@@ -82,4 +82,4 @@ feat/12-…   ●─●─●             hotfix/31-… ●──────●
 - 원본: `.github/milestones.json` (SDD §13.1 과 같은 내용). 마일스톤 범위·요구사항이 바뀌면 SDD 와 이 파일을 **같은 PR 에서** 바꾼다(`docs(docs)` 커밋).
 - dev 에 병합되면 `.github/workflows/milestones.yml` 이 GitHub 마일스톤을 만들거나 갱신한다(닫기·삭제는 하지 않음). 수동: `.github/scripts/sync-milestones.sh [--dry-run]`.
 - 이슈·PR 은 SDD 요구사항 ID → `requirements` 로 마일스톤을 정한다. 스파이크는 M0, 빌드·CI 골격은 M1.
-- 마일스톤 하나 = 릴리스 하나(`release` 필드) = dev → main 릴리스 PR 하나. M0·M1 은 릴리스 없음.
+- 마일스톤 하나 = 릴리스 하나(`release` 필드) = dev → main 릴리스 PR 하나. M0 은 릴리스 없음. M1(스캐폴딩)은 사용자 결정으로 v0.1.0(2026-11-25) — 이후 M2 v0.2.0 … M5 v0.5.0, M6 v1.0.0.
