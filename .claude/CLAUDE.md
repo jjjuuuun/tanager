@@ -20,14 +20,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ./gradlew :tanager-domain:test --tests 'dev.tanager.domain.layout.LayoutNodeTest.split*'    # 메서드 패턴
 ./gradlew check -PexcludeTags=wsl                 # WSL 통합 테스트 제외 (CI 와 동일)
 ./gradlew :tanager-app:run                        # 앱 실행
-./gradlew :tanager-app:jpackageImage              # 실행 파일 폴더(app-image) 생성
+./gradlew :tanager-app:jpackageImage              # 실행 파일 폴더(app-image) 생성 — jdeps 로 모듈 축소(목록: build/jpackage/runtime-modules.txt)
 ```
 
 ### WSL ↔ Windows 실행 구분
 저장소는 `/mnt/c/...` 에 있고 Claude 는 WSL 에서 돈다.
 - domain / application / ArchUnit 테스트 → WSL 의 `./gradlew` 로 충분.
 - ConPTY·PowerShell·wsl.exe 를 쓰는 `tanager-platform-windows`, `tanager-adapter-pty` 테스트와 앱 실행 → **Windows JDK** 로: `cmd.exe /c gradlew.bat <task>`
-- 두 쪽의 `build/` 가 섞이지 않게 같은 태스크를 양쪽에서 번갈아 돌리지 않는다. 이상하면 `./gradlew clean`.
+- 빌드 산출물은 WSL 이 `build/wsl/`, Windows 가 `build/` 로 나뉘어 있어 양쪽을 번갈아 돌려도 된다(리스크 R8). 리포트 경로도 WSL 은 `<모듈>/build/wsl/reports/…`.
 
 ### 최초 설정 (클론 직후 1회)
 저장소를 처음 만들 때는 사용자가 `.github/scripts/bootstrap-repo.sh <owner/repo>` 를 한 번 실행한다(빈 시작 커밋 · dev · ruleset · 라벨 · 마일스톤).
