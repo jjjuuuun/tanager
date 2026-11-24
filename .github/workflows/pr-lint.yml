@@ -1,0 +1,62 @@
+# PR 제목(= squash 커밋 헤더) · 브랜치 이름 · base 브랜치 규칙 검사
+#   작업 브랜치 → dev (squash) · dev → main 릴리스 (merge commit) · hotfix/* → main · main → dev 역병합
+name: pr-lint
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  pull-requests: read
+
+jobs:
+  pr-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: PR 제목 검사
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          types='feat|fix|perf|refactor|test|docs|build|ci|chore|revert'
+          scopes='domain|app|pty|persist|platform-win|platform-mac|ui|toolkit|bootstrap|build|ci|docs|claude|deps|release'
+          if [[ ! "$TITLE" =~ ^(${types})\((${scopes})\)!?:\ .+$ ]]; then
+            echo "::error::PR 제목 형식 오류: '$TITLE' → <type>(<scope>)[!]: <subject>"
+            exit 1
+          fi
+          if (( ${#TITLE} > 72 )); then
+            echo "::error::PR 제목이 72자를 넘습니다 (${#TITLE}자)"
+            exit 1
+          fi
+      - name: 브랜치 · base 규칙 검사
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          BASE_REF: ${{ github.base_ref }}
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          work='^(feat|fix|perf|refactor|test|docs|build|ci|chore|spike)/[0-9]+-[a-z0-9]+(-[a-z0-9]+)*$'
+          hotfix='^hotfix/[0-9]+-[a-z0-9]+(-[a-z0-9]+)*$'
+          release_title='^chore\(release\): v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'
+          err() { echo "::error::$1"; exit 1; }
+          case "$BASE_REF" in
+            dev)
+              if [[ "$HEAD_REF" == "main" ]]; then
+                [[ "$TITLE" =~ ^chore\(release\):\  ]] || err "main → dev 역병합 PR 제목은 'chore(release): ...' 입니다"
+              elif [[ "$HEAD_REF" =~ $hotfix ]]; then
+                err "hotfix/ 브랜치는 main 으로 PR 합니다 (dev 에는 main → dev 역병합으로 들어감)"
+              elif [[ ! "$HEAD_REF" =~ $work ]]; then
+                err "브랜치 이름 규칙 위반: '$HEAD_REF' → <type>/<이슈번호>-<kebab-slug>"
+              fi ;;
+            main)
+              if [[ "$HEAD_REF" == "dev" ]]; then
+                [[ "$TITLE" =~ $release_title ]] || err "릴리스 PR 제목은 'chore(release): vX.Y.Z' 입니다"
+              elif [[ ! "$HEAD_REF" =~ $hotfix ]]; then
+                err "main 으로는 dev(릴리스) 또는 hotfix/<번호>-<slug> 만 PR 할 수 있습니다. 작업 브랜치의 base 를 dev 로 바꾸세요"
+              fi ;;
+            *)
+              err "base 브랜치는 dev 또는 main 이어야 합니다 (현재: $BASE_REF)" ;;
+          esac
+      - name: spike 브랜치는 병합 금지
+        if: startsWith(github.head_ref, 'spike/')
+        run: |
+          echo "::error::spike/ 브랜치는 실험용입니다. 결과는 ADR 로 남기고 별도 feat/ 브랜치로 다시 구현하세요."
+          exit 1
