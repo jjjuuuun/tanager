@@ -5,7 +5,7 @@
 - 관련: SDD §3, §9
 
 ## 맥락
-분할 가능한 여러 터미널을 한 창에 띄우고, 좌측에 작업 경로 트리를 둔다. Windows(ConPTY 기반 WSL·PowerShell·cmd)부터 지원하고 이후 macOS 까지 넓힌다. 언어는 Python 또는 Java 중 최신 버전으로 한다. 가장 어려운 부분은 **터미널 에뮬레이션**(VT 시퀀스, 색, 와이드 문자, IME)과 **PTY**(Windows ConPTY, Unix pty)다.
+분할 가능한 여러 터미널을 한 창에 띄우고, 좌측에 작업 경로 트리를 둔다. Windows(ConPTY 기반 WSL·Windows PowerShell 5.1·cmd — PowerShell 7 은 범위 밖, 2026-11-24 사용자 결정)부터 지원하고 이후 macOS 까지 넓힌다. 언어는 Python 또는 Java 중 최신 버전으로 한다. 가장 어려운 부분은 **터미널 에뮬레이션**(VT 시퀀스, 색, 와이드 문자, IME)과 **PTY**(Windows ConPTY, Unix pty)다.
 
 ## 선택지
 1. **Java 25 + Swing(FlatLaf) + JediTerm + pty4j**
@@ -21,5 +21,5 @@
 JDK 는 **최신 LTS(25)** 로 고정한다. 비 LTS(26·27·28)는 건너뛰고, 다음 LTS(29, 2027-09 예정)가 나오면 올린다(Gradle toolchain 한 줄 변경). 그 사이에는 25.0.x 보안 업데이트만 반영한다. preview 기능은 쓰지 않는다.
 
 ## 결과
-- M0 스파이크 검증 항목: (a) pty4j 가 Windows 에서 ConPTY 로 wsl.exe·pwsh 를 띄우는가 (b) JediTerm 에서 한글 IME 조합·와이드 문자 표시 (c) OSC 7 / OSC 9;9 가 스트림에서 가로채지는가 (d) jpackage app-image 실행.
+- M0 스파이크 검증 항목: (a) pty4j 가 Windows 에서 ConPTY 로 wsl.exe·powershell.exe(5.1)·cmd 를 띄우는가 (b) JediTerm 에서 한글 IME 조합·와이드 문자 표시 (c) OSC 7 / OSC 9;9 가 스트림에서 가로채지는가 (d) jpackage app-image 실행.
 - 검증 실패 시 이 ADR 을 `대체됨` 으로 바꾸고 대안을 새 ADR 로 기록한다.

@@ -19,7 +19,7 @@ JUnit Jupiter · AssertJ · jqwik(속성 기반) · ArchUnit. Mockito 는 쓰지
 | 속성 기반(레이아웃 불변식 등) | `tanager-domain` | 없음 | 어디서나 |
 | 유스케이스 | `tanager-application` (Fake 사용) | 없음 | 어디서나 |
 | 어댑터 계약 | 각 adapter/platform 모듈 | `contract` | 어디서나 / OS 별 |
-| OS 통합(ConPTY, pwsh) | `tanager-platform-windows` | `windows` | Windows |
+| OS 통합(ConPTY, powershell 5.1 · cmd) | `tanager-platform-windows` | `windows` | Windows |
 | WSL 통합 | `tanager-platform-windows` | `wsl` | WSL 설치된 Windows (CI 제외) |
 | 아키텍처 | `tanager-architecture-test` | 없음 | 어디서나 |
 

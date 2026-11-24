@@ -36,8 +36,8 @@ Closes: #
 - [ ] `./gradlew check` 로컬 통과
 
 ### 수동 확인 환경
-- [ ] Windows 11 + PowerShell 7
 - [ ] Windows 11 + Windows PowerShell 5.1
+- [ ] Windows 11 + cmd
 - [ ] WSL2 (배포판: ______ )
 - [ ] macOS (해당 시)
 

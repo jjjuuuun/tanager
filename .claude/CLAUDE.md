@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 프로젝트
 
-**Tanager** — 여러 셸(WSL 배포판, PowerShell 7, Windows PowerShell, cmd)을 한 창에서 tmux 처럼 분할해 쓰고, 좌측 사이드바에 지금까지 작업한 경로를 환경별 **폴더 트리**(폴더 아래에 실행 중인 세션)로 보관하는 데스크톱 터미널 관리 프로그램. 재부팅 후에도 레이아웃과 각 창의 마지막 작업 경로를 복원한다. 폴더·세션을 고르면 **도구함 패널**이 그 경로에서 쓸 수 있는 Claude Code 스킬·서브에이전트·CLAUDE.md·MCP·훅·권한을 프로젝트용/전체 공통으로 나눠 보여 준다. 분할·이동·크기 조정은 **키보드와 마우스 모두**로, 상태줄에 CPU·메모리·디스크(WSL VM 포함)를 표시한다. UI 는 둥근 모서리·짧은 전환 효과·눈이 편한 소프트 색(시스템/다크/라이트). Windows 먼저, 이후 macOS.
+**Tanager** — 여러 셸(WSL 배포판, Windows PowerShell 5.1, cmd — PowerShell 7 은 범위 밖)을 한 창에서 tmux 처럼 분할해 쓰고, 좌측 사이드바에 지금까지 작업한 경로를 환경별 **폴더 트리**(폴더 아래에 실행 중인 세션)로 보관하는 데스크톱 터미널 관리 프로그램. 재부팅 후에도 레이아웃과 각 창의 마지막 작업 경로를 복원한다. 폴더·세션을 고르면 **도구함 패널**이 그 경로에서 쓸 수 있는 Claude Code 스킬·서브에이전트·CLAUDE.md·MCP·훅·권한을 프로젝트용/전체 공통으로 나눠 보여 준다. 분할·이동·크기 조정은 **키보드와 마우스 모두**로, 상태줄에 CPU·메모리·디스크(WSL VM 포함)를 표시한다. UI 는 둥근 모서리·짧은 전환 효과·눈이 편한 소프트 색(시스템/다크/라이트). Windows 먼저, 이후 macOS.
 
 - 스택: Java 25(최신 LTS, preview 금지) · Gradle 9.9 · Swing + FlatLaf · JediTerm(에뮬레이터) · pty4j(ConPTY/Unix PTY) · Jackson · jpackage
 - 설계 문서: `docs/plans/01-프로젝트-구성-설계.html`(개발 체계), `docs/plans/02-SDD.html`(요구사항·설계). 결정 기록: `docs/adr/`

@@ -74,8 +74,8 @@
       "key": "M5",
       "title": "M5 복원 · 탭 · 설정",
       "release": "v0.4.0",
-      "scope": "저장·복원, 탭, config, prefix 모드, 사라진 경로 표시·기록 제외 규칙, 사용자 정의 프로파일, 시스템/다크/라이트 테마, 리소스 표시",
-      "done": "FR-RES-*, FR-LAY-07/08, FR-CFG-*, FR-HIS-08/09, FR-SES-05, FR-UI-01/05, FR-MON-* 인수 조건 통과",
+      "scope": "저장·복원, 탭, config, prefix 모드, 사라진 경로 표시·기록 제외 규칙, 시스템/다크/라이트 테마, 리소스 표시",
+      "done": "FR-RES-*, FR-LAY-07/08, FR-CFG-*, FR-HIS-08/09, FR-UI-01/05, FR-MON-* 인수 조건 통과",
       "requirements": [
         "FR-RES-01",
         "FR-RES-02",
@@ -88,7 +88,6 @@
         "FR-CFG-03",
         "FR-HIS-08",
         "FR-HIS-09",
-        "FR-SES-05",
         "FR-UI-01",
         "FR-UI-05",
         "FR-MON-01",

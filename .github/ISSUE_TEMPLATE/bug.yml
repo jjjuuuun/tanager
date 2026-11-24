@@ -28,7 +28,7 @@ body:
     id: env
     attributes:
       label: 환경
-      placeholder: "Tanager v0.3.1 / Windows 11 24H2 / WSL Ubuntu 24.04 / pwsh 7.5"
+      placeholder: "Tanager v0.3.1 / Windows 11 24H2 / WSL Ubuntu 24.04 / PowerShell 5.1"
     validations:
       required: true
   - type: textarea
