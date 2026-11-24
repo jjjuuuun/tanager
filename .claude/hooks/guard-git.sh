@@ -2,7 +2,8 @@
 # PreToolUse(Bash: git * / gh *) — Git 전략을 강제한다.
 #   exit 2               = 차단 (사유는 stderr 로 Claude 에 전달)
 #   permissionDecision   = "ask" 를 stdout JSON 으로 내면 allow 규칙과 상관없이 사용자 승인을 받는다
-# 역할 분담: 이슈·브랜치·커밋·푸시·PR(작업→dev, 릴리스 dev→main)·리뷰는 Claude, 병합·PR 닫기는 사용자, 릴리스 태그는 사용자 승인 후 Claude.
+# 역할 분담: 이슈·브랜치·커밋·푸시·PR·리뷰, 그리고 작업 PR 의 dev squash 병합은 Claude.
+#           main 으로 가는 병합(릴리스·hotfix·역병합)과 PR 닫기는 사용자, 릴리스 태그는 사용자 승인 후 Claude.
 # 보호 브랜치: main(릴리스 전용) · dev(통합). 둘 다 직접 커밋·푸시 금지.
 set -euo pipefail
 
@@ -45,9 +46,22 @@ if [[ "$cmd" =~ git[[:space:]]+(commit|merge|cherry-pick|revert|am)([[:space:]]|
   block "$branch 에 직접 커밋/병합할 수 없습니다. 'git switch dev && git pull --ff-only && git switch -c <type>/<이슈번호>-<slug>' 후 작업하세요."
 fi
 
-# 4) PR 병합·닫기·승인은 사용자만 (Claude 는 리뷰를 코멘트로만 남긴다)
-[[ "$cmd" =~ gh[[:space:]]+pr[[:space:]]+(merge|close) ]] && block "PR 병합/닫기는 사용자가 결정합니다. 리뷰 코멘트까지만 남기세요."
-[[ "$cmd" =~ gh[[:space:]]+pr[[:space:]]+review && "$cmd" =~ (^|[[:space:]])(--approve|-a)([[:space:]]|$) ]] && block "PR 승인은 사용자가 합니다. 'gh pr review <번호> --comment' 를 쓰세요."
+# 4) PR: 닫기·승인은 사용자만. 병합은 "base 가 dev 인 PR 의 squash" 만 Claude 허용(사용자 확인은 릴리스 PR 에서)
+#    gh pr 로 시작하는 구간만 본다(이슈·PR 본문 같은 텍스트 오탐 방지)
+prseg="$(printf '%s\n' "$cmd" | sed -E 's/(&&|\|\||;|\|)/\n/g' | grep -E '^[[:space:]]*gh[[:space:]]+pr[[:space:]]+' || true)"
+[[ "$prseg" =~ gh[[:space:]]+pr[[:space:]]+close ]] && block "PR 닫기는 사용자가 결정합니다."
+[[ "$prseg" =~ gh[[:space:]]+pr[[:space:]]+review && "$prseg" =~ (^|[[:space:]])(--approve|-a)([[:space:]]|$) ]] && block "PR 승인은 사용자가 합니다. 'gh pr review <번호> --comment' 를 쓰세요."
+while IFS= read -r m; do
+  [[ "$m" =~ gh[[:space:]]+pr[[:space:]]+merge ]] || continue
+  [[ "$m" =~ (^|[[:space:]])(--merge|-m|--rebase|-r|--admin|--auto|--disable-auto|--subject|-t|--body|-b|--body-file|-F)([[:space:]=]|$) ]] \
+    && block "Claude 는 'gh pr merge <번호> --squash [--delete-branch]' 만 쓸 수 있습니다(merge commit·rebase·관리자 우회·자동 병합·메시지 지정 금지)."
+  [[ "$m" =~ (^|[[:space:]])(--squash|-s)([[:space:]]|$) ]] || block "작업 PR 은 squash 로만 병합합니다: --squash"
+  [[ "$m" =~ gh[[:space:]]+pr[[:space:]]+merge[[:space:]]+([0-9]+)([[:space:]]|$) ]] || block "병합할 PR 번호를 merge 바로 뒤에 숫자로 쓰세요."
+  num="${BASH_REMATCH[1]}"
+  repo=""; [[ "$m" =~ (--repo|-R)[[:space:]=]+([^[:space:]]+) ]] && repo="${BASH_REMATCH[2]}"
+  base="$(cd "${CLAUDE_PROJECT_DIR:-.}" && gh pr view "$num" ${repo:+--repo "$repo"} --json baseRefName -q .baseRefName 2>/dev/null || true)"
+  [[ "$base" == "dev" ]] || block "PR #$num 의 base 가 '${base:-확인 불가}' 입니다. Claude 는 dev 로 가는 작업 PR 만 병합합니다(main 병합은 사용자)."
+done <<<"$prseg"
 [[ "$cmd" =~ gh[[:space:]]+api && "$cmd" =~ pulls/[0-9]+/merge ]] && block "API 로 PR 을 병합할 수 없습니다."
 [[ "$cmd" =~ gh[[:space:]]+api && "$cmd" =~ (pulls|issues)/[0-9]+ && "$cmd" =~ state=closed ]] && block "API 로 PR 을 닫을 수 없습니다."
 [[ "$cmd" =~ gh[[:space:]]+api[[:space:]]+graphql && "$cmd" =~ (mergePullRequest|closePullRequest|enablePullRequestAutoMerge|approve) ]] && block "GraphQL 로 PR 을 병합/닫기/승인할 수 없습니다."

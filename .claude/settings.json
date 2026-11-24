@@ -35,6 +35,7 @@
       "Bash(gh pr comment *)",
       "Bash(gh pr review *)",
       "Bash(gh pr ready *)",
+      "Bash(gh pr merge *)",
       "Bash(gh run view *)",
       "Bash(gh run list *)",
       "Bash(gh run watch *)",
@@ -57,7 +58,6 @@
     "deny": [
       "Bash(git push --force *)",
       "Bash(git push -f *)",
-      "Bash(gh pr merge *)",
       "Bash(gh pr close *)",
       "Bash(gh pr review * --approve *)",
       "Bash(gh release delete *)"

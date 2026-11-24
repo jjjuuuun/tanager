@@ -61,7 +61,7 @@ OS 차이(셸 탐지, 경로 변환, 앱 디렉터리, 셸 통합, 기동 명령
 - 설계: DDD(전략적 설계 + 전술 패턴 일부), 구현: TDD, 코드: Functional Core / Imperative Shell. 세부 규칙은 `.claude/rules/` (Java 파일·테스트·플랫폼 파일을 열 때 해당 규칙이 자동 로드됨).
 - 기능 구현은 `/tdd [이슈번호] <설명>` — (이슈 없으면 `/issue`) → architect → test-author → implementer → reviewer → `/pr`.
 - **브랜치**: `dev` 는 통합 브랜치(작업 브랜치 → dev squash), `main` 은 릴리스 전용이자 GitHub 기본 브랜치(dev → main merge commit + 태그). PR 은 항상 `--base` 를 명시한다(GitHub 화면의 기본 base 는 main). 긴급 수정만 `hotfix/*` → main.
-- **역할**: 이슈·브랜치·커밋·푸시·Draft PR·CI 대응·PR 리뷰 코멘트·Ready 전환·릴리스 PR 은 Claude. **병합/닫기는 사용자**가 리뷰 코멘트를 보고 결정. 릴리스 태그는 사용자 승인 후 Claude. 세부는 `.claude/rules/git.md`.
+- **역할**: 이슈·브랜치·커밋·푸시·PR·CI 대응·리뷰 코멘트, 그리고 **작업 PR 의 dev squash 병합**(CI green · 차단 0건일 때)은 Claude. **사용자는 마일스톤마다 릴리스 PR(dev → main)에서 한 번 확인**하고 main 병합을 결정한다. hotfix → main · 역병합 · PR 닫기도 사용자. 릴리스 태그는 사용자 승인 후 Claude. 세부는 `.claude/rules/git.md`.
 - 커밋 `/commit`, 이슈 `/issue`, PR `/pr`, 릴리스 `/release`, 결정 기록 `/adr`. 마일스톤은 `.github/milestones.json`(SDD §13.1)이 원본.
 - 여러 모듈을 동시에 바꾸는 큰 기능은 에이전트 팀을 쓸 수 있다(실험 기능, 기본 꺼짐). 켜는 법과 역할 분담은 `docs/plans/01-프로젝트-구성-설계.html` §11.
 
