@@ -12,7 +12,7 @@ feat/12-…   ●─●─●             hotfix/31-… ●──────●
 ```
 - `main`: **릴리스 전용 · GitHub 기본 브랜치**(클론 직후 브랜치, 저장소 첫 화면 = 마지막 릴리스). 들어오는 것은 ① dev → main 릴리스 PR ② `hotfix/*` PR 뿐, 둘 다 **merge commit**. 태그는 main 에만.
 - `dev`: **통합 브랜치**. 모든 작업 브랜치는 dev 에서 갈라져 dev 로 **squash merge**. GitHub 의 기본 base 가 main 이므로 `gh pr create` 에 `--base dev` 를 반드시 쓴다(틀리면 pr-lint 가 막음).
-- 이슈 닫기: GitHub 은 기본 브랜치(main) 병합 때만 `Closes:` 로 이슈를 닫는다. 그래서 dev 병합 시 `.github/workflows/close-issues.yml` 이 PR 본문의 `Closes: #N` 이슈를 닫는다(마일스톤 진행률·`/release` 준비 확인이 맞게 됨).
+- 이슈 닫기: GitHub 은 기본 브랜치(main) 병합 때만 `Closes:` 로 이슈를 닫는다. 그래서 `.github/workflows/close-issues.yml` 이 **dev push** 때 커밋 메시지(= squash/merge 시 PR 제목+본문)의 `Closes: #N` 이슈를 닫는다(마일스톤 진행률·`/release` 준비 확인이 맞게 됨). PR 본문에 `Closes: #N` 을 꼭 쓴다.
 - main · dev 모두 직접 커밋·푸시·병합 금지 (`.githooks/pre-commit`·`pre-push` + `.claude/hooks/guard-git.sh` + GitHub ruleset).
 - 작업 브랜치: `<type>/<이슈번호>-<kebab-slug>` — 예 `feat/12-split-pane-resize`. dev 에서 분기, base = dev.
   - type: `feat fix perf refactor test docs build ci chore spike`

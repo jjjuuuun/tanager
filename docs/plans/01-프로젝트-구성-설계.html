@@ -435,7 +435,7 @@ Closes: #12</code></pre>
 <tr><td>pr-lint</td><td>ubuntu</td><td>PR 제목 · 브랜치 이름 · head → base 조합(작업 → dev, dev · hotfix → main, main → dev 역병합), spike 차단</td><td>제목 · 브랜치 · base 수정</td></tr>
 <tr><td>release</td><td>ubuntu → windows → ubuntu</td><td>태그가 main 위인지 확인 → check → app-image zip → msi → git-cliff → <code>gh release create</code></td><td>태그 삭제 후 수정·재태그 (사용자 결정)</td></tr>
 <tr><td>milestones</td><td>ubuntu</td><td><code>.github/milestones.json</code> 이 dev 에 병합되면 GitHub 마일스톤 생성 · 갱신</td><td>JSON 형식 확인</td></tr>
-<tr><td>close-issues</td><td>ubuntu</td><td>dev 로 병합된 PR 본문의 <code>Closes: #N</code> 이슈를 닫음 (기본 브랜치가 main 이라 GitHub 자동 닫기가 dev 에서는 동작하지 않음)</td><td>이슈를 손으로 닫기</td></tr>
+<tr><td>close-issues</td><td>ubuntu</td><td>dev push 때 커밋 메시지(= PR 제목+본문)의 <code>Closes: #N</code> 이슈를 닫음 (기본 브랜치가 main 이라 GitHub 자동 닫기가 dev 에서는 동작하지 않음. push 트리거라 워크플로를 처음 넣는 PR 에서도 동작)</td><td>이슈를 손으로 닫기</td></tr>
 </table></div>
 <h3>9.1 로컬 검사와 CI 의 대응</h3>
 <div class="tbl-wrap"><table>
