@@ -1,0 +1,36 @@
+# dev 로 병합된 PR 의 "Closes: #N" 이슈를 닫는다.
+# GitHub 은 기본 브랜치(main) 병합 때만 키워드로 이슈를 닫으므로, 통합 브랜치(dev) 병합 시점에 대신 닫는다.
+name: close-issues
+
+# pull_request_target: fork PR 에서도 토큰이 쓰기 가능. 코드를 checkout 하지 않고 본문은 env 로만 다루므로 안전하다.
+on:
+  pull_request_target:
+    types: [closed]
+    branches: [dev]
+
+permissions:
+  issues: write
+
+jobs:
+  close:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Closes/Fixes/Resolves 이슈 닫기
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          BODY: ${{ github.event.pull_request.body }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          nums="$(printf '%s' "$BODY" | grep -oiE '(^|[^[:alnum:]_])(close[sd]?|fix(e[sd])?|resolve[sd]?):?[[:space:]]+#[0-9]+' | grep -oE '[0-9]+$' | sort -u || true)"
+          [[ -z "$nums" ]] && { echo "닫을 이슈 없음"; exit 0; }
+          for n in $nums; do
+            state="$(gh issue view "$n" --json state -q .state 2>/dev/null || echo MISSING)"
+            if [[ "$state" == "OPEN" ]]; then
+              gh issue close "$n" --reason completed --comment "dev 에 반영됨 (#$PR). 다음 릴리스(dev → main)에 포함됩니다."
+              echo "닫음: #$n"
+            else
+              echo "건너뜀: #$n ($state)"
+            fi
+          done

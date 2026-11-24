@@ -1,0 +1,90 @@
+# 태그 vX.Y.Z push(main 의 커밋만) → Windows 패키지 빌드 → CHANGELOG 생성 → GitHub Release
+name: release
+
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+", "v[0-9]+.[0-9]+.[0-9]+-*"]
+
+permissions:
+  contents: write
+
+jobs:
+  verify-main:
+    name: 태그가 main 위에 있는지 확인
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - run: |
+          git fetch origin main
+          sha="$(git rev-parse "$GITHUB_REF_NAME^{commit}")"
+          # 단순 조상 검사는 이미 main 에 들어간 과거 dev 커밋도 통과시키므로 first-parent 사슬로 확인
+          git rev-list --first-parent origin/main | grep -qx "$sha" || {
+            echo "::error::태그 $GITHUB_REF_NAME 가 main 의 릴리스 커밋(first-parent)이 아닙니다. dev → main 릴리스 PR 병합 후 main 끝에서 태그하세요."
+            exit 1
+          }
+
+  package-windows:
+    needs: verify-main
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "25"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: 버전 = 태그
+        shell: pwsh
+        run: echo "TANAGER_VERSION=$($env:GITHUB_REF_NAME.TrimStart('v'))" >> $env:GITHUB_ENV
+      - name: 전체 검사
+        shell: pwsh
+        run: ./gradlew check -PexcludeTags=wsl
+      - name: jpackage (app-image → zip)
+        shell: pwsh
+        run: |
+          ./gradlew :tanager-app:jpackageImage -Pversion=$env:TANAGER_VERSION
+          Compress-Archive -Path tanager-app/build/jpackage/Tanager -DestinationPath "Tanager-$env:TANAGER_VERSION-windows-x64.zip"
+      - name: jpackage (msi, WiX 필요)
+        shell: pwsh
+        run: |
+          dotnet tool install --global wix
+          ./gradlew :tanager-app:jpackageInstaller -Pversion=$env:TANAGER_VERSION -PinstallerType=msi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-dist
+          path: |
+            Tanager-*-windows-x64.zip
+            tanager-app/build/jpackage/*.msi
+
+  publish:
+    needs: package-windows
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-dist
+          path: dist
+      - name: CHANGELOG 생성 (Conventional Commits)
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: cliff.toml
+          args: --latest --strip header
+        env:
+          OUTPUT: RELEASE_NOTES.md
+      - name: GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pre=""
+          [[ "$GITHUB_REF_NAME" == *-* ]] && pre="--prerelease"
+          gh release create "$GITHUB_REF_NAME" $pre \
+            --title "Tanager $GITHUB_REF_NAME" \
+            --notes-file RELEASE_NOTES.md \
+            $(find dist -type f \( -name '*.zip' -o -name '*.msi' \))

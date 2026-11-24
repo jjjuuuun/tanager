@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# Conventional Commits 형식 검사 (.gitmessage 참고)
+set -euo pipefail
+
+msg_file="$1"
+# CR(Windows 편집기) 제거 → 주석(#) 제거 → 앞쪽 빈 줄 제거. 그 다음 첫 줄이 헤더, 둘째 줄은 빈 줄이어야 한다
+clean="$(tr -d '\r' < "$msg_file" | { grep -v '^#' || true; } | sed '/[^[:space:]]/,$!d')"
+header="$(printf '%s\n' "$clean" | sed -n '1p')"
+second_line="$(printf '%s\n' "$clean" | sed -n '2p')"
+# 글자 수: UTF-8 연속 바이트(0x80~0xBF)를 빼고 센다 → locale(LANG 없는 GUI·IDE) 과 무관
+header_len="$(printf '%s' "$header" | LC_ALL=C tr -d '\200-\277' | wc -c | tr -d ' ')"
+
+# git 이 자동으로 만드는 메시지는 통과
+if [[ "$header" =~ ^(Merge|Revert\ \"|fixup!|squash!|amend!) ]]; then
+  exit 0
+fi
+
+types='feat|fix|perf|refactor|test|docs|build|ci|chore|revert'
+scopes='domain|app|pty|persist|platform-win|platform-mac|ui|toolkit|bootstrap|build|ci|docs|claude|deps|release'
+pattern="^(${types})\((${scopes})\)!?: .+$"
+
+fail() {
+  echo "✖ 커밋 메시지 형식 오류: $1" >&2
+  echo "  헤더: $header" >&2
+  echo "  형식: <type>(<scope>)[!]: <subject>   (자세한 규칙: .gitmessage)" >&2
+  exit 1
+}
+
+[[ -n "$header" ]] || fail "메시지가 비어 있습니다"
+[[ "$header" =~ $pattern ]] || fail "type 또는 scope 가 허용 목록에 없습니다"
+(( header_len <= 72 )) || fail "헤더가 72자를 넘습니다 (${header_len}자)"
+[[ "$header" != *. ]] || fail "헤더 끝에 마침표를 쓰지 않습니다"
+
+# 헤더 다음 줄은 반드시 빈 줄
+[[ -z "${second_line//[[:space:]]/}" ]] || fail "헤더와 본문 사이에 빈 줄이 필요합니다"
+
+exit 0

@@ -1,0 +1,25 @@
+name: milestones
+
+# .github/milestones.json(원본, SDD §13.1)을 GitHub 마일스톤에 반영한다.
+on:
+  push:
+    branches: [dev]
+    paths: [".github/milestones.json", ".github/scripts/sync-milestones.sh"]
+  workflow_dispatch:
+
+permissions:
+  issues: write   # 마일스톤 쓰기 권한은 issues 에 포함된다
+
+concurrency:
+  group: milestones
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: 마일스톤 동기화
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: .github/scripts/sync-milestones.sh
