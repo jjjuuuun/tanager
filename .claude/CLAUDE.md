@@ -70,6 +70,7 @@ OS 차이(셸 탐지, 경로 변환, 앱 디렉터리, 셸 통합, 기동 명령
 - `wsl.exe --list --quiet` 출력은 UTF-16LE. `WSL_UTF8=1` 을 주거나 UTF-16LE 로 디코딩.
 - JediTerm 은 Maven Central 에 없다 → `https://packages.jetbrains.team/maven/p/ij/intellij-dependencies` 저장소. 글자 단위 대체 글꼴이 없고 IME 조합 중 글자는 기본 글꼴로만 그리므로 **터미널 기본 글꼴은 한글 글리프가 있어야 한다**(D2Coding 번들).
 - Java 25 + JNA(pty4j): 실행 옵션에 `--enable-native-access=ALL-UNNAMED`.
+- Gradle 데몬도 JDK 25 로 돈다(`gradle/gradle-daemon-jvm.properties`, 없으면 자동으로 받음). 데몬 JDK 가 낮으면 Spotless(palantir)가 최신 문법(record 패턴 등)을 못 읽어 OS 마다 결과가 달라진다 — 이 파일을 지우지 말 것.
 - WSL 에서 source 되는 `*.sh` 가 CRLF 면 `$'\r': command not found`. `.gitattributes` 를 지키고 Windows 편집기에서 줄바꿈을 바꾸지 말 것.
 - Swing 컴포넌트는 EDT 에서만. 도메인 상태는 `StateActor` 밖에서 바꾸지 않는다.
 - 경로를 `String` 으로 비교하지 않는다. Windows 는 대소문자 무시, WSL/macOS 는 구분 → `WorkspacePath`.
