@@ -9,8 +9,8 @@ if [[ "$branch" == "main" || "$branch" == "dev" ]]; then
   exit 1
 fi
 
-if [[ -x ./gradlew ]]; then
-  ./gradlew --quiet spotlessCheck || {
+if [[ -f ./gradlew ]]; then
+  sh ./gradlew --quiet spotlessCheck || {
     echo "✖ 포맷 위반. './gradlew spotlessApply' 후 다시 커밋하세요." >&2
     exit 1
   }

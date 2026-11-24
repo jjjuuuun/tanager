@@ -21,15 +21,7 @@ with_checks=false; [[ "${2:-}" == "--with-checks" ]] && with_checks=true
 cd "$(git rev-parse --show-toplevel)"
 say() { printf '\n▶ %s\n' "$1"; }
 
-# ── 1. 시작 커밋 · dev ────────────────────────────────────────────
-if ! git rev-parse --verify -q main >/dev/null; then
-  say "main 에 빈 시작 커밋 생성"
-  git symbolic-ref HEAD refs/heads/main
-  git commit --allow-empty --no-verify -m "chore(build): 저장소 시작"
-fi
-git rev-parse --verify -q dev >/dev/null || { say "dev 브랜치 생성"; git branch dev main; }
-
-# ── 2. 원격 · 기본 브랜치 ─────────────────────────────────────────
+# ── 1. 원격 ──────────────────────────────────────────────────────
 url="https://github.com/$repo.git"
 if ! git remote get-url origin >/dev/null 2>&1; then
   git remote add origin "$url"
@@ -37,8 +29,26 @@ elif [[ "$(git remote get-url origin)" != "$url" ]]; then
   say "origin 주소 수정: $(git remote get-url origin) → $url"
   git remote set-url origin "$url"
 fi
-say "main · dev 푸시"
-git push --no-verify -u origin main dev
+remote_has() { git ls-remote --exit-code --heads origin "$1" >/dev/null 2>&1; }
+
+# ── 2. 시작 커밋 · dev (원격에 이미 있으면 건너뜀 → 재실행 안전) ─────────
+if ! remote_has main && ! git rev-parse --verify -q refs/heads/main >/dev/null; then
+  say "main 에 빈 시작 커밋 생성"
+  # commit-tree: 스테이징된 파일이 섞이지 않고 훅도 돌지 않는다
+  root="$(git commit-tree "$(git hash-object -t tree /dev/null)" -m "chore(build): 저장소 시작")"
+  git update-ref refs/heads/main "$root"
+fi
+if ! remote_has dev && ! git rev-parse --verify -q refs/heads/dev >/dev/null; then
+  say "dev 브랜치 생성"; git branch dev main
+fi
+to_push=()
+for b in main dev; do remote_has "$b" || to_push+=("$b"); done
+if (( ${#to_push[@]} )); then
+  say "푸시: ${to_push[*]}"
+  git push --no-verify -u origin "${to_push[@]}"   # main · dev 직접 푸시는 pre-push 가 막으므로 최초 1회만 우회
+else
+  say "main · dev 는 이미 원격에 있음 — 건너뜀"
+fi
 
 say "저장소 설정: 기본 브랜치 main · squash(작업→dev) + merge commit(릴리스·역병합) · rebase merge 끔"
 gh api -X PATCH "repos/$repo" \
