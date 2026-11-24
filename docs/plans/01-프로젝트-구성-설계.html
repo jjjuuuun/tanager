@@ -133,7 +133,7 @@ main{padding:28px 20px 80px}.grid2,.grid3{grid-template-columns:1fr}}
 <tr><td>JDK</td><td><b>25</b> (LTS, 2025-09 GA)</td><td>현재 가장 최신 LTS. Gradle toolchain 으로 고정하고 비 LTS(26·27·28)는 건너뛴다. 다음 LTS(29, 2027-09 예정)가 나오면 올린다. preview 기능은 쓰지 않는다.</td></tr>
 <tr><td>Gradle</td><td>9.9.x (Kotlin DSL)</td><td>9.1 부터 Java 25 toolchain 지원. 래퍼로 고정</td></tr>
 <tr><td>UI</td><td>Swing + FlatLaf</td><td>둥근 모서리 · 전환 효과 · 소프트 라이트/다크 테마(시스템 따라가기). 색 토큰은 SDD §8.5</td></tr>
-<tr><td>터미널</td><td>JediTerm (core + ui), pty4j 0.13.x</td><td>ConPTY 사용 여부는 M0 에서 확인</td></tr>
+<tr><td>터미널</td><td>JediTerm 3.76 (core + ui, JetBrains 저장소), pty4j 0.14.x</td><td>M0 확인: 번들 ConPTY 사용. 기본 글꼴은 한글 포함 D2Coding 번들(ADR-0001)</td></tr>
 <tr><td>직렬화</td><td>Jackson 3.x</td><td>adapter-persistence 에만</td></tr>
 <tr><td>테스트</td><td>JUnit Jupiter · AssertJ · jqwik · ArchUnit · Awaitility</td><td>Mockito 미사용(수작업 Fake)</td></tr>
 <tr><td>품질</td><td>Spotless(palantir-java-format) · JaCoCo</td><td>pre-commit 훅과 CI 에서 검사</td></tr>
