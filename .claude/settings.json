@@ -46,14 +46,8 @@
       "Bash(git merge-base *)",
       "Bash(git tag -l *)",
       "Bash(git rev-list *)",
-      "Bash(gh api -X PATCH repos/*/milestones/*)"
-    ],
-    "ask": [
-      "Bash(git push origin v*)",
-      "Bash(git push --tags *)",
-      "Bash(git push * --tags *)",
-      "Bash(gh release create *)",
-      "Bash(git reset --hard *)"
+      "Bash(gh api -X PATCH repos/*/milestones/*)",
+      "Bash(gh pr merge:*)"
     ],
     "deny": [
       "Bash(git push --force *)",
@@ -61,6 +55,13 @@
       "Bash(gh pr close *)",
       "Bash(gh pr review * --approve *)",
       "Bash(gh release delete *)"
+    ],
+    "ask": [
+      "Bash(git push origin v*)",
+      "Bash(git push --tags *)",
+      "Bash(git push * --tags *)",
+      "Bash(gh release create *)",
+      "Bash(git reset --hard *)"
     ]
   },
   "hooks": {
@@ -70,13 +71,13 @@
         "hooks": [
           {
             "type": "command",
-            "if": "Bash(git *)",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/guard-git.sh"
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/guard-git.sh",
+            "if": "Bash(git *)"
           },
           {
             "type": "command",
-            "if": "Bash(gh *)",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/guard-git.sh"
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/guard-git.sh",
+            "if": "Bash(gh *)"
           }
         ]
       }

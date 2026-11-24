@@ -24,5 +24,9 @@ while read -r local_ref _ remote_ref _; do
 done
 
 if $pushes_branch && [[ -f ./gradlew ]]; then
-  sh ./gradlew --quiet check
+  # WSL/Linux 에서는 Windows 전용(ConPTY · PowerShell) 테스트를 뺀다. Windows 에서 돌릴 때는 전부.
+  case "$(uname -s)" in
+    Linux*|Darwin*) sh ./gradlew --quiet check -PexcludeTags=windows,wsl ;;
+    *)              sh ./gradlew --quiet check ;;
+  esac
 fi
