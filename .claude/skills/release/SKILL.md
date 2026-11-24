@@ -11,7 +11,7 @@ argument-hint: "[vX.Y.Z]"
 1. 버전: 인자가 있으면 그것, 없으면 `.github/milestones.json` 에서 열린 마일스톤의 `release`. 형식 `vX.Y.Z[-pre]`. 이미 있는 태그면 중단(`git tag -l`).
 2. 마일스톤의 열린 이슈 0개: `gh api "repos/{owner}/{repo}/milestones?state=open" --jq '.[] | {title, open_issues}'`. 남아 있으면 목록을 보여 주고 멈춘다.
 3. `git fetch origin` 후 dev 최신 커밋의 CI 가 green: `gh run list --branch dev --workflow ci --limit 1`.
-4. main 이 dev 의 조상인지(hotfix 역병합 누락 확인): `git merge-base --is-ancestor origin/main origin/dev`. 아니면 역병합 PR 을 먼저 연다(`/pr` D).
+4. hotfix 역병합 누락 확인: `git rev-list --no-merges origin/dev..origin/main` 이 비어 있어야 한다(릴리스 merge commit 은 dev 에 없는 게 정상이라 `--no-merges` 로 뺀다). 커밋이 나오면 역병합 PR 을 먼저 연다(`/pr` D).
 
 ## B. 변경 내역
 5. `git cliff origin/main..origin/dev --tag <버전> --strip all` (없으면 `git log --oneline --no-merges origin/main..origin/dev`).
