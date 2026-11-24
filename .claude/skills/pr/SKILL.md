@@ -39,7 +39,7 @@ description: 작업 브랜치를 dev(hotfix 는 main) 기준으로 rebase·검�
     - [수정 권장] `파일:줄` 문제 — 남긴 이유
 
     ### 사용자가 직접 확인할 것
-    - 수동 확인 환경(Windows+pwsh / WSL / macOS) 중 Claude 가 못 본 것
+    - 수동 확인 환경(Windows PowerShell 5.1 / cmd / WSL / macOS) 중 Claude 가 못 본 것
     - UI 변경이면 확인 절차
     ```
 12. `gh pr ready <번호>` 로 Draft 를 해제한다.
