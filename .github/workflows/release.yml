@@ -1,4 +1,4 @@
-# 태그 vX.Y.Z push(main 의 커밋만) → Windows 패키지 빌드 → CHANGELOG 생성 → GitHub Release
+# 태그 vX.Y.Z push(main 의 커밋만) → Windows app-image zip → CHANGELOG 생성 → GitHub Release  (MSI 는 #22)
 name: release
 
 on:
@@ -48,17 +48,11 @@ jobs:
         run: |
           ./gradlew :tanager-app:jpackageImage -Pversion=$env:TANAGER_VERSION
           Compress-Archive -Path tanager-app/build/jpackage/Tanager -DestinationPath "Tanager-$env:TANAGER_VERSION-windows-x64.zip"
-      - name: jpackage (msi, WiX 필요)
-        shell: pwsh
-        run: |
-          dotnet tool install --global wix
-          ./gradlew :tanager-app:jpackageInstaller -Pversion=$env:TANAGER_VERSION -PinstallerType=msi
+      # MSI 설치 파일(jpackageInstaller · WiX)은 #22 에서 추가한다. 그때까지는 zip(app-image)만 배포.
       - uses: actions/upload-artifact@v4
         with:
           name: windows-dist
-          path: |
-            Tanager-*-windows-x64.zip
-            tanager-app/build/jpackage/*.msi
+          path: Tanager-*-windows-x64.zip
 
   publish:
     needs: package-windows

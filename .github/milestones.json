@@ -12,7 +12,7 @@
     {
       "key": "M1",
       "title": "M1 스캐폴딩",
-      "release": null,
+      "release": "v0.1.0",
       "scope": "Gradle 멀티 모듈, build-logic, ArchUnit, Spotless, JaCoCo, CI",
       "done": "CI 전부 green, 빈 앱 창 실행",
       "requirements": []
@@ -20,7 +20,7 @@
     {
       "key": "M2",
       "title": "M2 단일 터미널",
-      "release": "v0.1.0",
+      "release": "v0.2.0",
       "scope": "프로파일 탐지, 창 1개, 종료·재시작, 소프트 테마 기본값",
       "done": "FR-SES-01/02/04, FR-UI-02/03/06 인수 조건 통과",
       "requirements": [
@@ -35,7 +35,7 @@
     {
       "key": "M3",
       "title": "M3 이력 · 트리",
-      "release": "v0.2.0",
+      "release": "v0.3.0",
       "scope": "셸 통합, cwd 추적, 폴더·세션 트리, 고정·검색",
       "done": "FR-HIS-01~07, FR-SES-03 인수 조건 통과",
       "requirements": [
@@ -52,7 +52,7 @@
     {
       "key": "M4",
       "title": "M4 분할",
-      "release": "v0.3.0",
+      "release": "v0.4.0",
       "scope": "분할 · 크기 · 포커스 · 줌 · 교환 · 이동, 키 바인딩과 마우스 조작 전부, 전환 효과",
       "done": "FR-LAY-01~06 · 09~13, FR-UI-04 인수 조건 통과",
       "requirements": [
@@ -73,7 +73,7 @@
     {
       "key": "M5",
       "title": "M5 복원 · 탭 · 설정",
-      "release": "v0.4.0",
+      "release": "v0.5.0",
       "scope": "저장·복원, 탭, config, prefix 모드, 사라진 경로 표시·기록 제외 규칙, 시스템/다크/라이트 테마, 리소스 표시",
       "done": "FR-RES-*, FR-LAY-07/08, FR-CFG-*, FR-HIS-08/09, FR-UI-01/05, FR-MON-* 인수 조건 통과",
       "requirements": [
