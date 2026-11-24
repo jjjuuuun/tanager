@@ -1,0 +1,21 @@
+# 저장소는 /mnt/c 에 있고 WSL·Windows 양쪽에서 편집된다 → 줄바꿈을 저장소가 강제한다
+* text=auto eol=lf
+
+# Windows 전용 스크립트는 CRLF
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+*.ps1   text eol=crlf
+*.psm1  text eol=crlf
+
+# WSL 안에서 source 되는 셸 통합 스크립트는 반드시 LF (CRLF 면 bash 가 '\r' 오류)
+*.sh    text eol=lf
+*.bash  text eol=lf
+*.zsh   text eol=lf
+.githooks/*  text eol=lf
+
+# 바이너리
+*.jar   binary
+*.png   binary
+*.ico   binary
+*.icns  binary
+*.ttf   binary
