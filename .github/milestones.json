@@ -100,8 +100,8 @@
     {
       "key": "M6",
       "title": "M6 도구함",
-      "release": "v0.5.0 → v1.0.0",
-      "scope": "Claude Code 공급자, 도구함 패널, 이력 가져오기, 안정화",
+      "release": "v1.0.0",
+      "scope": "Claude Code 공급자, 도구함 패널, 이력 가져오기, 안정화 (중간 점검은 v1.0.0-rc.N 프리릴리스)",
       "done": "FR-TK-01~09 인수 조건 통과, NFR 전체 측정",
       "requirements": [
         "FR-TK-01",
