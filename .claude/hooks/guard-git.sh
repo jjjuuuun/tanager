@@ -21,11 +21,13 @@ ask() {
 [[ "$cmd" =~ (^|[[:space:]])--no-verify([[:space:]]|$) ]] && block "--no-verify 로 git 훅을 우회할 수 없습니다."
 
 # 2) 강제 푸시·main 푸시 금지 (작업 브랜치의 --force-with-lease 는 허용: rebase 후 갱신용)
-if [[ "$cmd" =~ git[[:space:]]+push ]]; then
-  [[ "$cmd" =~ (^|[[:space:]])(-f|--force)([[:space:]]|$) ]] && block "강제 푸시는 금지입니다. 작업 브랜치라면 --force-with-lease 를 쓰세요."
-  [[ "$cmd" =~ (^|[[:space:]])\+ ]] && block "+refspec 강제 푸시는 금지입니다."
-  [[ "$cmd" =~ (^|[[:space:]:])(main|dev)([[:space:]]|$) ]] && block "main · dev 로 직접 푸시할 수 없습니다. PR 로 병합하세요."
-  [[ ( "$branch" == "main" || "$branch" == "dev" ) && ! "$cmd" =~ (refs/tags/|--tags|--follow-tags|[[:space:]:]v[0-9]+\.[0-9]+) ]] && block "현재 브랜치가 $branch 입니다. 작업 브랜치에서 푸시하세요."
+#    한 명령에 여러 단계가 묶여 있어도(&&, ;, |, 줄바꿈) git push 부분만 검사한다
+push="$(printf '%s\n' "$cmd" | sed -E 's/(&&|\|\||;|\|)/\n/g' | grep -E 'git[[:space:]]+push' || true)"
+if [[ -n "$push" ]]; then
+  [[ "$push" =~ (^|[[:space:]])(-f|--force)([[:space:]]|$) ]] && block "강제 푸시는 금지입니다. 작업 브랜치라면 --force-with-lease 를 쓰세요."
+  [[ "$push" =~ (^|[[:space:]])\+ ]] && block "+refspec 강제 푸시는 금지입니다."
+  [[ "$push" =~ (^|[[:space:]:])(main|dev)([[:space:]]|$) ]] && block "main · dev 로 직접 푸시할 수 없습니다. PR 로 병합하세요."
+  [[ ( "$branch" == "main" || "$branch" == "dev" ) && ! "$push" =~ (refs/tags/|--tags|--follow-tags|[[:space:]:]v[0-9]+\.[0-9]+) ]] && block "현재 브랜치가 $branch 입니다. 작업 브랜치에서 푸시하세요."
 fi
 
 # 3) main · dev 직접 커밋·병합 금지
@@ -42,7 +44,7 @@ fi
 if [[ "$cmd" =~ git[[:space:]]+tag([[:space:]]|$) && ! "$cmd" =~ git[[:space:]]+tag([[:space:]]+(-l|--list)([[:space:]]|$)|[[:space:]]*$) ]]; then
   ask "릴리스 태그 생성/삭제입니다. 태그 이름과 대상 커밋을 확인하세요."
 fi
-if [[ "$cmd" =~ git[[:space:]]+push ]] && [[ "$cmd" =~ (^|[[:space:]])(--tags|--follow-tags)([[:space:]]|$) || "$cmd" =~ refs/tags/ || "$cmd" =~ [[:space:]:]v[0-9]+\.[0-9]+ ]]; then
+if [[ -n "$push" ]] && [[ "$push" =~ (^|[[:space:]])(--tags|--follow-tags)([[:space:]]|$) || "$push" =~ refs/tags/ || "$push" =~ [[:space:]:]v[0-9]+\.[0-9]+ ]]; then
   ask "태그 푸시는 release 워크플로(패키징·GitHub Release)를 실행합니다."
 fi
 [[ "$cmd" =~ gh[[:space:]]+release[[:space:]]+(create|edit|upload) ]] && ask "GitHub Release 를 직접 바꿉니다. 보통은 태그 푸시로 워크플로가 만듭니다."
