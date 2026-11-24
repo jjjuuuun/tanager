@@ -43,16 +43,16 @@
       "Bash(.github/scripts/sync-milestones.sh *)",
       "Bash(git cliff *)",
       "Bash(git merge-base *)",
-      "Bash(git tag -l *)"
+      "Bash(git tag -l *)",
+      "Bash(git rev-list *)",
+      "Bash(gh api -X PATCH repos/*/milestones/*)"
     ],
     "ask": [
-      "Bash(git tag *)",
       "Bash(git push origin v*)",
       "Bash(git push --tags *)",
       "Bash(git push * --tags *)",
       "Bash(gh release create *)",
-      "Bash(git reset --hard *)",
-      "Bash(git rebase *)"
+      "Bash(git reset --hard *)"
     ],
     "deny": [
       "Bash(git push --force *)",

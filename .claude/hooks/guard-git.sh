@@ -6,7 +6,9 @@
 # 보호 브랜치: main(릴리스 전용) · dev(통합). 둘 다 직접 커밋·푸시 금지.
 set -euo pipefail
 
-cmd="$(jq -r '.tool_input.command // ""')"
+raw="$(jq -r '.tool_input.command // ""')"
+# git 전역 옵션(-C <경로>, -c <키=값>)을 지워 'git -C x push' 도 'git push' 로 검사한다
+cmd="$(printf '%s' "$raw" | sed -E "s/git([[:space:]]+-[Cc][[:space:]]+(\"[^\"]*\"|'[^']*'|[^[:space:]]+))+/git/g")"
 branch="$(git -C "${CLAUDE_PROJECT_DIR:-.}" symbolic-ref --short HEAD 2>/dev/null || echo "")"
 
 block() { echo "[guard-git] 차단: $1" >&2; exit 2; }
@@ -19,6 +21,13 @@ ask() {
 # ── 차단 ─────────────────────────────────────────────────────────────
 # 1) 훅 우회 금지
 [[ "$cmd" =~ (^|[[:space:]])--no-verify([[:space:]]|$) ]] && block "--no-verify 로 git 훅을 우회할 수 없습니다."
+# core.hooksPath 변경 차단 — 실제 git 명령 구간(git config … / git -c core.hooksPath=…)만 본다(커밋 메시지 본문 오탐 방지)
+hp="$(printf '%s\n' "$raw" | sed -E 's/(&&|\|\||;|\|)/\n/g' \
+      | grep -iE '^[[:space:]]*git[[:space:]].*core\.hookspath' \
+      | grep -iE '([[:space:]]config[[:space:]]|-c[[:space:]]*core\.hookspath)' || true)"
+if [[ -n "$hp" ]] && ! grep -qiE 'hookspath[[:space:]=]+\.githooks/?([[:space:]]|$)' <<<"$hp"; then
+  block "core.hooksPath 를 바꿔 git 훅을 우회할 수 없습니다(허용 값: .githooks)."
+fi
 
 # 2) 강제 푸시·main 푸시 금지 (작업 브랜치의 --force-with-lease 는 허용: rebase 후 갱신용)
 #    한 명령에 여러 단계가 묶여 있어도(&&, ;, |, 줄바꿈) git push 부분만 검사한다
@@ -26,12 +35,13 @@ push="$(printf '%s\n' "$cmd" | sed -E 's/(&&|\|\||;|\|)/\n/g' | grep -E 'git[[:s
 if [[ -n "$push" ]]; then
   [[ "$push" =~ (^|[[:space:]])(-f|--force)([[:space:]]|$) ]] && block "강제 푸시는 금지입니다. 작업 브랜치라면 --force-with-lease 를 쓰세요."
   [[ "$push" =~ (^|[[:space:]])\+ ]] && block "+refspec 강제 푸시는 금지입니다."
-  [[ "$push" =~ (^|[[:space:]:])(main|dev)([[:space:]]|$) ]] && block "main · dev 로 직접 푸시할 수 없습니다. PR 로 병합하세요."
+  [[ "$push" =~ (^|[[:space:]])--(mirror|all|prune|delete)([[:space:]]|$) ]] && block "--mirror · --all · --prune · --delete 푸시는 금지입니다."
+  [[ "$push" =~ (^|[[:space:]:/])(main|dev)([[:space:]]|$) ]] && block "main · dev 로 직접 푸시할 수 없습니다. PR 로 병합하세요."
   [[ ( "$branch" == "main" || "$branch" == "dev" ) && ! "$push" =~ (refs/tags/|--tags|--follow-tags|[[:space:]:]v[0-9]+\.[0-9]+) ]] && block "현재 브랜치가 $branch 입니다. 작업 브랜치에서 푸시하세요."
 fi
 
 # 3) main · dev 직접 커밋·병합 금지
-if [[ "$cmd" =~ git[[:space:]]+(commit|merge|cherry-pick) && ( "$branch" == "main" || "$branch" == "dev" ) ]]; then
+if [[ "$cmd" =~ git[[:space:]]+(commit|merge|cherry-pick|revert|am)([[:space:]]|$) && ( "$branch" == "main" || "$branch" == "dev" ) ]]; then
   block "$branch 에 직접 커밋/병합할 수 없습니다. 'git switch dev && git pull --ff-only && git switch -c <type>/<이슈번호>-<slug>' 후 작업하세요."
 fi
 
@@ -39,6 +49,8 @@ fi
 [[ "$cmd" =~ gh[[:space:]]+pr[[:space:]]+(merge|close) ]] && block "PR 병합/닫기는 사용자가 결정합니다. 리뷰 코멘트까지만 남기세요."
 [[ "$cmd" =~ gh[[:space:]]+pr[[:space:]]+review && "$cmd" =~ (^|[[:space:]])(--approve|-a)([[:space:]]|$) ]] && block "PR 승인은 사용자가 합니다. 'gh pr review <번호> --comment' 를 쓰세요."
 [[ "$cmd" =~ gh[[:space:]]+api && "$cmd" =~ pulls/[0-9]+/merge ]] && block "API 로 PR 을 병합할 수 없습니다."
+[[ "$cmd" =~ gh[[:space:]]+api && "$cmd" =~ (pulls|issues)/[0-9]+ && "$cmd" =~ state=closed ]] && block "API 로 PR 을 닫을 수 없습니다."
+[[ "$cmd" =~ gh[[:space:]]+api[[:space:]]+graphql && "$cmd" =~ (mergePullRequest|closePullRequest|enablePullRequestAutoMerge|approve) ]] && block "GraphQL 로 PR 을 병합/닫기/승인할 수 없습니다."
 
 # ── 승인 필요 (릴리스) ────────────────────────────────────────────────
 if [[ "$cmd" =~ git[[:space:]]+tag([[:space:]]|$) && ! "$cmd" =~ git[[:space:]]+tag([[:space:]]+(-l|--list)([[:space:]]|$)|[[:space:]]*$) ]]; then
