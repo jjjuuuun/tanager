@@ -102,7 +102,7 @@ main{padding:28px 20px 80px}.grid2,.grid3{grid-template-columns:1fr}}
 <tr><td>문서</td><td>Tanager 소프트웨어 설계 기술서 (SDD, Software Design Description)</td></tr>
 <tr><td>버전</td><td>0.1 (초안)</td></tr>
 <tr><td>작성일</td><td>2026-11-24</td></tr>
-<tr><td>상태</td><td>M0 스파이크 전. ✱ 표시 항목은 스파이크에서 검증 후 확정</td></tr>
+<tr><td>상태</td><td>M0 스파이크 완료(2026-11-24, #10) — 결과는 ADR-0001 · 0003. 남은 ✱ 는 M1 · M5 에서 확인</td></tr>
 <tr><td>짝 문서</td><td><a href="01-프로젝트-구성-설계.html">01-프로젝트-구성-설계.html</a> — 언어·구조·방법론·Git·CI·에이전트</td></tr>
 </table>
 <h3>1.1 목적</h3>
@@ -166,13 +166,13 @@ PS C:\work\infra&gt; ▌</div></foreignObject><rect x="620" y="46" width="250" h
 <h3>3.4 복원 (FR-RES)</h3>
 <div class="tbl-wrap"><table><tr><th>ID</th><th>요구사항</th><th>우선순위</th><th>마일스톤</th></tr><tr><td><code>FR-RES-01</code></td><td>상태 변경 후 1초 안에 디스크에 저장한다 (디바운스, 원자적 쓰기)</td><td><span class="tag must">필수</span></td><td>M5</td></tr><tr><td><code>FR-RES-02</code></td><td>시작 시 탭 · 분할 · 창별 프로파일 · 마지막 cwd · 포커스를 복원한다</td><td><span class="tag must">필수</span></td><td>M5</td></tr><tr><td><code>FR-RES-03</code></td><td>창 위치 · 크기 · 최대화 · 사이드바/도구함 폭과 표시 여부를 복원한다</td><td><span class="tag should">권장</span></td><td>M5</td></tr><tr><td><code>FR-RES-04</code></td><td>저장 파일이 손상되면 <code>.bak</code> 에서 복구하고 알린다</td><td><span class="tag must">필수</span></td><td>M5</td></tr></table></div>
 <h3>3.5 도구함 (FR-TK)</h3>
-<div class="tbl-wrap"><table><tr><th>ID</th><th>요구사항</th><th>우선순위</th><th>마일스톤</th></tr><tr><td><code>FR-TK-01</code></td><td>폴더 또는 세션을 선택하면 그 경로의 AI 도구 구성을 도구함 패널에 보여 준다</td><td><span class="tag must">필수</span></td><td>M6</td></tr><tr><td><code>FR-TK-02</code></td><td>항목 종류: 스킬(+레거시 commands), 서브에이전트, 메모리(CLAUDE.md · CLAUDE.local.md · rules · 상위 디렉터리 CLAUDE.md), MCP 서버, 훅, 권한 규칙</td><td><span class="tag must">필수</span></td><td>M6</td></tr><tr><td><code>FR-TK-03</code></td><td>범위별 그룹: 이 프로젝트 · 로컬 · 상위 디렉터리 · 전체 공통(사용자) · 관리형(있으면)</td><td><span class="tag must">필수</span></td><td>M6</td></tr><tr><td><code>FR-TK-04</code></td><td>세션 환경에 맞는 홈을 쓴다: WSL 세션 → 그 배포판의 <code>~</code>, Windows 세션 → <code>%USERPROFILE%</code></td><td><span class="tag must">필수</span></td><td>M6</td></tr><tr><td><code>FR-TK-05</code></td><td>항목 상세: 이름, 설명(프런트매터 description), 원본 파일, 같은 이름이 다른 범위에 있어 가려졌는지</td><td><span class="tag should">권장</span></td><td>M6</td></tr><tr><td><code>FR-TK-06</code></td><td>동작: 터미널에 입력(<code>/이름 </code>, Enter 없음) · 파일 열기(OS 기본 편집기) · 경로 복사</td><td><span class="tag should">권장</span></td><td>M6</td></tr><tr><td><code>FR-TK-07</code></td><td>읽기 전용. MCP <code>env</code> · <code>headers</code> 값과 토큰류는 마스킹하고 저장·로그하지 않는다</td><td><span class="tag must">필수</span></td><td>M6</td></tr><tr><td><code>FR-TK-08</code></td><td>선택 시·창 포커스 시 다시 읽고(캐시: 파일 수정 시각), 수동 새로고침 버튼을 둔다</td><td><span class="tag should">권장</span></td><td>M6</td></tr><tr><td><code>FR-TK-09</code></td><td>Claude Code 작업 이력 가져오기: 그 환경의 <code>~/.claude/projects/</code> 에서 Claude 를 쓴 디렉터리를 찾아 트리에 추가하고, '여기서 claude --continue' 메뉴를 제공한다 ✱</td><td><span class="tag could">선택</span></td><td>M6</td></tr><tr><td><code>FR-TK-10</code></td><td>AI 도구 공급자 확장점(ToolkitProvider) — Codex · Gemini CLI 등은 어댑터 추가로 지원</td><td><span class="tag could">선택</span></td><td>M7+</td></tr></table></div>
+<div class="tbl-wrap"><table><tr><th>ID</th><th>요구사항</th><th>우선순위</th><th>마일스톤</th></tr><tr><td><code>FR-TK-01</code></td><td>폴더 또는 세션을 선택하면 그 경로의 AI 도구 구성을 도구함 패널에 보여 준다</td><td><span class="tag must">필수</span></td><td>M6</td></tr><tr><td><code>FR-TK-02</code></td><td>항목 종류: 스킬(+레거시 commands), 서브에이전트, 메모리(CLAUDE.md · CLAUDE.local.md · rules · 상위 디렉터리 CLAUDE.md), MCP 서버, 훅, 권한 규칙</td><td><span class="tag must">필수</span></td><td>M6</td></tr><tr><td><code>FR-TK-03</code></td><td>범위별 그룹: 이 프로젝트 · 로컬 · 상위 디렉터리 · 전체 공통(사용자) · 관리형(있으면)</td><td><span class="tag must">필수</span></td><td>M6</td></tr><tr><td><code>FR-TK-04</code></td><td>세션 환경에 맞는 홈을 쓴다: WSL 세션 → 그 배포판의 <code>~</code>, Windows 세션 → <code>%USERPROFILE%</code></td><td><span class="tag must">필수</span></td><td>M6</td></tr><tr><td><code>FR-TK-05</code></td><td>항목 상세: 이름, 설명(프런트매터 description), 원본 파일, 같은 이름이 다른 범위에 있어 가려졌는지</td><td><span class="tag should">권장</span></td><td>M6</td></tr><tr><td><code>FR-TK-06</code></td><td>동작: 터미널에 입력(<code>/이름 </code>, Enter 없음) · 파일 열기(OS 기본 편집기) · 경로 복사</td><td><span class="tag should">권장</span></td><td>M6</td></tr><tr><td><code>FR-TK-07</code></td><td>읽기 전용. MCP <code>env</code> · <code>headers</code> 값과 토큰류는 마스킹하고 저장·로그하지 않는다</td><td><span class="tag must">필수</span></td><td>M6</td></tr><tr><td><code>FR-TK-08</code></td><td>선택 시·창 포커스 시 다시 읽고(캐시: 파일 수정 시각), 수동 새로고침 버튼을 둔다</td><td><span class="tag should">권장</span></td><td>M6</td></tr><tr><td><code>FR-TK-09</code></td><td>Claude Code 작업 이력 가져오기: 그 환경의 <code>~/.claude/projects/</code> 에서 Claude 를 쓴 디렉터리를 찾아 트리에 추가하고, '여기서 claude --continue' 메뉴를 제공한다 (형식 M0 확인)</td><td><span class="tag could">선택</span></td><td>M6</td></tr><tr><td><code>FR-TK-10</code></td><td>AI 도구 공급자 확장점(ToolkitProvider) — Codex · Gemini CLI 등은 어댑터 추가로 지원</td><td><span class="tag could">선택</span></td><td>M7+</td></tr></table></div>
 <h3>3.6 설정 (FR-CFG)</h3>
 <div class="tbl-wrap"><table><tr><th>ID</th><th>요구사항</th><th>우선순위</th><th>마일스톤</th></tr><tr><td><code>FR-CFG-01</code></td><td>키 바인딩 재정의 (충돌 검사)</td><td><span class="tag should">권장</span></td><td>M5</td></tr><tr><td><code>FR-CFG-02</code></td><td>글꼴(한글 폴백 포함) · 크기 · 테마(§3.8) · 스크롤백 줄 수</td><td><span class="tag should">권장</span></td><td>M5</td></tr><tr><td><code>FR-CFG-03</code></td><td>설정 파일을 열고 저장하면 즉시 반영</td><td><span class="tag could">선택</span></td><td>M5</td></tr></table></div>
 <h3>3.7 리소스 표시 (FR-MON)</h3>
 <div class="tbl-wrap"><table><tr><th>ID</th><th>요구사항</th><th>우선순위</th><th>마일스톤</th></tr><tr><td><code>FR-MON-01</code></td><td>상태줄 오른쪽에 호스트 CPU 사용률 · 메모리(사용/전체) · 포커스 창 cwd 가 있는 드라이브의 디스크(사용/전체)를 표시한다. 기본 2초 주기</td><td><span class="tag should">권장</span></td><td>M5</td></tr><tr><td><code>FR-MON-02</code></td><td>포커스 창이 WSL 세션이면 WSL VM 메모리(사용/한도 — <code>.wslconfig</code> 의 memory)와 그 배포판 <code>/</code> 의 디스크 사용량을 함께 표시한다. 실행 중인 WSL 세션이 없으면 <code>wsl.exe</code> 를 부르지 않는다(VM 을 깨우지 않음)</td><td><span class="tag should">권장</span></td><td>M5</td></tr><tr><td><code>FR-MON-03</code></td><td>임계값(기본: CPU 90% 10초 지속 · 메모리 85% · 디스크 90%)을 넘은 항목은 경고색으로 바꾸고, 툴팁에 상세(코어 수, 사용 가능 메모리, 드라이브 경로, 마지막 갱신 시각)를 보여 준다</td><td><span class="tag should">권장</span></td><td>M5</td></tr><tr><td><code>FR-MON-04</code></td><td>항목별 표시 여부 · 주기(1~10초) · 임계값을 설정한다. 상태줄에서 끄면 수집도 멈춘다. 항목 클릭 = OS 작업 관리자 / 디스크 정리 열기</td><td><span class="tag could">선택</span></td><td>M5</td></tr></table></div>
 <h3>3.8 화면 · 테마 (FR-UI)</h3>
-<div class="tbl-wrap"><table><tr><th>ID</th><th>요구사항</th><th>우선순위</th><th>마일스톤</th></tr><tr><td><code>FR-UI-01</code></td><td>테마 모드: <b>시스템(기본)</b> · 다크 · 라이트. 시스템 모드는 OS 설정을 따르고, OS 에서 바꾸면 재시작 없이 즉시 반영한다 ✱</td><td><span class="tag must">필수</span></td><td>M5</td></tr><tr><td><code>FR-UI-02</code></td><td>눈이 편한 색(§8.5 색 토큰): 순수 검정·순수 흰색을 쓰지 않는다. 본문 대비 7:1~13:1, 보조 글자 4.5:1 이상(WCAG AA), 강조색은 채도를 낮춘다</td><td><span class="tag must">필수</span></td><td>M2</td></tr><tr><td><code>FR-UI-03</code></td><td>부드러운 모양: 버튼·탭·팝업·창 모서리를 둥글게(6~10px), 영역은 굵은 선 대신 배경 단차로 나누고, 포커스 창만 2px 강조색 테두리</td><td><span class="tag must">필수</span></td><td>M2</td></tr><tr><td><code>FR-UI-04</code></td><td>부드러운 움직임: 포커스 테두리 · 드롭 영역 · 줌 · 사이드바/도구함 접기에 150~200ms ease-out 전환. 경계선 미리보기는 화면 주사율에 맞춘다. OS 의 '애니메이션 효과 끄기'가 켜져 있으면 즉시 전환</td><td><span class="tag should">권장</span></td><td>M4</td></tr><tr><td><code>FR-UI-05</code></td><td>터미널 ANSI 16색 · 커서 · 선택 색을 테마와 같은 톤으로 맞추고, 테마가 바뀌면 실행 중인 세션에도 즉시 적용한다</td><td><span class="tag must">필수</span></td><td>M5</td></tr><tr><td><code>FR-UI-06</code></td><td>글꼴: 안티앨리어싱(그레이스케일 기본), 한글 폴백, 줄 간격 1.2, 커서 깜빡임은 부드럽게(페이드)</td><td><span class="tag should">권장</span></td><td>M2</td></tr></table></div>
+<div class="tbl-wrap"><table><tr><th>ID</th><th>요구사항</th><th>우선순위</th><th>마일스톤</th></tr><tr><td><code>FR-UI-01</code></td><td>테마 모드: <b>시스템(기본)</b> · 다크 · 라이트. 시스템 모드는 OS 설정을 따르고, OS 에서 바꾸면 재시작 없이 즉시 반영한다 ✱</td><td><span class="tag must">필수</span></td><td>M5</td></tr><tr><td><code>FR-UI-02</code></td><td>눈이 편한 색(§8.5 색 토큰): 순수 검정·순수 흰색을 쓰지 않는다. 본문 대비 7:1~13:1, 보조 글자 4.5:1 이상(WCAG AA), 강조색은 채도를 낮춘다</td><td><span class="tag must">필수</span></td><td>M2</td></tr><tr><td><code>FR-UI-03</code></td><td>부드러운 모양: 버튼·탭·팝업·창 모서리를 둥글게(6~10px), 영역은 굵은 선 대신 배경 단차로 나누고, 포커스 창만 2px 강조색 테두리</td><td><span class="tag must">필수</span></td><td>M2</td></tr><tr><td><code>FR-UI-04</code></td><td>부드러운 움직임: 포커스 테두리 · 드롭 영역 · 줌 · 사이드바/도구함 접기에 150~200ms ease-out 전환. 경계선 미리보기는 화면 주사율에 맞춘다. OS 의 '애니메이션 효과 끄기'가 켜져 있으면 즉시 전환</td><td><span class="tag should">권장</span></td><td>M4</td></tr><tr><td><code>FR-UI-05</code></td><td>터미널 ANSI 16색 · 커서 · 선택 색을 테마와 같은 톤으로 맞추고, 테마가 바뀌면 실행 중인 세션에도 즉시 적용한다</td><td><span class="tag must">필수</span></td><td>M5</td></tr><tr><td><code>FR-UI-06</code></td><td>글꼴: 터미널 기본 글꼴은 한글 글리프가 있는 고정폭 <b>D2Coding(앱에 번들)</b>. 한글이 없는 글꼴을 고르면 경고한다(IME 조합 중 글자가 기본 글꼴로만 그려짐 — M0). 안티앨리어싱(그레이스케일 기본), 줄 간격 1.2, 커서 깜빡임은 부드럽게(페이드)</td><td><span class="tag should">권장</span></td><td>M2</td></tr></table></div>
 <h3>3.9 비기능 요구사항 (NFR)</h3>
 <div class="tbl-wrap"><table>
 <tr><th>ID</th><th>항목</th><th>기준</th></tr>
@@ -384,7 +384,7 @@ public record CpuWindow(List&lt;Double&gt; recent) {                            
 <h3>6.6 리소스 수집</h3>
 <ol>
 <li><code>WatchResourcesUseCase</code> 가 가상 스레드 하나에서 주기(기본 2초)마다 <code>PlatformModule.resources()</code> 를 부른다. 결과는 저장 상태가 아니므로 StateActor 를 거치지 않고 <code>ResourceSampled</code> 이벤트로 바로 UiDispatcher 에 보낸다.</li>
-<li>호스트 CPU · 메모리: <code>com.sun.management.OperatingSystemMXBean</code>(<code>getCpuLoad</code> · <code>getTotalMemorySize</code> · <code>getFreeMemorySize</code>). JDK 만으로 Windows · macOS 모두 된다 ✱(Windows 에서 값이 작업 관리자와 맞는지 M0 확인).</li>
+<li>호스트 CPU · 메모리: <code>com.sun.management.OperatingSystemMXBean</code>(<code>getCpuLoad</code> · <code>getTotalMemorySize</code> · <code>getFreeMemorySize</code>). JDK 만으로 Windows · macOS 모두 된다 ✱(Windows 에서 값이 작업 관리자와 맞는지 M5 구현 때 확인).</li>
 <li>디스크: 포커스 창 cwd 의 루트(<code>C:\</code> 등)에 대해 <code>FileStore.getTotalSpace / getUsableSpace</code>.</li>
 <li>WSL: 실행 중인 WSL 세션이 있을 때만, 그 배포판에 <code>wsl.exe -d &lt;배포판&gt; -- sh -c 'cat /proc/meminfo; df -kP /'</code> 를 5초 이상 간격으로 실행해 파싱(<code>MeminfoParser</code> · <code>DfParser</code> 는 픽스처로 테스트하는 순수 함수).</li>
 <li>판정: <code>CpuWindow.level</code> · <code>Usage.ratio</code> 와 <code>Thresholds</code> 비교 → 상태줄 항목 색. 상태줄에서 항목을 끄면 그 수집도 멈춘다.</li>
@@ -423,8 +423,9 @@ public record CpuWindow(List&lt;Double&gt; recent) {                            
 <li><b>읽기 전용</b>: 어댑터는 파일을 쓰지 않는다. "파일 열기"는 OS 기본 편집기에 넘길 뿐이다(Windows: <code>Desktop.open</code>, WSL 파일은 <code>\\wsl.localhost</code> 경로로).</li>
 <li><b>터미널에 입력</b>: 포커스 창의 <code>TerminalStream.write</code> 로 <code>/이름 </code> 을 보낸다. Enter 는 보내지 않는다. 포커스 창이 다른 환경이면 경고만 한다.</li>
 </ul>
-<h3>7.3 Claude Code 작업 이력 가져오기 (FR-TK-09) ✱</h3>
-<p>Claude Code 는 사용한 디렉터리별로 <code>~/.claude/projects/&lt;인코딩된 경로&gt;/</code> 아래에 대화 기록을 남긴다. 디렉터리 이름 인코딩은 되돌릴 수 없으므로(<code>/</code>·<code>.</code> → <code>-</code>) 각 기록 파일의 메타데이터에 있는 작업 경로(<code>cwd</code>)만 읽어 이력에 "Claude 사용" 표시와 함께 넣는다. <b>대화 내용은 읽지 않는다.</b> 형식이 공개 사양이 아니므로 M0 에서 실제 파일로 확인하고, 실패하면 기능을 끄고 경고만 남긴다.</p>
+<h3>7.3 Claude Code 작업 이력 가져오기 (FR-TK-09)</h3>
+<p>Claude Code 는 사용한 디렉터리별로 <code>~/.claude/projects/&lt;인코딩된 경로&gt;/</code> 아래에 대화 기록을 남긴다. 디렉터리 이름 인코딩은 되돌릴 수 없으므로(<code>/</code>·<code>.</code> → <code>-</code>) 각 기록 파일의 메타데이터에 있는 작업 경로(<code>cwd</code>)만 읽어 이력에 "Claude 사용" 표시와 함께 넣는다. <b>대화 내용은 읽지 않는다.</b> 형식이 공개 사양이 아니므로 실패하면 기능을 끄고 경고만 남긴다.</p>
+<p><b>M0 확인 결과</b>: 디렉터리 이름은 되돌릴 수 없다(한글 경로 → <code>-----</code>). 각 <code>*.jsonl</code> 의 여러 종류 줄에 <code>cwd</code> 필드가 있으므로, 파일마다 <code>cwd</code> 가 있는 첫 줄 하나만 읽는다(나머지 · 대화 내용은 읽지 않음). <code>cwd</code> 를 못 찾은 디렉터리는 건너뛴다.</p>
 <p>메뉴: <b>여기서 claude --continue</b> / <b>여기서 claude --resume</b> → 그 경로에서 새 창을 열고 명령을 입력·실행한다.</p>
 <h3>7.4 확장: 다른 AI 도구</h3>
 <pre data-lang="java"><code>public interface ToolkitProvider {
@@ -496,7 +497,7 @@ public record CpuWindow(List&lt;Double&gt; recent) {                            
 <h3>8.4 사이드바 메뉴</h3>
 <div class="tbl-wrap"><table>
 <tr><th>노드</th><th>메뉴</th></tr>
-<tr><td>폴더</td><td>여기서 열기 ▸ 오른쪽 · 아래 · 새 탭 / 다른 프로파일로 열기 ▸ (경로 변환 가능한 프로파일만) / 여기서 claude --continue ✱ / 경로 복사 / 고정 · 별칭 / 숨기기 / 기록 삭제</td></tr>
+<tr><td>폴더</td><td>여기서 열기 ▸ 오른쪽 · 아래 · 새 탭 / 다른 프로파일로 열기 ▸ (경로 변환 가능한 프로파일만) / 여기서 claude --continue / 경로 복사 / 고정 · 별칭 / 숨기기 / 기록 삭제</td></tr>
 <tr><td>세션</td><td>포커스 / 같은 경로에 새 창 / 재시작 / 닫기</td></tr>
 <tr><td>환경</td><td>새 창(기본 경로) / 모두 펼치기·접기</td></tr>
 </table></div>
@@ -572,7 +573,7 @@ public record CpuWindow(List&lt;Double&gt; recent) {                            
   &quot;history&quot;: { &quot;maxEntries&quot;: 2000, &quot;exclude&quot;: [&quot;/tmp/**&quot;, &quot;**/node_modules/**&quot;] },
   &quot;toolkit&quot;: { &quot;providers&quot;: [&quot;claude-code&quot;], &quot;importClaudeProjects&quot;: true },
   &quot;appearance&quot;: { &quot;theme&quot;: &quot;SYSTEM&quot;, &quot;animations&quot;: &quot;AUTO&quot;, &quot;cornerRadius&quot;: 8 },   // SYSTEM | DARK | LIGHT · AUTO | ON | OFF
-  &quot;terminal&quot;: { &quot;font&quot;: [&quot;JetBrains Mono&quot;, &quot;D2Coding&quot;, &quot;Malgun Gothic&quot;], &quot;size&quot;: 14, &quot;lineHeight&quot;: 1.2, &quot;scrollback&quot;: 10000 },
+  &quot;terminal&quot;: { &quot;font&quot;: &quot;D2Coding&quot;, &quot;size&quot;: 14, &quot;lineHeight&quot;: 1.2, &quot;scrollback&quot;: 10000 },
   &quot;layout&quot;: { &quot;dividerHitPx&quot;: 6, &quot;minPane&quot;: { &quot;cols&quot;: 20, &quot;rows&quot;: 5 } },
   &quot;monitor&quot;: { &quot;enabled&quot;: true, &quot;intervalSec&quot;: 2, &quot;items&quot;: [&quot;CPU&quot;, &quot;MEMORY&quot;, &quot;DISK&quot;, &quot;WSL&quot;],
                &quot;thresholds&quot;: { &quot;cpu&quot;: 0.90, &quot;cpuSustainSec&quot;: 10, &quot;memory&quot;: 0.85, &quot;disk&quot;: 0.90 } },
@@ -599,14 +600,14 @@ public record CpuWindow(List&lt;Double&gt; recent) {                            
 <tr><td>powershell (5.1)</td><td><code>powershell.exe -NoLogo -NoExit -Command ". '&lt;…\tanager.ps1&gt;'"</code> + 작업 디렉터리 지정. 스크립트는 UTF-8 BOM, 5.1 문법</td><td>OSC 9;9</td></tr>
 <tr><td>cmd</td><td><code>cmd.exe /k</code> + 환경 변수 <code>PROMPT=$e]9;9;$P$e\$P$G</code></td><td>OSC 9;9</td></tr>
 </table></div>
-<h4>tanager.bash ✱</h4>
+<h4>tanager.bash (M0 검증)</h4>
 <pre data-lang="bash"><code># 사용자 설정을 먼저 읽고, 프롬프트 훅을 덧붙인다 (덮어쓰지 않음)
 [ -f ~/.bashrc ] &amp;&amp; . ~/.bashrc
 
 __tanager_osc7() {
   local LC_ALL=C p=$PWD out= c i
   for (( i = 0; i &lt; ${#p}; i++ )); do            # 바이트 단위 퍼센트 인코딩 (한글 경로 대응)
-    c=${p:i:1}
+    c=${p:i:1}            # LC_ALL=C 덕분에 바이트 단위 — 빼면 한글이 %D55C 처럼 깨진다(M0 에서 재현)
     case $c in
       [a-zA-Z0-9/._~-]) out+=$c ;;
       *) printf -v c &#x27;%%%02X&#x27; &quot;&#x27;$c&quot;; out+=$c ;;
@@ -615,7 +616,7 @@ __tanager_osc7() {
   printf &#x27;\e]7;file://%s%s\e\\&#x27; &quot;$HOSTNAME&quot; &quot;$out&quot;
 }
 PROMPT_COMMAND=&quot;__tanager_osc7${PROMPT_COMMAND:+;$PROMPT_COMMAND}&quot;</code></pre>
-<h4>tanager.ps1 ✱</h4>
+<h4>tanager.ps1 (M0 검증 — UTF-8 BOM 으로 저장)</h4>
 <pre data-lang="powershell"><code># 프로필($PROFILE)은 이미 로드된 뒤. 기존 prompt 를 감싸서 앞에 OSC 9;9 를 붙인다 (oh-my-posh 등과 공존)
 $global:__TanagerPrompt = $function:prompt
 function global:prompt {
@@ -652,7 +653,9 @@ function global:prompt {
 <ul>
 <li>런타임 모듈: <code>java.desktop</code>, <code>java.logging</code>, <code>jdk.unsupported</code> 등 jdeps 결과로 확정 ✱.</li>
 <li>시작 시간: AppCDS 아카이브를 빌드 시 생성해 포함.</li>
-<li>pty4j 네이티브 라이브러리는 jar 에서 풀려 사용자 디렉터리에 캐시된다 — 설치 경로가 읽기 전용이어도 동작하는지 M0 에서 확인 ✱.</li>
+<li>pty4j 네이티브 라이브러리는 jar 에서 풀려 사용자 디렉터리에 캐시된다 — 설치 경로가 읽기 전용이어도 동작한다(M0: pty4j 0.14 가 번들 <code>conpty.dll</code> 을 <code>%TEMP%</code> 에 풀어 씀). Java 25 의 JNA restricted method 경고 → 실행 옵션 <code>--enable-native-access=ALL-UNNAMED</code>.</li>
+<li>M0 의 app-image 는 전체 런타임 포함 132MB → jlink 로 필요한 모듈만(M1).</li>
+<li>터미널 기본 글꼴 D2Coding(SIL OFL 1.1)을 앱에 번들한다(FR-UI-06, ADR-0001).</li>
 <li>코드 서명이 없으면 SmartScreen 경고가 뜬다 → v1.0 전에 서명 여부 결정(리스크 R6).</li>
 </ul>
 </section><section id="quality"><h2><span class="no">12.</span>품질 설계</h2>
@@ -672,7 +675,7 @@ function global:prompt {
 <h3>13.1 마일스톤</h3>
 <div class="tbl-wrap"><table>
 <tr><th>단계</th><th>버전</th><th>범위</th><th>완료 조건</th></tr>
-<tr><td>M0 스파이크</td><td>—</td><td>pty4j ConPTY · JediTerm 한글 IME · OSC 7/9;9 가로채기 · jpackage · Claude 이력 형식 확인</td><td>ADR-0001·0003 확정, ✱ 항목 해소</td></tr>
+<tr><td>M0 스파이크</td><td>—</td><td>pty4j ConPTY · JediTerm 한글 IME · OSC 7/9;9 가로채기 · jpackage · Claude 이력 형식 확인</td><td>ADR-0001·0003 확정, ✱ 항목 해소 — <b>완료 2026-11-24 (#10)</b></td></tr>
 <tr><td>M1 스캐폴딩</td><td>—</td><td>Gradle 멀티 모듈, build-logic, ArchUnit, Spotless, JaCoCo, CI</td><td>CI 전부 green, 빈 앱 창 실행</td></tr>
 <tr><td>M2 단일 터미널</td><td>v0.1.0</td><td>프로파일 탐지, 창 1개, 종료·재시작, 소프트 테마 기본값</td><td>FR-SES-01/02/04, FR-UI-02/03/06</td></tr>
 <tr><td>M3 이력 · 트리</td><td>v0.2.0</td><td>셸 통합, cwd 추적, 폴더·세션 트리, 고정·검색</td><td>FR-HIS-01~07, FR-SES-03</td></tr>
@@ -698,8 +701,8 @@ function global:prompt {
 </section><section id="risk"><h2><span class="no">14.</span>리스크와 결정</h2>
 <div class="tbl-wrap"><table>
 <tr><th>ID</th><th>리스크</th><th>영향</th><th>대응</th></tr>
-<tr><td>R1</td><td>pty4j 가 Windows 에서 ConPTY 대신 winpty 를 쓰거나 wsl.exe 와 호환 문제</td><td>높음</td><td>M0 스파이크. 안 되면 ConPTY 를 FFM API(java.lang.foreign)로 직접 호출하는 어댑터</td></tr>
-<tr><td>R2</td><td>JediTerm 한글 IME 조합·와이드 문자 문제</td><td>높음</td><td>M0 확인. 문제 시 패치 기여 또는 포크</td></tr>
+<tr><td>R1</td><td>pty4j 가 Windows 에서 ConPTY 대신 winpty 를 쓰거나 wsl.exe 와 호환 문제</td><td>높음</td><td><b>해소(M0)</b>: pty4j 0.14 가 번들 ConPTY(<code>WinConPtyProcess</code>)로 WSL · PowerShell 5.1 · cmd 기동, 크기 전달 확인</td></tr>
+<tr><td>R2</td><td>JediTerm 한글 IME 조합·와이드 문자 문제</td><td>높음</td><td><b>부분 해소(M0)</b>: 한글 글리프가 있는 기본 글꼴(D2Coding 번들)이면 조합 · 확정 · 두 칸 폭 정상. JediTerm 은 조합 중 글자를 기본 글꼴로만 그리므로 한글 없는 글꼴은 경고. 업스트림 패치 기여는 M2 에서 판단</td></tr>
 <tr><td>R3</td><td>셸 통합이 사용자 프롬프트 테마와 충돌</td><td>중간</td><td>감싸기 방식, 프로파일별 셸 통합 끄기 옵션</td></tr>
 <tr><td>R4</td><td>WSL automount 루트 변경, <code>\\wsl.localhost</code> 접근 지연</td><td>중간</td><td>탐지 시 wslpath 질의, 도구함 비동기·캐시</td></tr>
 <tr><td>R5</td><td>Claude Code 설정 위치·형식 변경</td><td>중간</td><td>공급자 어댑터에 격리, 픽스처 테스트, 실패 시 경고만</td></tr>
@@ -707,7 +710,7 @@ function global:prompt {
 <tr><td>R7</td><td>JDK 25 LTS 고정으로 26~28 의 새 기능을 못 씀</td><td>낮음</td><td>LTS 사이에는 25.0.x 보안 업데이트만. 29 LTS 출시 후 toolchain 한 줄 변경 PR</td></tr>
 <tr><td>R8</td><td><code>/mnt/c</code> 저장소를 WSL·Windows 양쪽에서 빌드</td><td>낮음</td><td>OS 별 빌드 디렉터리 분리(<code>build/&lt;os&gt;</code>) 검토</td></tr>
 <tr><td>R9</td><td>WSL 지표 수집이 VM 을 깨우거나 느림</td><td>중간</td><td>실행 중 WSL 세션이 있을 때만 · 5초 이상 간격 · 시간 초과 1초 후 '—' 표시</td></tr>
-<tr><td>R10</td><td>Swing 에서 OS 테마 변경 감지 · 부드러운 전환 구현 난도</td><td>중간</td><td>M0 에서 레지스트리 감지 확인 ✱. 실패 시 창 포커스 때마다 다시 읽기로 대체</td></tr>
+<tr><td>R10</td><td>Swing 에서 OS 테마 변경 감지 · 부드러운 전환 구현 난도</td><td>중간</td><td>M5 에서 레지스트리 감지 확인 ✱(M0 범위 밖). 실패 시 창 포커스 때마다 다시 읽기로 대체</td></tr>
 </table></div>
 <h3>14.1 ADR</h3>
 <ul>
