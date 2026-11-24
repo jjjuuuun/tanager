@@ -17,6 +17,7 @@ feat/12-…   ●─●─●             hotfix/31-… ●──────●
 - 작업 브랜치: `<type>/<이슈번호>-<kebab-slug>` — 예 `feat/12-split-pane-resize`. dev 에서 분기, base = dev.
   - type: `feat fix perf refactor test docs build ci chore spike`
   - `spike/` 는 실험용. PR 병합 금지(CI 가 막음). 결론은 `docs/adr/` 에 남기고 `feat/` 로 다시 구현.
+- **브랜치 정리**: 병합된 작업 브랜치는 GitHub 이 자동 삭제하고 Claude 가 로컬에서도 지운다. 스파이크 브랜치는 결과 PR 이 병합되면 `archive/<브랜치명>` 태그(주석 태그, 승인 필요)로 커밋을 보관한 뒤 원격 · 로컬에서 지운다. **main · dev 는 절대 지우지 않는다**(ruleset 이 삭제 금지). 남는 브랜치는 main · dev 둘뿐이어야 한다.
 - 긴급 수정: `hotfix/<이슈번호>-<slug>` — **main 에서 분기, base = main**. 병합 후 패치 태그 → main → dev **역병합 PR**(merge commit).
 - 팀 모드 하위 브랜치: `<부모 브랜치>--<역할>` (예 `feat/12-split-pane--domain`). 로컬에서 부모 브랜치로 병합하며 PR 을 만들지 않는다.
 - 태그: `vX.Y.Z` (SemVer). main 의 커밋에만(release 워크플로가 검사). `v1.0.0` 전에는 MINOR 가 호환성 깨짐을 포함할 수 있다.
