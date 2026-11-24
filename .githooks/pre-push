@@ -23,6 +23,6 @@ while read -r local_ref _ remote_ref _; do
   esac
 done
 
-if $pushes_branch && [[ -x ./gradlew ]]; then
-  ./gradlew --quiet check
+if $pushes_branch && [[ -f ./gradlew ]]; then
+  sh ./gradlew --quiet check
 fi

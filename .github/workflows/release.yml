@@ -18,8 +18,10 @@ jobs:
           fetch-depth: 0
       - run: |
           git fetch origin main
-          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || {
-            echo "::error::태그 $GITHUB_REF_NAME 가 main 에 없는 커밋을 가리킵니다. dev → main 릴리스 PR 병합 후 main 에서 태그하세요."
+          sha="$(git rev-parse "$GITHUB_REF_NAME^{commit}")"
+          # 단순 조상 검사는 이미 main 에 들어간 과거 dev 커밋도 통과시키므로 first-parent 사슬로 확인
+          git rev-list --first-parent origin/main | grep -qx "$sha" || {
+            echo "::error::태그 $GITHUB_REF_NAME 가 main 의 릴리스 커밋(first-parent)이 아닙니다. dev → main 릴리스 PR 병합 후 main 끝에서 태그하세요."
             exit 1
           }
 

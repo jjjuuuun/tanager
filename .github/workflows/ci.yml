@@ -29,8 +29,15 @@ jobs:
       - uses: actions/checkout@v5
       - id: check
         run: |
-          if [[ -x gradlew ]]; then echo "has_gradle=true" >> "$GITHUB_OUTPUT"
-          else echo "has_gradle=false" >> "$GITHUB_OUTPUT"; echo "::notice::gradlew 없음(M1 전) — Gradle 잡을 건너뜁니다"; fi
+          if [[ ! -f gradlew ]]; then
+            echo "has_gradle=false" >> "$GITHUB_OUTPUT"; echo "::notice::gradlew 없음(M1 전) — Gradle 잡을 건너뜁니다"
+          elif [[ ! -x gradlew ]]; then
+            # 건너뜀은 필수 검사에서 '통과'로 치므로, 실행 비트 누락을 조용히 넘기면 테스트 없이 초록불이 된다
+            echo "::error::gradlew 가 실행 권한 없이(100644) 커밋됐습니다. 'git update-index --chmod=+x gradlew' 후 다시 커밋하세요."
+            exit 1
+          else
+            echo "has_gradle=true" >> "$GITHUB_OUTPUT"
+          fi
 
   lint:
     name: 1. lint (spotless)
