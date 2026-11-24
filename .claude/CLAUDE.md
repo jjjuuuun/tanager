@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - 스택: Java 25(최신 LTS, preview 금지) · Gradle 9.9 · Swing + FlatLaf · JediTerm(에뮬레이터) · pty4j(ConPTY/Unix PTY) · Jackson · jpackage
 - 설계 문서: `docs/plans/01-프로젝트-구성-설계.html`(개발 체계), `docs/plans/02-SDD.html`(요구사항·설계). 결정 기록: `docs/adr/`
-- 상태: **계획 단계**. 소스·Gradle 래퍼·GitHub 원격은 아직 없다. 첫 작업은 M0 스파이크(ADR-0001 검증) → M1 스캐폴딩.
+- 상태: **M0 스파이크 완료**(2026-11-24, 결과 ADR-0001 · 0003, 실험 코드는 병합하지 않은 `spike/10-conpty-jediterm` 브랜치의 `spike/m0`). 다음은 M1 스캐폴딩 — 제품 소스 · 루트 Gradle 래퍼는 아직 없다.
 
 ## 명령 (M1 스캐폴딩 이후 유효)
 
@@ -68,6 +68,8 @@ OS 차이(셸 탐지, 경로 변환, 앱 디렉터리, 셸 통합, 기동 명령
 ## 함정
 
 - `wsl.exe --list --quiet` 출력은 UTF-16LE. `WSL_UTF8=1` 을 주거나 UTF-16LE 로 디코딩.
+- JediTerm 은 Maven Central 에 없다 → `https://packages.jetbrains.team/maven/p/ij/intellij-dependencies` 저장소. 글자 단위 대체 글꼴이 없고 IME 조합 중 글자는 기본 글꼴로만 그리므로 **터미널 기본 글꼴은 한글 글리프가 있어야 한다**(D2Coding 번들).
+- Java 25 + JNA(pty4j): 실행 옵션에 `--enable-native-access=ALL-UNNAMED`.
 - WSL 에서 source 되는 `*.sh` 가 CRLF 면 `$'\r': command not found`. `.gitattributes` 를 지키고 Windows 편집기에서 줄바꿈을 바꾸지 말 것.
 - Swing 컴포넌트는 EDT 에서만. 도메인 상태는 `StateActor` 밖에서 바꾸지 않는다.
 - 경로를 `String` 으로 비교하지 않는다. Windows 는 대소문자 무시, WSL/macOS 는 구분 → `WorkspacePath`.
