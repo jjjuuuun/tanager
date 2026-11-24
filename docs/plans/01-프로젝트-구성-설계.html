@@ -378,17 +378,19 @@ Closes: #12</code></pre>
 <li>이슈 생성(<code>/issue</code>) · 마일스톤 지정</li>
 <li>브랜치 · TDD 커밋(<code>/tdd</code>) · 푸시</li>
 <li>Draft PR · CI 대응 · 리뷰 후 <b>PR 에 리뷰 코멘트</b>(병합 권장/보류 권장) · Ready 전환(<code>/pr</code>)</li>
-<li>릴리스 PR dev → main · 변경 내역 · 릴리스 리뷰(<code>/release</code>)</li>
+<li><b>작업 PR 의 dev squash 병합</b> — CI green · 차단 0건 · "병합 권장"일 때만</li>
+<li>릴리스 PR dev → main — 포함된 PR · 리뷰 권고 · 남은 지적 · 수동 확인 항목을 모아 정리(<code>/release</code>)</li>
 <li>사용자 승인 후 태그 생성 · 푸시 · 마일스톤 닫기</li>
 </ul></div>
 <div class="card"><h4>사용자가 하는 것</h4><ul class="small">
-<li>리뷰 코멘트를 보고 <b>병합 또는 닫기</b> (작업 PR · 릴리스 PR · 역병합 PR)</li>
+<li><b>마일스톤마다 한 번, 릴리스 PR 을 보고 main 병합 결정</b> — 사용자 확인 지점(ADR-0005)</li>
+<li>hotfix → main · 역병합 PR 병합, PR 닫기, Claude 가 넘긴(보류 권장) 작업 PR 결정</li>
 <li>태그 생성 · 태그 푸시 승인 (승인 창)</li>
 <li>저장소 최초 설정 <code>bootstrap-repo.sh</code></li>
 <li>Claude 가 확인할 수 없는 수동 확인(실제 화면 · 한글 입력 · 설치 파일)</li>
 </ul></div>
 </div>
-<p class="small muted">강제: <code>gh pr merge</code> · <code>gh pr close</code> · <code>gh pr review --approve</code> 는 <code>settings.json</code> deny + <code>guard-git.sh</code> 차단. 태그 · 태그 푸시 · <code>gh release create</code> 는 allow 규칙과 상관없이 승인 창(<code>guard-git.sh</code> 가 ask 반환).</p>
+<p class="small muted">강제: <code>gh pr merge</code> 는 PR 의 base 가 dev 이고 <code>--squash</code> 일 때만 <code>guard-git.sh</code> 가 통과시킨다(base 를 조회). <code>gh pr close</code> · <code>gh pr review --approve</code> 는 <code>settings.json</code> deny + <code>guard-git.sh</code> 차단. 태그 · 태그 푸시 · <code>gh release create</code> 는 allow 규칙과 상관없이 승인 창(<code>guard-git.sh</code> 가 ask 반환).</p>
 <h3>8.2 작업 PR 절차 (이 순서대로)</h3>
 <ol class="steps">
 <li><b class="h">이슈 생성 — Claude</b><span class="sub"><code>/issue</code>. 템플릿 필드 · 인수 조건 Given/When/Then · SDD 요구사항 ID → 마일스톤(<code>.github/milestones.json</code>).</span></li>
@@ -398,14 +400,14 @@ Closes: #12</code></pre>
 <li><b class="h">푸시 → Draft PR (base dev) — Claude</b><span class="sub"><code>/pr</code>. 본문 첫 줄 "병합 방법: Squash and merge", 템플릿 1~9절, 이슈와 같은 마일스톤.</span></li>
 <li><b class="h">CI 전부 green — Claude</b><span class="sub">lint · test-core · test-windows · pr-lint. 실패하면 고쳐서 다시 푸시.</span></li>
 <li><b class="h">리뷰 → PR 에 리뷰 코멘트 — Claude</b><span class="sub">reviewer 서브에이전트 + <code>/code-review</code>. 차단 지적은 고친 뒤, 최종 결과와 권고를 <code>gh pr review --comment</code> 로 남긴다.</span></li>
-<li><b class="h">Ready for review — Claude</b><span class="sub">Draft 해제 후 PR URL 과 권고 한 줄을 보고하고 멈춘다.</span></li>
-<li><b class="h">Squash merge 또는 닫기 — 사용자</b><span class="sub">PR 제목이 dev 의 커밋 헤더가 된다. 병합 후 브랜치 자동 삭제.</span></li>
+<li><b class="h">Ready for review — Claude</b><span class="sub">Draft 해제.</span></li>
+<li><b class="h">Squash merge — Claude (조건부)</b><span class="sub">CI green · 차단 0건 · 권고 "병합 권장"이면 <code>gh pr merge &lt;n&gt; --squash --delete-branch</code>. PR 제목이 dev 의 커밋 헤더가 된다. 조건이 하나라도 안 맞으면 병합하지 않고 사용자에게 넘긴다.</span></li>
 </ol>
 <h3>8.3 릴리스 절차 (마일스톤이 끝났을 때)</h3>
 <ol class="steps">
 <li><b class="h">준비 확인 — Claude</b><span class="sub"><code>/release</code>: 마일스톤의 열린 이슈 0개 · dev CI green · main 이 dev 의 조상인지(역병합 누락 확인).</span></li>
 <li><b class="h">릴리스 PR dev → main — Claude</b><span class="sub">제목 <code>chore(release): v0.3.0</code>, 본문 첫 줄 "병합 방법: Create a merge commit", git-cliff 변경 내역, 호환성, WSL 통합 테스트 결과. 릴리스 리뷰 코멘트.</span></li>
-<li><b class="h">merge commit 으로 병합 또는 보류 — 사용자</b></li>
+<li><b class="h">사용자 확인 지점: merge commit 으로 병합 또는 보류 — 사용자</b><span class="sub">마일스톤의 모든 작업 PR 을 여기서 한 번에 본다. 본문의 "포함된 PR" 표와 "사용자가 직접 확인할 것" 체크박스.</span></li>
 <li><b class="h">태그 — Claude, 승인 후</b><span class="sub">main 에서 <code>git tag -a v0.3.0</code> → <code>git push origin v0.3.0</code> (각각 승인 창) → release 워크플로 → 마일스톤 닫기.</span></li>
 </ol>
 <h3>8.4 긴급 수정 (hotfix)</h3>
@@ -491,7 +493,7 @@ GitHub 호스티드 Windows 러너에는 WSL 배포판이 없다. <code>@Tag("ws
 <div class="grid3">
 <div class="card"><h4><span class="tag could">allow</span></h4><p><code>./gradlew *</code>, git 조회 · 브랜치 · add · commit · fetch · <code>pull --ff-only</code> · <code>rebase origin/dev|main</code> · 작업 브랜치 push(<code>--force-with-lease</code> 포함), <code>gh issue create/comment/edit</code>, <code>gh pr create/edit/comment/review/ready</code>, <code>gh run</code>, 마일스톤 API</p></div>
 <div class="card"><h4><span class="tag should">ask</span></h4><p><code>git tag</code>, 태그 푸시(<code>origin v*</code> · <code>--tags</code>), <code>gh release create</code>, <code>git rebase</code>(그 외), <code>git reset --hard</code></p></div>
-<div class="card"><h4><span class="tag must">deny</span></h4><p><code>git push --force / -f</code>, <code>gh pr merge</code>, <code>gh pr close</code>, <code>gh pr review --approve</code>, <code>gh release delete</code> (+ 훅: main · dev 직접 커밋 · 푸시)</p></div>
+<div class="card"><h4><span class="tag must">deny</span></h4><p><code>git push --force / -f</code>, <code>gh pr close</code>, <code>gh pr review --approve</code>, <code>gh release delete</code> (+ 훅: main · dev 직접 커밋 · 푸시, main 으로 가는 PR 병합, squash 외 병합)</p></div>
 </div>
 </section><section id="agents"><h2><span class="no">11.</span>에이전트 구성 (서브에이전트 · 팀)</h2>
 <h3>11.1 작업 크기에 따른 선택</h3>
