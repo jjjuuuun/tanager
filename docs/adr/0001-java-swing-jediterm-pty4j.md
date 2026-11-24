@@ -24,7 +24,7 @@ JDK 는 **최신 LTS(25)** 로 고정한다. 비 LTS(26·27·28)는 건너뛰고
 - M0 스파이크 검증 항목: (a) pty4j 가 Windows 에서 ConPTY 로 wsl.exe·powershell.exe(5.1)·cmd 를 띄우는가 (b) JediTerm 에서 한글 IME 조합·와이드 문자 표시 (c) OSC 7 / OSC 9;9 가 스트림에서 가로채지는가 (d) jpackage app-image 실행.
 - 검증 실패 시 이 ADR 을 `대체됨` 으로 바꾸고 대안을 새 ADR 로 기록한다.
 
-## M0 검증 결과 (2026-11-24, 이슈 #10, 브랜치 `spike/10-conpty-jediterm` 의 `spike/m0`)
+## M0 검증 결과 (2026-11-24, 이슈 #10, 실험 코드: 태그 `archive/spike-10-conpty-jediterm` 의 `spike/m0`)
 환경: Windows 11, Windows 측 JDK 17(Gradle 실행용) · WSL Ubuntu-24.04. 자동 확인은 `--selftest`(화면 없이 셸 3개 기동 → 결과 파일), 한글 입력은 사람이 확인.
 
 | 항목 | 결과 | 비고 |
