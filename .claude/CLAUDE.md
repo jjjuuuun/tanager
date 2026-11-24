@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - 스택: Java 25(최신 LTS, preview 금지) · Gradle 9.9 · Swing + FlatLaf · JediTerm(에뮬레이터) · pty4j(ConPTY/Unix PTY) · Jackson · jpackage
 - 설계 문서: `docs/plans/01-프로젝트-구성-설계.html`(개발 체계), `docs/plans/02-SDD.html`(요구사항·설계). 결정 기록: `docs/adr/`
-- 상태: **M0 스파이크 완료**(2026-11-24, 결과 ADR-0001 · 0003, 실험 코드는 병합하지 않은 `spike/10-conpty-jediterm` 브랜치의 `spike/m0`). 다음은 M1 스캐폴딩 — 제품 소스 · 루트 Gradle 래퍼는 아직 없다.
+- 상태: **M1 스캐폴딩 완료**(2026-11-24) — Gradle 멀티 모듈 10개 · build-logic · ArchUnit 규칙 · `Result` · `PlatformModule` 포트와 ServiceLoader 선택 · FlatLaf 빈 창 · jpackage(jdeps 축소). 다음은 **M2 단일 터미널(v0.1.0)** — 첫 릴리스. M0 결과는 ADR-0001 · 0003.
 
 ## 명령 (M1 스캐폴딩 이후 유효)
 
