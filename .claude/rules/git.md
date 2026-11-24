@@ -70,6 +70,9 @@ feat/12-…   ●─●─●             hotfix/31-… ●──────●
 
 - Claude 가 절대 하지 않는 것: `gh pr merge`, `gh pr close`, `gh pr review --approve`, main·dev 직접 커밋/푸시/병합, 강제 푸시(`--force-with-lease` 는 작업 브랜치에서만 허용). `settings.json` deny + `guard-git.sh` 가 막는다.
 - 태그 생성·태그 푸시·`gh release create` 는 allow 규칙과 상관없이 승인 창이 뜬다(`guard-git.sh` 가 ask 반환).
+- `guard-git.sh` 는 명령 **실행 전** 브랜치로 판단한다. 브랜치 생성과 커밋을 한 명령에 묶지 말고 따로 실행한다. 전역 옵션(`-C`·`-c`)을 붙여도 같은 검사를 받고, 훅 경로 변경(`.githooks` 외), `--mirror`·`--delete` 푸시, `gh api` 로 PR 병합·닫기도 막는다.
+- 커밋 메시지는 파일로 넘긴다(`git commit -F <파일>`). 메시지 본문의 `dev`·`push` 같은 글자를 guard 가 명령으로 오인하지 않게.
+- PR 제목은 **66자 이하**로 쓴다. squash 커밋 헤더에 ` (#N)` 이 붙어도 72자를 넘지 않게.
 - 리뷰 코멘트는 `gh` 에 로그인한 사용자 계정 이름으로 달린다. 그래서 본문 첫 줄에 `## Claude 리뷰` 를 붙인다.
 - 저장소 최초 설정(빈 시작 커밋 · dev 생성 · 기본 브랜치 main · ruleset · 라벨 · 마일스톤)은 사용자가 `.github/scripts/bootstrap-repo.sh <owner/repo>` 로 한 번 실행한다. M1 이후 `--with-checks` 로 다시 실행해 필수 CI 검사를 켠다.
 
