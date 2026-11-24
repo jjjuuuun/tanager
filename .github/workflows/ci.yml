@@ -1,0 +1,117 @@
+# 순서: gate → lint → (test-core ∥ test-windows) → package-smoke(dev · main push 만)
+name: ci
+
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev, main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  JAVA_VERSION: "25"   # 최신 LTS. 다음 LTS(29) 전까지 고정
+  JAVA_DISTRIBUTION: temurin
+
+jobs:
+  # M1(Gradle 래퍼) 전에는 아래 잡을 실패 대신 '건너뜀'으로 둔다. 건너뛴 잡은 필수 검사에서 통과로 친다.
+  gate:
+    name: 0. gate (gradlew 있음?)
+    runs-on: ubuntu-latest
+    outputs:
+      has_gradle: ${{ steps.check.outputs.has_gradle }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: check
+        run: |
+          if [[ -x gradlew ]]; then echo "has_gradle=true" >> "$GITHUB_OUTPUT"
+          else echo "has_gradle=false" >> "$GITHUB_OUTPUT"; echo "::notice::gradlew 없음(M1 전) — Gradle 잡을 건너뜁니다"; fi
+
+  lint:
+    name: 1. lint (spotless)
+    needs: gate
+    if: needs.gate.outputs.has_gradle == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          java-version: ${{ env.JAVA_VERSION }}
+      - uses: gradle/actions/setup-gradle@v4
+      - run: ./gradlew spotlessCheck
+
+  test-core:
+    name: 2a. test core (domain · app · ArchUnit)
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          java-version: ${{ env.JAVA_VERSION }}
+      - uses: gradle/actions/setup-gradle@v4
+      - run: ./gradlew :tanager-domain:check :tanager-application:check :tanager-architecture-test:test jacocoCoverageVerification
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: core-test-reports
+          path: "**/build/reports/"
+
+  test-windows:
+    name: 2b. test windows (ConPTY · PowerShell · 통합)
+    needs: lint
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          java-version: ${{ env.JAVA_VERSION }}
+      - uses: gradle/actions/setup-gradle@v4
+      # WSL 은 GitHub 호스티드 러너에서 쓸 수 없으므로 @Tag("wsl") 테스트는 제외한다
+      - run: ./gradlew check -PexcludeTags=wsl
+        shell: pwsh
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-test-reports
+          path: "**/build/reports/"
+
+  # macOS 지원(M7) 시작 시 주석 해제
+  # test-macos:
+  #   name: 2c. test macos
+  #   needs: lint
+  #   runs-on: macos-latest
+  #   steps:
+  #     - uses: actions/checkout@v5
+  #     - uses: actions/setup-java@v5
+  #       with: { distribution: temurin, java-version: "25" }
+  #     - uses: gradle/actions/setup-gradle@v4
+  #     - run: ./gradlew check
+
+  package-smoke:
+    name: 3. package smoke (jpackage app-image)
+    if: github.event_name == 'push'
+    needs: [test-core, test-windows]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          java-version: ${{ env.JAVA_VERSION }}
+      - uses: gradle/actions/setup-gradle@v4
+      - run: ./gradlew :tanager-app:jpackageImage
+        shell: pwsh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tanager-windows-app-image
+          path: tanager-app/build/jpackage/
+          retention-days: 7

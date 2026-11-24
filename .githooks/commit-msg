@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Conventional Commits 형식 검사 (.gitmessage 참고)
+set -euo pipefail
+
+msg_file="$1"
+# 주석(#)과 빈 줄을 뺀 첫 줄이 헤더
+header="$(grep -v '^#' "$msg_file" | sed '/^[[:space:]]*$/d' | head -n1)"
+
+# git 이 자동으로 만드는 메시지는 통과
+if [[ "$header" =~ ^(Merge|Revert\ \"|fixup!|squash!|amend!) ]]; then
+  exit 0
+fi
+
+types='feat|fix|perf|refactor|test|docs|build|ci|chore|revert'
+scopes='domain|app|pty|persist|platform-win|platform-mac|ui|toolkit|bootstrap|build|ci|docs|claude|deps|release'
+pattern="^(${types})\((${scopes})\)!?: .+$"
+
+fail() {
+  echo "✖ 커밋 메시지 형식 오류: $1" >&2
+  echo "  헤더: $header" >&2
+  echo "  형식: <type>(<scope>)[!]: <subject>   (자세한 규칙: .gitmessage)" >&2
+  exit 1
+}
+
+[[ -n "$header" ]] || fail "메시지가 비어 있습니다"
+[[ "$header" =~ $pattern ]] || fail "type 또는 scope 가 허용 목록에 없습니다"
+(( ${#header} <= 72 )) || fail "헤더가 72자를 넘습니다 (${#header}자)"
+[[ "$header" != *. ]] || fail "헤더 끝에 마침표를 쓰지 않습니다"
+
+# 헤더 다음 줄은 반드시 빈 줄
+second_line="$(grep -v '^#' "$msg_file" | sed -n '2p')"
+[[ -z "$second_line" ]] || fail "헤더와 본문 사이에 빈 줄이 필요합니다"
+
+exit 0

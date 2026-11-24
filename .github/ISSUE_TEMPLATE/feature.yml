@@ -1,0 +1,41 @@
+name: 기능 요청
+description: 새 기능 또는 개선
+title: "feat: "
+labels: ["type:feat"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 문제 / 동기
+      description: 어떤 불편을 해결하나요?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 제안
+      description: 원하는 동작. 키 바인딩·화면 흐름이 있다면 함께.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 인수 조건 (Given / When / Then)
+      description: 테스트로 옮길 수 있게 작성합니다.
+      placeholder: |
+        Given WSL 세션이 /home/me/proj 에 있을 때
+        When 사용자가 cd src 를 실행하면
+        Then 사이드바 트리에 /home/me/proj/src 가 추가된다
+    validations:
+      required: true
+  - type: dropdown
+    id: module
+    attributes:
+      label: 주 영향 모듈
+      multiple: true
+      options: [domain, app, pty, persist, platform-win, platform-mac, ui, toolkit, bootstrap, build, ci, docs]
+  - type: input
+    id: sdd
+    attributes:
+      label: SDD 요구사항 ID
+      placeholder: "FR-HIS-01"

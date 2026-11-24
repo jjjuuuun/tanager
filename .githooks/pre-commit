@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# 커밋 전 빠른 검사: main · dev 직접 커밋 차단 + 포맷 검사
+set -euo pipefail
+
+branch="$(git symbolic-ref --short HEAD 2>/dev/null || echo detached)"
+if [[ "$branch" == "main" || "$branch" == "dev" ]]; then
+  echo "✖ $branch 에 직접 커밋할 수 없습니다. dev 에서 작업 브랜치를 만드세요:" >&2
+  echo "  git switch dev && git pull --ff-only && git switch -c <type>/<이슈번호>-<slug>" >&2
+  exit 1
+fi
+
+if [[ -x ./gradlew ]]; then
+  ./gradlew --quiet spotlessCheck || {
+    echo "✖ 포맷 위반. './gradlew spotlessApply' 후 다시 커밋하세요." >&2
+    exit 1
+  }
+fi
