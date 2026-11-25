@@ -11,6 +11,7 @@ import dev.tanager.domain.session.LaunchTemplate;
 import dev.tanager.domain.session.ProfileId;
 import dev.tanager.domain.session.ShellKind;
 import dev.tanager.domain.session.ShellProfile;
+import dev.tanager.domain.session.WorkingDir;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -51,14 +52,20 @@ class WindowsLaunchCommandsTest {
             new LaunchTemplate(CMD_EXE, List.of()),
             IntegrationMode.NONE);
 
-    private static WorkspacePath path(ShellEnvironment env, String raw) {
-        return WorkspacePath.of(env, raw).value().orElseThrow();
+    private static final String USER_PROFILE = "C:\\Users\\me";
+
+    private static WorkingDir path(ShellEnvironment env, String raw) {
+        return new WorkingDir.At(WorkspacePath.of(env, raw).value().orElseThrow());
+    }
+
+    private static LaunchCommand of(ShellProfile profile, WorkingDir dir) {
+        return WindowsLaunchCommands.of(profile, dir, USER_PROFILE);
     }
 
     @Test
     @DisplayName("P1 WSL 은 wsl.exe -d 배포판 --cd 경로 -- bash -i 이고 작업 디렉터리는 비운다")
     void wslUsesCdOption() {
-        LaunchCommand command = WindowsLaunchCommands.of(WSL, path(new ShellEnvironment.Wsl("Ubuntu"), "/home/me/p"));
+        LaunchCommand command = of(WSL, path(new ShellEnvironment.Wsl("Ubuntu"), "/home/me/p"));
 
         assertThat(command.argv()).containsExactly(WSL_EXE, "-d", "Ubuntu", "--cd", "/home/me/p", "--", "bash", "-i");
         assertThat(command.workingDirectory()).isEmpty();
@@ -68,7 +75,7 @@ class WindowsLaunchCommandsTest {
     @Test
     @DisplayName("P2 PowerShell 은 템플릿 그대로 띄우고 작업 디렉터리를 Windows 경로로 준다")
     void powershellUsesWorkingDirectory() {
-        LaunchCommand command = WindowsLaunchCommands.of(POWERSHELL, path(new ShellEnvironment.Windows(), "C:\\work"));
+        LaunchCommand command = of(POWERSHELL, path(new ShellEnvironment.Windows(), "C:\\work"));
 
         assertThat(command.argv()).containsExactly(PS_EXE, "-NoLogo");
         assertThat(command.workingDirectory()).contains("C:\\work");
@@ -78,7 +85,7 @@ class WindowsLaunchCommandsTest {
     @Test
     @DisplayName("P3 cmd 는 실행 파일만으로 띄우고 작업 디렉터리를 Windows 경로로 준다")
     void cmdUsesWorkingDirectory() {
-        LaunchCommand command = WindowsLaunchCommands.of(CMD, path(new ShellEnvironment.Windows(), "C:\\work"));
+        LaunchCommand command = of(CMD, path(new ShellEnvironment.Windows(), "C:\\work"));
 
         assertThat(command.argv()).containsExactly(CMD_EXE);
         assertThat(command.workingDirectory()).contains("C:\\work");
@@ -87,24 +94,49 @@ class WindowsLaunchCommandsTest {
     @Test
     @DisplayName("P4 공백 · 한글이 든 경로도 argv 원소 하나로 유지한다")
     void unusualPathsStayOneArgument() {
-        WorkspacePath linux = path(new ShellEnvironment.Wsl("Ubuntu"), "/home/me/한글 폴더 #1");
-        WorkspacePath windows = path(new ShellEnvironment.Windows(), "C:\\한글 폴더 #1");
+        WorkingDir linux = path(new ShellEnvironment.Wsl("Ubuntu"), "/home/me/한글 폴더 #1");
+        WorkingDir windows = path(new ShellEnvironment.Windows(), "C:\\한글 폴더 #1");
 
-        assertThat(WindowsLaunchCommands.of(WSL, linux).argv()).contains("/home/me/한글 폴더 #1");
-        assertThat(WindowsLaunchCommands.of(CMD, windows).workingDirectory()).contains("C:\\한글 폴더 #1");
+        assertThat(of(WSL, linux).argv()).contains("/home/me/한글 폴더 #1");
+        assertThat(of(CMD, windows).workingDirectory()).contains("C:\\한글 폴더 #1");
     }
 
     @Test
     @DisplayName("P5 프로파일과 경로의 환경이 다르면 거부한다")
     void mismatchedEnvironmentIsRejected() {
-        WorkspacePath windows = path(new ShellEnvironment.Windows(), "C:\\work");
-        WorkspacePath otherDistro = path(new ShellEnvironment.Wsl("Debian"), "/home/me");
+        WorkingDir windows = path(new ShellEnvironment.Windows(), "C:\\work");
+        WorkingDir otherDistro = path(new ShellEnvironment.Wsl("Debian"), "/home/me");
 
-        assertThatThrownBy(() -> WindowsLaunchCommands.of(WSL, windows)).isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> WindowsLaunchCommands.of(WSL, otherDistro))
-                .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> WindowsLaunchCommands.of(POWERSHELL, otherDistro))
-                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> of(WSL, windows)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> of(WSL, otherDistro)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> of(POWERSHELL, otherDistro)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("P6 WSL 의 홈은 --cd ~ 로 넘기고 작업 디렉터리는 비운다")
+    void wslHomeUsesTilde() {
+        LaunchCommand command = of(WSL, new WorkingDir.Home());
+
+        assertThat(command.argv()).containsExactly(WSL_EXE, "-d", "Ubuntu", "--cd", "~", "--", "bash", "-i");
+        assertThat(command.workingDirectory()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("P7 PowerShell 의 홈은 USERPROFILE 을 작업 디렉터리로 준다")
+    void powershellHomeUsesUserProfile() {
+        LaunchCommand command = of(POWERSHELL, new WorkingDir.Home());
+
+        assertThat(command.argv()).containsExactly(PS_EXE, "-NoLogo");
+        assertThat(command.workingDirectory()).contains(USER_PROFILE);
+    }
+
+    @Test
+    @DisplayName("P8 cmd 의 홈도 USERPROFILE 을 작업 디렉터리로 준다")
+    void cmdHomeUsesUserProfile() {
+        LaunchCommand command = of(CMD, new WorkingDir.Home());
+
+        assertThat(command.argv()).containsExactly(CMD_EXE);
+        assertThat(command.workingDirectory()).contains(USER_PROFILE);
     }
 
     @Provide
@@ -122,8 +154,8 @@ class WindowsLaunchCommandsTest {
         var windows = WorkspacePath.of(new ShellEnvironment.Windows(), "C:\\" + segment);
         Assume.that(linux.isOk() && windows.isOk());
 
-        LaunchCommand wsl = WindowsLaunchCommands.of(WSL, linux.value().orElseThrow());
-        LaunchCommand cmd = WindowsLaunchCommands.of(CMD, windows.value().orElseThrow());
+        LaunchCommand wsl = of(WSL, new WorkingDir.At(linux.value().orElseThrow()));
+        LaunchCommand cmd = of(CMD, new WorkingDir.At(windows.value().orElseThrow()));
 
         assertThat(wsl.argv().stream()
                         .filter(a -> a.equals(linux.value().orElseThrow().path()))

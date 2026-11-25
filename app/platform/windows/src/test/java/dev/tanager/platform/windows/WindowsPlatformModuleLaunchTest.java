@@ -9,11 +9,40 @@ import dev.tanager.domain.session.LaunchTemplate;
 import dev.tanager.domain.session.ProfileId;
 import dev.tanager.domain.session.ShellKind;
 import dev.tanager.domain.session.ShellProfile;
+import dev.tanager.domain.session.WorkingDir;
+import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 class WindowsPlatformModuleLaunchTest {
+
+    private static final ShellProfile POWERSHELL = new ShellProfile(
+            new ProfileId("powershell"),
+            "Windows PowerShell",
+            ShellKind.WINDOWS_POWERSHELL,
+            new ShellEnvironment.Windows(),
+            new LaunchTemplate("C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", List.of()),
+            IntegrationMode.OSC9_9);
+
+    private static WindowsPlatformModule module(Optional<String> userProfile) {
+        WindowsShellCatalog catalog = new WindowsShellCatalog(
+                new FakeCommandRunner(new CommandOutcome.NotStarted("x")),
+                key -> Optional.empty(),
+                Duration.ofSeconds(1));
+        return new WindowsPlatformModule(catalog, key -> key.equals("USERPROFILE") ? userProfile : Optional.empty());
+    }
+
+    @Test
+    @DisplayName("홈에서 띄우면 생성 때 읽은 USERPROFILE 이 작업 디렉터리가 된다")
+    void homeResolvesToUserProfileFromEnv() {
+        // when
+        var command = module(Optional.of("D:\\사용자\\나")).launchCommand(POWERSHELL, new WorkingDir.Home());
+
+        // then
+        assertThat(command.workingDirectory()).contains("D:\\사용자\\나");
+    }
 
     @Test
     @DisplayName("launchCommand 는 WindowsLaunchCommands 에 위임한다")
@@ -26,15 +55,15 @@ class WindowsPlatformModuleLaunchTest {
                 new ShellEnvironment.Windows(),
                 new LaunchTemplate("C:\\Windows\\System32\\cmd.exe", List.of()),
                 IntegrationMode.NONE);
-        WorkspacePath cwd = WorkspacePath.of(new ShellEnvironment.Windows(), "C:\\work")
+        WorkingDir cwd = new WorkingDir.At(WorkspacePath.of(new ShellEnvironment.Windows(), "C:\\work")
                 .value()
-                .orElseThrow();
+                .orElseThrow());
 
         // when
-        var command = new WindowsPlatformModule().launchCommand(cmd, cwd);
+        var command = module(Optional.of("C:\\Users\\me")).launchCommand(cmd, cwd);
 
         // then
-        assertThat(command).isEqualTo(WindowsLaunchCommands.of(cmd, cwd));
+        assertThat(command).isEqualTo(WindowsLaunchCommands.of(cmd, cwd, "C:\\Users\\me"));
         assertThat(command.argv()).containsExactly("C:\\Windows\\System32\\cmd.exe");
     }
 }

@@ -1,8 +1,8 @@
 package dev.tanager.application.port.out;
 
 import dev.tanager.application.platform.OperatingSystem;
-import dev.tanager.domain.history.WorkspacePath;
 import dev.tanager.domain.session.ShellProfile;
+import dev.tanager.domain.session.WorkingDir;
 import java.util.List;
 
 /**
@@ -27,10 +27,13 @@ public interface PlatformModule {
     List<ShellProfile> shells();
 
     /**
-     * {@code profile} 셸을 {@code cwd} 에서 띄우는 PTY 명령을 만든다(ADR-0007). 외부 상태를 보지 않는 순수 계산이다 — 경로가
-     * 실제로 있는지는 확인하지 않는다.
+     * {@code profile} 셸을 {@code dir} 에서 띄우는 PTY 명령을 만든다(ADR-0007 · 0009). 외부 상태를 보지 않는 순수 계산이다 —
+     * 경로가 실제로 있는지는 확인하지 않는다. {@link WorkingDir.Home} 을 그 환경의 홈으로 바꾸는 일도 여기서 한다.
      *
-     * @throws IllegalArgumentException {@code cwd} 의 환경이 {@code profile} 의 환경과 다를 때
+     * @throws IllegalArgumentException {@code dir} 이 경로이고 그 환경이 {@code profile} 의 환경과 다를 때
      */
-    LaunchCommand launchCommand(ShellProfile profile, WorkspacePath cwd);
+    LaunchCommand launchCommand(ShellProfile profile, WorkingDir dir);
+
+    /** 앱 데이터 폴더 등 OS 별 위치. 계산만 하고 디렉터리를 만들지 않는다. */
+    PlatformDirs dirs();
 }

@@ -9,6 +9,7 @@ import dev.tanager.domain.session.LaunchTemplate;
 import dev.tanager.domain.session.ProfileId;
 import dev.tanager.domain.session.ShellKind;
 import dev.tanager.domain.session.ShellProfile;
+import dev.tanager.domain.session.WorkingDir;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -26,11 +27,17 @@ class MacLaunchCommandTest {
                 new ShellEnvironment.Windows(),
                 new LaunchTemplate("/bin/zsh", List.of()),
                 IntegrationMode.OSC7);
-        WorkspacePath cwd = WorkspacePath.of(new ShellEnvironment.Windows(), "C:\\x")
+        WorkingDir cwd = new WorkingDir.At(WorkspacePath.of(new ShellEnvironment.Windows(), "C:\\x")
                 .value()
-                .orElseThrow();
+                .orElseThrow());
 
         assertThatThrownBy(() -> new MacPlatformModule().launchCommand(zsh, cwd))
                 .isInstanceOf(UnsupportedOperationException.class);
+    }
+
+    @Test
+    @DisplayName("dirs 는 M7 전까지 UnsupportedOperationException")
+    void dirsIsNotSupportedYet() {
+        assertThatThrownBy(() -> new MacPlatformModule().dirs()).isInstanceOf(UnsupportedOperationException.class);
     }
 }

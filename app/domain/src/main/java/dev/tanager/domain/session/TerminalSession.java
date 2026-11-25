@@ -14,7 +14,7 @@ public record TerminalSession(ShellProfile profile, SessionState state) {
     public TerminalSession {
         Objects.requireNonNull(profile, "profile");
         Objects.requireNonNull(state, "state");
-        // 복원처럼 생성자를 직접 부르는 곳에서도 "경로는 프로파일의 환경" 불변식을 지킨다.
+        // 복원처럼 생성자를 직접 부르는 곳에서도 "경로는 프로파일의 환경" 불변식을 지킨다. 홈은 어느 환경에나 있다.
         pathOf(state).ifPresent(path -> {
             if (!path.env().equals(profile.env())) {
                 throw new IllegalArgumentException("상태의 경로 환경이 프로파일과 다르다: " + path.env() + " ≠ " + profile.env());
@@ -24,16 +24,29 @@ public record TerminalSession(ShellProfile profile, SessionState state) {
 
     private static Optional<WorkspacePath> pathOf(SessionState state) {
         return switch (state) {
-            case SessionState.Starting s -> Optional.of(s.dir());
-            case SessionState.Running r -> Optional.of(r.cwd());
-            case SessionState.Exited e -> Optional.of(e.lastCwd());
+            case SessionState.Starting s -> pathOf(s.dir());
+            case SessionState.Running r -> pathOf(r.cwd());
+            case SessionState.Exited e -> pathOf(e.lastCwd());
             case SessionState.Failed _ -> Optional.empty();
         };
     }
 
-    /** {@code dir} 에서 시작하는 새 세션. 경로 환경이 프로파일과 다르면 거부한다. */
-    public static Result<TerminalSession, SessionError> start(ShellProfile profile, WorkspacePath dir) {
-        return sameEnvironment(profile, dir).map(d -> new TerminalSession(profile, new SessionState.Starting(d)));
+    private static Optional<WorkspacePath> pathOf(WorkingDir dir) {
+        return switch (dir) {
+            case WorkingDir.Home _ -> Optional.empty();
+            case WorkingDir.At at -> Optional.of(at.path());
+        };
+    }
+
+    /** {@code dir} 에서 시작하는 새 세션. 경로의 환경이 프로파일과 다르면 거부한다. */
+    public static Result<TerminalSession, SessionError> start(ShellProfile profile, WorkingDir dir) {
+        Objects.requireNonNull(dir, "dir");
+        return switch (dir) {
+            case WorkingDir.Home home -> Result.ok(new TerminalSession(profile, new SessionState.Starting(home)));
+            case WorkingDir.At at ->
+                sameEnvironment(profile, at.path())
+                        .map(p -> new TerminalSession(profile, new SessionState.Starting(new WorkingDir.At(p))));
+        };
     }
 
     /** 프로세스가 떴다: {@code Starting → Running}. */
@@ -52,11 +65,11 @@ public record TerminalSession(ShellProfile profile, SessionState state) {
         };
     }
 
-    /** 셸 통합이 새 cwd 를 알렸다: {@code Running → Running}. 다른 환경의 경로는 거부한다. */
+    /** 셸 통합이 새 cwd 를 알렸다: {@code Running → Running(At cwd)}. 다른 환경의 경로는 거부한다. */
     public Result<TerminalSession, SessionError> cwdChanged(WorkspacePath cwd) {
         return switch (state) {
             case SessionState.Running r ->
-                sameEnvironment(profile, cwd).map(c -> with(new SessionState.Running(r.pid(), c)));
+                sameEnvironment(profile, cwd).map(c -> with(new SessionState.Running(r.pid(), new WorkingDir.At(c))));
             case SessionState.Starting _, SessionState.Exited _, SessionState.Failed _ -> illegal("cwdChanged");
         };
     }

@@ -29,6 +29,10 @@ class TerminalSessionTest {
         return WorkspacePath.of(WIN, p).value().orElseThrow();
     }
 
+    private static WorkingDir at(WorkspacePath path) {
+        return new WorkingDir.At(path);
+    }
+
     private static ShellProfile wslProfile() {
         return new ShellProfile(
                 new ProfileId("wsl-ubuntu"),
@@ -40,7 +44,9 @@ class TerminalSessionTest {
     }
 
     private static TerminalSession starting() {
-        return TerminalSession.start(wslProfile(), wslPath("/home/me")).value().orElseThrow();
+        return TerminalSession.start(wslProfile(), at(wslPath("/home/me")))
+                .value()
+                .orElseThrow();
     }
 
     private static TerminalSession running() {
@@ -119,9 +125,9 @@ class TerminalSessionTest {
         // given
         WorkspacePath dir = wslPath("/home/me");
         // when
-        Result<TerminalSession, SessionError> r = TerminalSession.start(wslProfile(), dir);
+        Result<TerminalSession, SessionError> r = TerminalSession.start(wslProfile(), at(dir));
         // then
-        assertThat(r.value()).contains(new TerminalSession(wslProfile(), new SessionState.Starting(dir)));
+        assertThat(r.value()).contains(new TerminalSession(wslProfile(), new SessionState.Starting(at(dir))));
     }
 
     @Test
@@ -130,7 +136,7 @@ class TerminalSessionTest {
         // given
         WorkspacePath dir = winPath("C:\\work");
         // when
-        Result<TerminalSession, SessionError> r = TerminalSession.start(wslProfile(), dir);
+        Result<TerminalSession, SessionError> r = TerminalSession.start(wslProfile(), at(dir));
         // then
         assertThat(r.error()).contains(new SessionError.EnvironmentMismatch(WSL, WIN));
     }
@@ -143,7 +149,7 @@ class TerminalSessionTest {
         // when
         Result<TerminalSession, SessionError> r = s.launched(42);
         // then
-        assertThat(r.value().orElseThrow().state()).isEqualTo(new SessionState.Running(42, wslPath("/home/me")));
+        assertThat(r.value().orElseThrow().state()).isEqualTo(new SessionState.Running(42, at(wslPath("/home/me"))));
     }
 
     @Test
@@ -166,7 +172,7 @@ class TerminalSessionTest {
         // when
         Result<TerminalSession, SessionError> r = s.cwdChanged(next);
         // then
-        assertThat(r.value().orElseThrow().state()).isEqualTo(new SessionState.Running(42, next));
+        assertThat(r.value().orElseThrow().state()).isEqualTo(new SessionState.Running(42, at(next)));
     }
 
     @Test
@@ -188,7 +194,7 @@ class TerminalSessionTest {
         // when
         Result<TerminalSession, SessionError> r = s.exited(1);
         // then
-        assertThat(r.value().orElseThrow().state()).isEqualTo(new SessionState.Exited(1, wslPath("/home/me")));
+        assertThat(r.value().orElseThrow().state()).isEqualTo(new SessionState.Exited(1, at(wslPath("/home/me"))));
     }
 
     @Test
@@ -200,7 +206,7 @@ class TerminalSessionTest {
         // when
         Result<TerminalSession, SessionError> r = s.exited(0);
         // then
-        assertThat(r.value().orElseThrow().state()).isEqualTo(new SessionState.Exited(0, next));
+        assertThat(r.value().orElseThrow().state()).isEqualTo(new SessionState.Exited(0, at(next)));
     }
 
     @Test
@@ -218,7 +224,7 @@ class TerminalSessionTest {
         // when
         Result<TerminalSession, SessionError> r = s.restart();
         // then
-        assertThat(r.value().orElseThrow().state()).isEqualTo(new SessionState.Starting(next));
+        assertThat(r.value().orElseThrow().state()).isEqualTo(new SessionState.Starting(at(next)));
     }
 
     @Test
@@ -283,7 +289,7 @@ class TerminalSessionTest {
     void constructorRejectsEnvironmentMismatch() {
         // given
         ShellProfile profile = wslProfile();
-        SessionState running = new SessionState.Running(1, winPath("C:\\work"));
+        SessionState running = new SessionState.Running(1, at(winPath("C:\\work")));
         // when / then
         assertThatThrownBy(() -> new TerminalSession(profile, running)).isInstanceOf(IllegalArgumentException.class);
     }
@@ -297,5 +303,81 @@ class TerminalSessionTest {
         TerminalSession s = new TerminalSession(profile, new SessionState.Failed("x"));
         // then
         assertThat(s.state()).isEqualTo(new SessionState.Failed("x"));
+    }
+
+    // ---- 홈에서 시작(ADR-0009) ----
+
+    @Test
+    @DisplayName("start 는 Home 에서 시작하는 Starting(Home) 세션을 만든다")
+    void startAtHomeCreatesStartingHome() {
+        // when
+        Result<TerminalSession, SessionError> r = TerminalSession.start(wslProfile(), new WorkingDir.Home());
+        // then
+        assertThat(r.value())
+                .contains(new TerminalSession(wslProfile(), new SessionState.Starting(new WorkingDir.Home())));
+    }
+
+    @Test
+    @DisplayName("Home 으로 시작한 세션이 launched 하면 Running(pid, Home) 이다")
+    void launchedFromHomeKeepsHome() {
+        // given
+        TerminalSession s = TerminalSession.start(wslProfile(), new WorkingDir.Home())
+                .value()
+                .orElseThrow();
+        // when
+        Result<TerminalSession, SessionError> r = s.launched(7);
+        // then
+        assertThat(r.value().orElseThrow().state()).isEqualTo(new SessionState.Running(7, new WorkingDir.Home()));
+    }
+
+    @Test
+    @DisplayName("Running(Home) 에서 cwdChanged(p) 하면 Running(At p) 가 된다")
+    void cwdChangedFromHomeBecomesAt() {
+        // given
+        TerminalSession s = TerminalSession.start(wslProfile(), new WorkingDir.Home())
+                .value()
+                .orElseThrow()
+                .launched(7)
+                .value()
+                .orElseThrow();
+        WorkspacePath next = wslPath("/home/me/proj");
+        // when
+        Result<TerminalSession, SessionError> r = s.cwdChanged(next);
+        // then
+        assertThat(r.value().orElseThrow().state()).isEqualTo(new SessionState.Running(7, at(next)));
+    }
+
+    @Test
+    @DisplayName("Exited(Home) 에서 restart 하면 Starting(Home) 이다")
+    void restartFromHomeStartsAtHome() {
+        // given
+        TerminalSession s = TerminalSession.start(wslProfile(), new WorkingDir.Home())
+                .value()
+                .orElseThrow()
+                .launched(7)
+                .value()
+                .orElseThrow()
+                .exited(2)
+                .value()
+                .orElseThrow();
+        // when
+        Result<TerminalSession, SessionError> r = s.restart();
+        // then
+        assertThat(r.value().orElseThrow().state()).isEqualTo(new SessionState.Starting(new WorkingDir.Home()));
+    }
+
+    @Test
+    @DisplayName("Home 상태는 어떤 프로파일 환경에서도 생성자가 받는다")
+    void constructorAcceptsHomeForAnyEnvironment() {
+        // when
+        TerminalSession s = new TerminalSession(wslProfile(), new SessionState.Running(1, new WorkingDir.Home()));
+        // then
+        assertThat(s.state()).isEqualTo(new SessionState.Running(1, new WorkingDir.Home()));
+    }
+
+    @Test
+    @DisplayName("WorkingDir.At 은 null 경로를 거부한다")
+    void workingDirAtRejectsNull() {
+        assertThatThrownBy(() -> new WorkingDir.At(null)).isInstanceOf(NullPointerException.class);
     }
 }

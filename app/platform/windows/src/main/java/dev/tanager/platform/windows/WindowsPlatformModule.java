@@ -2,28 +2,50 @@ package dev.tanager.platform.windows;
 
 import dev.tanager.application.platform.OperatingSystem;
 import dev.tanager.application.port.out.LaunchCommand;
+import dev.tanager.application.port.out.PlatformDirs;
 import dev.tanager.application.port.out.PlatformModule;
-import dev.tanager.domain.history.WorkspacePath;
 import dev.tanager.domain.session.ShellProfile;
+import dev.tanager.domain.session.WorkingDir;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Function;
 
 /** Windows 계열(10 · 11). WSL · PowerShell 5.1 · cmd 는 이 모듈이 맡는다(M2~). */
 public final class WindowsPlatformModule implements PlatformModule {
     private static final Duration WSL_LIST_TIMEOUT = Duration.ofSeconds(3);
+    private static final String APP_FOLDER = "Tanager";
+    private static final Function<String, Optional<String>> SYSTEM_ENV =
+            name -> Optional.ofNullable(System.getenv(name));
 
     private final WindowsShellCatalog shellCatalog;
+    private final String userProfile;
+    private final Path appData;
 
     /** ServiceLoader 용. 실제 프로세스 실행과 시스템 환경변수를 쓴다. */
     public WindowsPlatformModule() {
-        this(new WindowsShellCatalog(
-                new ProcessCommandRunner(), name -> Optional.ofNullable(System.getenv(name)), WSL_LIST_TIMEOUT));
+        this(SYSTEM_ENV);
     }
 
-    WindowsPlatformModule(WindowsShellCatalog shellCatalog) {
+    private WindowsPlatformModule(Function<String, Optional<String>> env) {
+        this(new WindowsShellCatalog(new ProcessCommandRunner(), env, WSL_LIST_TIMEOUT), env);
+    }
+
+    /** 환경 변수({@code USERPROFILE} · {@code APPDATA})는 여기서 한 번 읽는다 — 기동 명령 계산을 순수하게 두려고. */
+    WindowsPlatformModule(WindowsShellCatalog shellCatalog, Function<String, Optional<String>> env) {
         this.shellCatalog = Objects.requireNonNull(shellCatalog, "shellCatalog");
+        Objects.requireNonNull(env, "env");
+        String userHome = System.getProperty("user.home");
+        this.userProfile = nonBlank(env, "USERPROFILE").orElse(userHome);
+        this.appData = nonBlank(env, "APPDATA")
+                .map(dir -> Path.of(dir, APP_FOLDER))
+                .orElseGet(() -> Path.of(userHome, "AppData", "Roaming", APP_FOLDER));
+    }
+
+    private static Optional<String> nonBlank(Function<String, Optional<String>> env, String name) {
+        return env.apply(name).map(String::strip).filter(value -> !value.isEmpty());
     }
 
     @Override
@@ -42,7 +64,13 @@ public final class WindowsPlatformModule implements PlatformModule {
     }
 
     @Override
-    public LaunchCommand launchCommand(ShellProfile profile, WorkspacePath cwd) {
-        return WindowsLaunchCommands.of(profile, cwd);
+    public LaunchCommand launchCommand(ShellProfile profile, WorkingDir dir) {
+        return WindowsLaunchCommands.of(profile, dir, userProfile);
+    }
+
+    @Override
+    public PlatformDirs dirs() {
+        Path dir = appData;
+        return () -> dir;
     }
 }
