@@ -1,4 +1,4 @@
-# 순서: gate → lint → (test-core ∥ test-windows) → package-smoke(dev · main push 만)
+# 순서: gate → lint → (test-core ∥ test-windows) → package-smoke(app-image · MSI — PR 과 push 모두)
 name: ci
 
 on:
@@ -103,9 +103,9 @@ jobs:
   #     - uses: gradle/actions/setup-gradle@v4
   #     - run: ./gradlew check
 
+  # 빌드 · 패키징 변경을 병합 전에 잡으려고 PR 에서도 돈다(약 몇 분 더 걸리는 비용은 감수, #22)
   package-smoke:
-    name: 3. package smoke (jpackage app-image)
-    if: github.event_name == 'push'
+    name: 3. package smoke (jpackage app-image · MSI)
     needs: [test-core, test-windows]
     runs-on: windows-latest
     steps:
@@ -115,13 +115,18 @@ jobs:
           distribution: ${{ env.JAVA_DISTRIBUTION }}
           java-version: ${{ env.JAVA_VERSION }}
       - uses: gradle/actions/setup-gradle@v4
-      - run: ./gradlew :bootstrap:jpackageImage
-        shell: pwsh
-      # 고지(THIRD-PARTY-NOTICES · D2Coding OFL)와 글꼴이 이미지에 들어갔는지 검사(ADR-0010)
-      - run: ./gradlew :bootstrap:verifyAppImage
+      - uses: ./.github/actions/setup-wix
+      # app-image → 고지(LICENSE · THIRD-PARTY-NOTICES · D2Coding OFL)와 글꼴 검사(ADR-0010) → MSI
+      - run: ./gradlew :bootstrap:jpackageImage :bootstrap:verifyAppImage :bootstrap:jpackageInstaller
         shell: pwsh
       - uses: actions/upload-artifact@v4
         with:
           name: tanager-windows-app-image
           path: app/bootstrap/build/jpackage/
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tanager-windows-msi
+          path: app/bootstrap/build/jpackage-installer/*.msi
+          if-no-files-found: error
           retention-days: 7
