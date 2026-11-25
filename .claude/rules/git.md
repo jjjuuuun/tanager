@@ -77,6 +77,14 @@ feat/12-…   ●─●─●             hotfix/31-… ●──────●
 - 커밋 메시지는 파일로 넘긴다(`git commit -F <파일>`). 메시지 본문의 `dev`·`push` 같은 글자를 guard 가 명령으로 오인하지 않게.
 - PR 제목은 **66자 이하**로 쓴다. squash 커밋 헤더에 ` (#N)` 이 붙어도 72자를 넘지 않게.
 - 리뷰 코멘트는 `gh` 에 로그인한 사용자 계정 이름으로 달린다. 그래서 본문 첫 줄에 `## Claude 리뷰` 를 붙인다.
+- PR 본문 수정은 `gh api -X PATCH repos/{owner}/{repo}/pulls/<n> -F body=@<파일>` 로 한다. `gh pr edit` 은 GitHub classic Projects 지원 종료 오류(`repository.pullRequest.projectCards`)로 실패한다.
+
+## 워크플로(`.github/workflows`)의 PowerShell 단계
+v0.1.0 릴리스 실패(#32)에서 나온 규칙. Windows 러너의 `shell: pwsh` 단계에 적용한다.
+- `-` 로 시작하는 인수에 변수가 들어가면 **따옴표로 감싼다**: `"-Pversion=$env:X"`. 따옴표가 없으면 PowerShell 이 `$env:X` 를 펼치지 않고 글자 그대로 넘긴다.
+- PowerShell 은 외부 명령(`./gradlew` 등)이 실패해도 다음 줄로 간다. 여러 줄 단계에서는 외부 명령마다 `if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }` 를 붙인다. 마지막 줄 하나뿐이면 필요 없다.
+- release · CI 의 pwsh 단계를 바꾸면 로컬에서도 **PowerShell 로** 그대로 돌려 본다(`powershell.exe -NoProfile -File <단계.ps1>`). bash 로 같은 명령을 돌린 확인은 확인이 아니다.
+  - WSL 에서 돌리면 Windows Gradle 데몬이 출력 파이프를 잡고 있어 명령이 끝나지 않을 수 있다. 결과는 산출물(zip 등)과 종료 코드로 본다.
 - 저장소 최초 설정(빈 시작 커밋 · dev 생성 · 기본 브랜치 main · ruleset · 라벨 · 마일스톤)은 사용자가 `.github/scripts/bootstrap-repo.sh <owner/repo>` 로 한 번 실행한다. M1 이후 `--with-checks` 로 다시 실행해 필수 CI 검사를 켠다.
 
 ## 마일스톤
