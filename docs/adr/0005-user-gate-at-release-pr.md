@@ -1,6 +1,6 @@
 # 0005. 사용자 확인 지점: 작업 PR 이 아니라 릴리스 PR
 
-- 상태: 채택
+- 상태: 채택(2026-11-25 개정 — 아래 "개정")
 - 날짜: 2026-11-24
 - 관련: ADR-0004, `.claude/rules/git.md`, `/pr` · `/release` 스킬
 
@@ -22,3 +22,15 @@
 - 강제: `guard-git.sh` 가 `gh pr merge` 를 `<번호> --squash [--delete-branch]` 형태이고 PR 의 base 가 dev 일 때만 통과시킨다(`gh pr view` 로 base 조회, 실패하면 차단). `--merge`·`--rebase`·`--admin`·`--auto`·메시지 지정은 차단. `settings.json` deny 에서 `gh pr merge` 를 빼고 allow 에 넣었다.
 - dev 에 사람이 보기 전의 변경이 들어간다. 대신 CI · reviewer 서브에이전트 · 훅이 그 자리를 맡고, 릴리스 전에 되돌리는 PR 로 고칠 수 있다. main(배포본)은 여전히 사용자 확인 없이는 바뀌지 않는다.
 - 이 ADR 을 들여온 PR(#6)은 Claude 자신의 권한을 넓히는 변경이므로 사용자가 병합한다.
+
+## 개정 (2026-11-25)
+사용자 결정: "dev > main 머지(release)말고는 알아서 진행해줘." v0.1.0 릴리스에서 hotfix 병합 · 역병합 병합 · 태그 승인 창 · A/B 선택을 매번 사용자에게 물은 것이 계기.
+- 사용자 몫은 **릴리스 PR(dev → main) 병합 하나**로 줄인다.
+- Claude 가 하는 것
+  - 작업 PR squash
+  - `hotfix/*` → main 병합 · 역병합(main → dev) 병합: merge commit
+  - 태그 생성 · 푸시, `gh release create`, PR 닫기
+- 계속 막는 것: 릴리스 PR 병합, `--rebase` · `--admin` · `--auto`, 강제 푸시, main · dev 직접 변경, `gh release delete`.
+- 승인 창을 띄우는 것: 원격 태그 · ref 삭제, `--tags` 푸시.
+- `guard-git.sh` 는 PR 의 head · base 를 조회해 병합 방법과 방향이 맞을 때만 통과시킨다.
+- Claude 자신의 권한을 넓히는 변경이어서 auto 모드 분류기가 Claude 의 직접 수정을 막았다. 그래서 Claude 가 패치를 만들고, 사용자가 내용을 보고 적용했다.

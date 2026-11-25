@@ -31,7 +31,7 @@ feat/12-…   ●─●─●             hotfix/31-… ●──────●
 
 `pr-lint.yml` 이 head·base·제목 조합을 검사한다. Claude 는 PR 본문 첫 줄에 병합 방법을 적는다.
 
-**확인 지점**: 작업 PR(→ dev)은 조건이 맞으면 Claude 가 squash 병합한다. 사용자는 **마일스톤마다 한 번, 릴리스 PR(dev → main)** 에서 그동안의 PR · 리뷰 코멘트를 모아 보고 main 병합을 결정한다(사용자 결정, 2026-11-24 · ADR-0005). 중간에 보고 싶으면 PR · 리뷰 코멘트는 언제든 남아 있고, 문제가 있으면 릴리스 전에 되돌리는 PR 을 만든다.
+**확인 지점**: 사용자가 하는 일은 **마일스톤마다 한 번, 릴리스 PR(dev → main) 병합**뿐이다. 그동안의 PR · 리뷰 코멘트를 모아 보고 병합을 결정한다(사용자 결정 2026-11-24, 2026-11-25 개정 · ADR-0005). 그 밖의 병합(작업 PR squash · 역병합 · hotfix)과 태그 · Release 는 Claude 가 묻지 않고 한다. 중간에 보고 싶으면 PR · 리뷰 코멘트는 언제든 남아 있고, 문제가 있으면 릴리스 전에 되돌리는 PR 을 만든다.
 
 ## 커밋 메시지 (`.gitmessage`, `.githooks/commit-msg` 가 검사)
 ```
@@ -67,12 +67,12 @@ feat/12-…   ●─●─●             hotfix/31-… ●──────●
 | 10. 조건이 맞으면 **Squash merge** — CI green · 차단 0건 · 권고 "병합 권장". 아니면 멈추고 사용자에게 넘김 | Claude | `gh pr merge <n> --squash --delete-branch` |
 | 11. 마일스톤의 이슈가 모두 닫히면 **릴리스 PR dev → main** 생성 — 포함된 PR · 각 리뷰 권고 · 남은 지적 · 수동 확인 항목을 모아 정리 | Claude | `/release` |
 | 12. **사용자 확인 지점(마일스톤마다 한 번)** — 릴리스 PR 을 보고 merge commit 병합 또는 보류 | **사용자** | GitHub 화면 |
-| 13. main 에서 `git tag -a vX.Y.Z` → `git push origin vX.Y.Z` → release 워크플로 → 마일스톤 닫기 | Claude, **사용자 승인 후** | `/release` (승인 창) |
+| 13. main 에서 `git tag -a vX.Y.Z` → `git push origin vX.Y.Z` → release 워크플로 → 마일스톤 닫기 | Claude | `/release` |
 
-긴급 수정: `hotfix/<n>-<slug>`(main 에서 분기) → 1~9 와 같되 base = main, **병합은 사용자**(merge commit) → 13(패치 버전) → main → dev 역병합 PR(Claude 생성, 사용자 병합).
+긴급 수정: `hotfix/<n>-<slug>`(main 에서 분기) → 1~9 와 같되 base = main, 조건이 맞으면 Claude 가 **merge commit** 으로 병합(`gh pr merge <n> --merge`) → 13(패치 버전) → main → dev 역병합 PR 도 Claude 가 만들고 merge commit 으로 병합.
 
-- Claude 가 절대 하지 않는 것: **main 으로 가는 PR 병합**(릴리스 · hotfix · 역병합), 작업 PR 의 squash 외 병합(`--merge`·`--rebase`·`--admin`·`--auto`), `gh pr close`, `gh pr review --approve`, main·dev 직접 커밋/푸시/병합, 강제 푸시(`--force-with-lease` 는 작업 브랜치에서만). `settings.json` deny + `guard-git.sh` 가 막는다(병합은 PR 의 base 를 조회해 dev 일 때만 통과).
-- 태그 생성·태그 푸시·`gh release create` 는 allow 규칙과 상관없이 승인 창이 뜬다(`guard-git.sh` 가 ask 반환).
+- Claude 가 절대 하지 않는 것: **릴리스 PR(dev → main) 병합**, `--rebase`·`--admin`·`--auto` 병합, 작업 PR 의 merge commit 병합, `gh pr review --approve`, main·dev 직접 커밋/푸시/병합, 강제 푸시(`--force-with-lease` 는 작업 브랜치에서만), `gh release delete`. `settings.json` deny + `guard-git.sh` 가 막는다. 병합은 PR 의 head · base 를 조회해 작업 PR(→ dev) = `--squash`, 역병합(main → dev) · `hotfix/*` → main = `--merge` 일 때만 통과한다.
+- 태그 생성 · 푸시와 `gh release create` 는 승인 없이 한다. 승인 창이 뜨는 것은 원격 태그 · ref 삭제(`git push origin :<ref>`)와 `--tags` · `--follow-tags` 푸시뿐이다.
 - `guard-git.sh` 는 명령 **실행 전** 브랜치로 판단한다. 브랜치 생성과 커밋을 한 명령에 묶지 말고 따로 실행한다. 전역 옵션(`-C`·`-c`)을 붙여도 같은 검사를 받고, 훅 경로 변경(`.githooks` 외), `--mirror`·`--delete` 푸시, `gh api` 로 PR 병합·닫기도 막는다.
 - 커밋 메시지는 파일로 넘긴다(`git commit -F <파일>`). 메시지 본문의 `dev`·`push` 같은 글자를 guard 가 명령으로 오인하지 않게.
 - PR 제목은 **66자 이하**로 쓴다. squash 커밋 헤더에 ` (#N)` 이 붙어도 72자를 넘지 않게.
