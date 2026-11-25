@@ -34,7 +34,8 @@ import tools.jackson.databind.node.ObjectNode;
  * 임시 파일에 쓴 뒤 원자적으로 바꾼다).
  */
 public final class JsonConfigRepository implements ConfigRepository {
-    static final int SCHEMA_VERSION = 1;
+    private static final System.Logger LOG = System.getLogger(JsonConfigRepository.class.getName());
+    private static final int SCHEMA_VERSION = 1;
 
     private static final String KEY_SCHEMA_VERSION = "schemaVersion";
     private static final String KEY_DEFAULT_PROFILE = "defaultProfile";
@@ -122,16 +123,15 @@ public final class JsonConfigRepository implements ConfigRepository {
 
     private static LoadedConfig interpret(ObjectNode root) {
         List<ConfigWarning> warnings = new ArrayList<>();
-        JsonNode version = root.get(KEY_SCHEMA_VERSION);
-        if (version != null) {
-            Optional<Integer> v = schemaVersion(root);
-            if (v.isEmpty()) {
-                warnings.add(new ConfigWarning.IgnoredValue(KEY_SCHEMA_VERSION, "1 이상의 정수가 아니다"));
-            } else if (v.get() > SCHEMA_VERSION) {
-                warnings.add(new ConfigWarning.NewerVersion(v.get()));
-            }
+        Optional<Integer> version = schemaVersion(root);
+        if (version.isEmpty()) {
+            warnings.add(new ConfigWarning.IgnoredValue(KEY_SCHEMA_VERSION, "1 이상의 정수가 아니다"));
+        } else if (version.get() > SCHEMA_VERSION) {
+            warnings.add(new ConfigWarning.NewerVersion(version.get()));
         }
-        Optional<ProfileId> defaultProfile = profileIdAt(root, KEY_DEFAULT_PROFILE, warnings);
+        Optional<ProfileId> defaultProfile = nonBlankString(
+                        root.get(KEY_DEFAULT_PROFILE), KEY_DEFAULT_PROFILE, warnings)
+                .map(ProfileId::new);
         Map<ProfileId, ProfileSettings> profiles = profiles(root.get(KEY_PROFILES), warnings);
         return new LoadedConfig(new AppConfig(defaultProfile, profiles), warnings);
     }
@@ -146,10 +146,6 @@ public final class JsonConfigRepository implements ConfigRepository {
             return Optional.of(version.intValue());
         }
         return Optional.empty();
-    }
-
-    private static Optional<ProfileId> profileIdAt(ObjectNode root, String key, List<ConfigWarning> warnings) {
-        return nonBlankString(root.get(key), key, warnings).map(ProfileId::new);
     }
 
     private static Map<ProfileId, ProfileSettings> profiles(JsonNode node, List<ConfigWarning> warnings) {
@@ -189,7 +185,8 @@ public final class JsonConfigRepository implements ConfigRepository {
 
     // ---- 쓰기 ----
 
-    private ConfigError refusal(ConfigError readError) {
+    // 읽지 못한 파일은 덮어쓰지 않는다. 손상은 사용자의 내용을 지키려는 거부이고, 그 밖은 쓰기 실패다.
+    private static ConfigError refusal(ConfigError readError) {
         return switch (readError) {
             case ConfigError.Corrupt corrupt -> new ConfigError.WouldOverwrite("손상된 파일이다 — " + corrupt.detail());
             case ConfigError.Unreadable unreadable -> new ConfigError.WriteFailed(unreadable.detail());
@@ -251,8 +248,7 @@ public final class JsonConfigRepository implements ConfigRepository {
         try {
             Files.deleteIfExists(tmp);
         } catch (IOException e) {
-            System.getLogger(JsonConfigRepository.class.getName())
-                    .log(System.Logger.Level.WARNING, "임시 설정 파일을 지우지 못했다: {0}", tmp);
+            LOG.log(System.Logger.Level.WARNING, "임시 설정 파일을 지우지 못했다: {0}", tmp);
         }
     }
 }

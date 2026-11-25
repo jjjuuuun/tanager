@@ -8,6 +8,7 @@ import dev.tanager.application.port.in.StartSessionUseCase;
 import dev.tanager.application.port.in.StartedSession;
 import dev.tanager.application.port.out.AppConfig;
 import dev.tanager.application.port.out.ConfigRepository;
+import dev.tanager.application.port.out.ConfigWarning;
 import dev.tanager.application.port.out.LaunchError;
 import dev.tanager.application.port.out.PlatformModule;
 import dev.tanager.application.port.out.PtyLauncher;
@@ -80,7 +81,9 @@ public final class SessionStarter implements StartSessionUseCase {
         return config.load()
                 .fold(
                         loaded -> {
-                            loaded.warnings().forEach(w -> notices.add(new StartNotice.ConfigWarned(w)));
+                            for (ConfigWarning warning : loaded.warnings()) {
+                                notices.add(new StartNotice.ConfigWarned(warning));
+                            }
                             return loaded.config();
                         },
                         error -> {
@@ -94,12 +97,10 @@ public final class SessionStarter implements StartSessionUseCase {
         if (raw.isEmpty() || raw.get().equals(HOME_SHORTHAND)) {
             return new WorkingDir.Home();
         }
-        return WorkspacePath.of(profile.env(), raw.get())
-                .<WorkingDir>map(WorkingDir.At::new)
-                .fold(dir -> dir, error -> {
-                    notices.add(new StartNotice.StartDirInvalid(raw.get()));
-                    return new WorkingDir.Home();
-                });
+        return WorkspacePath.of(profile.env(), raw.get()).<WorkingDir>fold(WorkingDir.At::new, error -> {
+            notices.add(new StartNotice.StartDirInvalid(raw.get()));
+            return new WorkingDir.Home();
+        });
     }
 
     // 경로가 있는지 미리 보지 않는다 — 기동이 WorkingDirectoryNotFound 를 주면 홈에서 한 번 더 띄운다(ADR-0009).
