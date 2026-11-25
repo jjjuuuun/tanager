@@ -9,6 +9,8 @@ import java.util.Set;
 
 /** {@code wsl.exe --list --quiet} 출력에서 배포판 이름을 뽑는다. 기본 출력은 UTF-16LE, {@code WSL_UTF8=1} 이면 UTF-8. */
 final class WslListParser {
+    private static final byte[] UTF16LE_BOM = {(byte) 0xFF, (byte) 0xFE};
+    private static final byte[] UTF8_BOM = {(byte) 0xEF, (byte) 0xBB, (byte) 0xBF};
 
     private WslListParser() {}
 
@@ -26,17 +28,18 @@ final class WslListParser {
 
     private static String decode(byte[] b) {
         String text;
-        if (startsWith(b, 0xFF, 0xFE)) {
-            text = new String(b, 2, b.length - 2, StandardCharsets.UTF_16LE);
-        } else if (startsWith(b, 0xEF, 0xBB, 0xBF)) {
-            text = new String(b, 3, b.length - 3, StandardCharsets.UTF_8);
+        if (startsWith(b, UTF16LE_BOM)) {
+            text = new String(b, UTF16LE_BOM.length, b.length - UTF16LE_BOM.length, StandardCharsets.UTF_16LE);
+        } else if (startsWith(b, UTF8_BOM)) {
+            text = new String(b, UTF8_BOM.length, b.length - UTF8_BOM.length, StandardCharsets.UTF_8);
         } else {
-            text = new String(b, charsetWithoutBom(b));
+            text = new String(b, guessCharset(b));
         }
         return text.replace("\uFEFF", "").replace("\u0000", "");
     }
 
-    private static Charset charsetWithoutBom(byte[] b) {
+    /** BOM 이 없을 때: 배포판 이름은 ASCII 라 UTF-16LE 면 NUL 바이트가 반드시 섞인다. */
+    private static Charset guessCharset(byte[] b) {
         for (byte x : b) {
             if (x == 0) {
                 return StandardCharsets.UTF_16LE;
@@ -45,18 +48,7 @@ final class WslListParser {
         return StandardCharsets.UTF_8;
     }
 
-    private static boolean startsWith(byte[] b, int... prefix) {
-        if (b.length < prefix.length) {
-            return false;
-        }
-        return Arrays.equals(Arrays.copyOf(b, prefix.length), toBytes(prefix));
-    }
-
-    private static byte[] toBytes(int... values) {
-        byte[] out = new byte[values.length];
-        for (int i = 0; i < values.length; i++) {
-            out[i] = (byte) values[i];
-        }
-        return out;
+    private static boolean startsWith(byte[] b, byte[] prefix) {
+        return b.length >= prefix.length && Arrays.equals(b, 0, prefix.length, prefix, 0, prefix.length);
     }
 }

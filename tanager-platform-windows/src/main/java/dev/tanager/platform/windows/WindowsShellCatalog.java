@@ -36,29 +36,41 @@ final class WindowsShellCatalog {
         String wslExe = system32 + "\\wsl.exe";
         List<ShellProfile> profiles = new ArrayList<>();
         for (String distro : distros(wslExe)) {
-            profiles.add(new ShellProfile(
-                    new ProfileId("wsl:" + distro),
-                    distro,
-                    ShellKind.BASH,
-                    new ShellEnvironment.Wsl(distro),
-                    new LaunchTemplate(wslExe, List.of("-d", distro)),
-                    IntegrationMode.OSC7));
+            profiles.add(wsl(wslExe, distro));
         }
-        profiles.add(new ShellProfile(
+        profiles.add(powershell(system32));
+        profiles.add(cmd(env.apply("ComSpec").orElse(system32 + "\\cmd.exe")));
+        return List.copyOf(profiles);
+    }
+
+    private static ShellProfile wsl(String wslExe, String distro) {
+        return new ShellProfile(
+                new ProfileId("wsl:" + distro),
+                distro,
+                ShellKind.BASH,
+                new ShellEnvironment.Wsl(distro),
+                new LaunchTemplate(wslExe, List.of("-d", distro)),
+                IntegrationMode.OSC7);
+    }
+
+    private static ShellProfile powershell(String system32) {
+        return new ShellProfile(
                 new ProfileId("powershell"),
                 "Windows PowerShell",
                 ShellKind.WINDOWS_POWERSHELL,
                 new ShellEnvironment.Windows(),
                 new LaunchTemplate(system32 + "\\WindowsPowerShell\\v1.0\\powershell.exe", List.of("-NoLogo")),
-                IntegrationMode.OSC9_9));
-        profiles.add(new ShellProfile(
+                IntegrationMode.OSC9_9);
+    }
+
+    private static ShellProfile cmd(String executable) {
+        return new ShellProfile(
                 new ProfileId("cmd"),
                 "cmd",
                 ShellKind.CMD,
                 new ShellEnvironment.Windows(),
-                new LaunchTemplate(env.apply("ComSpec").orElse(system32 + "\\cmd.exe"), List.of()),
-                IntegrationMode.OSC9_9));
-        return List.copyOf(profiles);
+                new LaunchTemplate(executable, List.of()),
+                IntegrationMode.OSC9_9);
     }
 
     private List<String> distros(String wslExe) {
