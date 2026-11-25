@@ -37,17 +37,24 @@ public final class Pty4jLauncher implements PtyLauncher {
                     .setInitialRows(initialSize.rows())
                     .setUseWinConPty(true)
                     .start();
-        } catch (IOException | LinkageError e) {
-            // LinkageError: conpty.dll · JNA 를 읽지 못했다 — 앱 전체가 아니라 이 세션만 실패로 돌린다
+        } catch (IOException e) {
+            return Result.err(new LaunchError.StartFailed(detail(e)));
+        } catch (LinkageError e) {
+            // conpty.dll · JNA 를 읽지 못했다 — 앱 전체가 아니라 이 세션만 실패로 돌린다. 배포 문제라 스택을 남긴다
+            LOG.log(Level.WARNING, "PTY 네이티브 라이브러리를 읽지 못했다", e);
             return Result.err(new LaunchError.StartFailed(detail(e)));
         }
         if (process instanceof WinPtyProcess) {
-            LOG.log(Level.WARNING, "ConPTY 를 쓰지 못해 winpty 로 시작했다(pid {0}) — 출력 인코딩 · 크기 반영이 다를 수 있다", process.pid());
+            LOG.log(
+                    Level.WARNING,
+                    "ConPTY 를 쓰지 못해 winpty 로 시작했다(pid {0}) — 출력 인코딩 · 크기 반영이 다를 수 있다",
+                    String.valueOf(process.pid()));
         }
         return Result.ok(new Pty4jTerminalStream(process));
     }
 
-    // pty4j 는 없는 작업 디렉터리를 만나면 ConPTY 대신 winpty 로 조용히 넘어가거나 모호한 오류를 낸다 — 먼저 확인한다
+    // 없는 실행 파일 · 작업 디렉터리에 대한 pty4j 의 오류는 어느 쪽이 없는지 알 수 없을 만큼 모호하다 — 먼저 확인해 구별한다.
+    // (pty4j 0.14 가 winpty 로 넘어가는 것은 ConPTY 네이티브 로드가 UnsatisfiedLinkError 로 실패할 때뿐이다)
     private static Optional<LaunchError> precheck(LaunchCommand command) {
         String executable = command.argv().getFirst();
         // 상대 이름(cmd.exe 등)은 PATH 검색 결과라 여기서 판단하지 않는다

@@ -37,7 +37,10 @@ class Pty4jLauncherWindowsTest {
 
     @AfterEach
     void closeAll() {
+        // close 는 바로 돌아온다 — 셸이 끝나기 전에 @TempDir 를 지우면 "사용 중" 으로 실패한다(W9)
         opened.forEach(TerminalStream::close);
+        opened.forEach(stream -> await().atMost(WAIT)
+                .until(() -> stream.onExit().toCompletableFuture().isDone()));
     }
 
     private TerminalStream start(LaunchCommand command, TerminalSize size) {
@@ -123,7 +126,7 @@ class Pty4jLauncherWindowsTest {
     }
 
     @Test
-    @DisplayName("W7 close 하면 실행 중이던 자손 프로세스까지 5초 안에 모두 죽는다")
+    @DisplayName("W7 close 하면 실행 중이던 자손 프로세스까지 모두 죽는다")
     void closeKillsTheWholeProcessTree() {
         // given
         TerminalStream stream = start(WindowsShells.cmd(), TerminalSize.DEFAULT);
@@ -137,7 +140,7 @@ class Pty4jLauncherWindowsTest {
         stream.close();
 
         // then
-        await().atMost(Duration.ofSeconds(5)).until(() -> tree.stream().noneMatch(ProcessHandle::isAlive));
+        await().atMost(WAIT).until(() -> tree.stream().noneMatch(ProcessHandle::isAlive));
     }
 
     @Test

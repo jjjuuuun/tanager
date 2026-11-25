@@ -11,9 +11,11 @@ import java.util.function.Consumer;
 /**
  * {@link TerminalStream} 의 수작업 Fake. 테스트가 {@link #emit} · {@link #exit} 로 셸의 출력과 종료를 흉내 낸다.
  *
- * <p>계약을 지킨다. 콜백은 {@code emit} 을 부른 스레드에서 온다. {@code start()} 전의 {@code emit} · {@code exit} 는
- * 버퍼에 쌓았다가 {@code start()} 때 순서대로 전달한다(구독자는 첫 바이트부터 받는다). 끝난 뒤({@code exit} 처리
- * 또는 {@code close})에는 구독 · 쓰기 · 크기 변경이 무시된다.
+ * <p>계약을 지킨다. 콜백은 {@code emit} 을 부른 스레드에서, 이 객체의 모니터를 쥔 채로 온다(콜백 안에서 다른 스레드가 이
+ * 스트림을 부르기를 기다리면 교착한다). {@link #whenStarted} 스크립트는 {@code start()} 를 부른 스레드에서 돈다. {@code
+ * start()} 전의 {@code emit} · {@code exit} 는 버퍼에 쌓았다가 {@code start()} 때 순서대로 전달한다(구독자는 첫 바이트부터
+ * 받는다). 끝난 뒤({@code exit} 처리 또는 {@code close})에는 구독 · 쓰기 · 크기 변경이 무시되고, {@code close} 뒤의 {@code
+ * start()} 는 아무 일도 하지 않는다.
  */
 public final class ScriptedTerminalStream implements TerminalStream {
     private final long pid;
@@ -87,6 +89,9 @@ public final class ScriptedTerminalStream implements TerminalStream {
     public void start() {
         Consumer<ScriptedTerminalStream> script;
         synchronized (this) {
+            if (closed) {
+                return;
+            }
             if (started) {
                 throw new IllegalStateException("이미 시작했다");
             }
@@ -136,7 +141,7 @@ public final class ScriptedTerminalStream implements TerminalStream {
 
     @Override
     public CompletionStage<Integer> onExit() {
-        return exit;
+        return exit.minimalCompletionStage();
     }
 
     @Override
@@ -165,7 +170,9 @@ public final class ScriptedTerminalStream implements TerminalStream {
         for (Consumer<byte[]> subscriber : subscribers) {
             try {
                 subscriber.accept(chunk.clone());
-            } catch (RuntimeException e) {
+            } catch (VirtualMachineError e) {
+                throw e;
+            } catch (Throwable e) {
                 subscribers.remove(subscriber);
             }
         }

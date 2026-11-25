@@ -18,6 +18,7 @@ class MacLaunchCommandTest {
     @Test
     @DisplayName("launchCommand 는 M7 전까지 UnsupportedOperationException")
     void launchCommandIsNotSupportedYet() {
+        // TODO(M7): macOS 용 ShellEnvironment 가 아직 없어 Windows 환경으로 만든다. M7 에서 macOS 환경 · 실제 명령 테스트로 바꾼다
         ShellProfile zsh = new ShellProfile(
                 new ProfileId("zsh"),
                 "zsh",

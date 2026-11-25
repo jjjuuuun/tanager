@@ -42,7 +42,9 @@ public abstract class PtyLauncherContract {
 
     @AfterEach
     void closeOpenedStreams() {
+        // close 는 바로 돌아온다 — 다음 테스트 · 임시 폴더 정리와 부딪히지 않게 끝날 때까지 기다린다
         opened.forEach(TerminalStream::close);
+        opened.forEach(PtyLauncherContract::awaitExit);
     }
 
     private TerminalStream open(LaunchCommand command) {
@@ -149,6 +151,28 @@ public abstract class PtyLauncherContract {
     }
 
     @Test
+    @DisplayName("C4b 구독자가 Error 를 던져도 그 구독자만 해제되고 onExit 가 완료된다")
+    public void subscriberThrowingErrorIsDroppedAndExitStillCompletes() {
+        // given
+        TerminalStream stream = open(printsThenExits("hi", 0));
+        AtomicInteger throwingCalls = new AtomicInteger();
+        stream.subscribe(chunk -> {
+            throwingCalls.incrementAndGet();
+            throw new AssertionError("구독자 오류");
+        });
+        OutputCollector healthy = new OutputCollector();
+        stream.subscribe(healthy);
+
+        // when
+        stream.start();
+
+        // then
+        assertThat(stream.onExit().toCompletableFuture()).succeedsWithin(WAIT).isEqualTo(0);
+        assertThat(healthy.text()).contains("hi");
+        assertThat(throwingCalls.get()).isEqualTo(1);
+    }
+
+    @Test
     @DisplayName("C5 cancel 한 구독자는 더 받지 않고 cancel 은 여러 번 해도 된다")
     public void cancelledSubscriberReceivesNothingMore() {
         // given
@@ -183,7 +207,7 @@ public abstract class PtyLauncherContract {
         assertThatCode(stream::close).doesNotThrowAnyException();
 
         // then
-        assertThat(stream.onExit().toCompletableFuture()).succeedsWithin(Duration.ofSeconds(5));
+        assertThat(stream.onExit().toCompletableFuture()).succeedsWithin(WAIT);
         String before = out.text();
         assertThatCode(() -> {
                     stream.write(echoLine("after-close"));
@@ -243,6 +267,68 @@ public abstract class PtyLauncherContract {
         TerminalStream stream = open(interactive());
 
         assertThat(stream.pid()).isPositive();
+    }
+
+    @Test
+    @DisplayName("C11 끝난 스트림의 close 는 아무 일도 하지 않고 onExit 값도 그대로다")
+    public void closeAfterExitChangesNothing() {
+        // given
+        TerminalStream stream = open(printsThenExits("hi", 7));
+        stream.subscribe(new OutputCollector());
+        stream.start();
+        awaitExit(stream);
+
+        // when
+        assertThatCode(stream::close).doesNotThrowAnyException();
+
+        // then
+        assertThat(stream.onExit().toCompletableFuture()).succeedsWithin(WAIT).isEqualTo(7);
+    }
+
+    @Test
+    @DisplayName("C12 시작 전에 close 해도 onExit 가 완료된다")
+    public void closeBeforeStartCompletesExit() {
+        // given
+        TerminalStream stream = open(interactive());
+
+        // when
+        stream.close();
+
+        // then
+        assertThat(stream.onExit().toCompletableFuture()).succeedsWithin(WAIT);
+    }
+
+    @Test
+    @DisplayName("C13 close 뒤 start 는 예외 없이 아무 일도 하지 않는다")
+    public void startAfterCloseIsANoOp() {
+        // given
+        TerminalStream stream = open(interactive());
+        OutputCollector out = new OutputCollector();
+        stream.subscribe(out);
+        stream.close();
+        awaitExit(stream);
+
+        // when
+        assertThatCode(stream::start).doesNotThrowAnyException();
+
+        // then
+        stream.write(echoLine("after-close"));
+        assertThat(out.text()).doesNotContain("after-close");
+    }
+
+    @Test
+    @DisplayName("C14 onExit 로 받은 것을 완료시켜도 실제 종료 코드가 유지된다")
+    public void onExitCannotBeCompletedByCallers() {
+        // given
+        TerminalStream stream = open(printsThenExits("hi", 7));
+        stream.subscribe(new OutputCollector());
+
+        // when
+        stream.onExit().toCompletableFuture().complete(99);
+        stream.start();
+
+        // then
+        assertThat(stream.onExit().toCompletableFuture()).succeedsWithin(WAIT).isEqualTo(7);
     }
 
     /** 하위 클래스가 UTF-8 입력 바이트를 만들 때 쓰는 도우미. */

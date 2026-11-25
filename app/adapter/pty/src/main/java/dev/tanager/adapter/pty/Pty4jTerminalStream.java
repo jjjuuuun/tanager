@@ -31,6 +31,8 @@ final class Pty4jTerminalStream implements TerminalStream {
 
     private final PtyProcess process;
     private final long pid;
+    // 기동 직후에 잡은 핸들은 시작 시각을 기억한다 — 끝난 뒤 같은 PID 를 물려받은 무관한 프로세스와 구별된다
+    private final Optional<ProcessHandle> root;
     private final List<Subscriber> subscribers = new CopyOnWriteArrayList<>();
     private final CompletableFuture<Integer> exit = new CompletableFuture<>();
     private final AtomicBoolean started = new AtomicBoolean();
@@ -40,6 +42,7 @@ final class Pty4jTerminalStream implements TerminalStream {
     Pty4jTerminalStream(PtyProcess process) {
         this.process = process;
         this.pid = process.pid();
+        this.root = ProcessHandle.of(pid);
     }
 
     @Override
@@ -54,6 +57,9 @@ final class Pty4jTerminalStream implements TerminalStream {
 
     @Override
     public void start() {
+        if (closed.get()) {
+            return;
+        }
         if (!started.compareAndSet(false, true)) {
             throw new IllegalStateException("이미 시작한 터미널 스트림이다(pid " + pid + ")");
         }
@@ -72,7 +78,7 @@ final class Pty4jTerminalStream implements TerminalStream {
                 in.flush();
             } catch (IOException e) {
                 // 확인과 쓰기 사이에 프로세스가 끝났다 — 끝난 뒤의 쓰기는 무시한다는 계약과 같다
-                LOG.log(Level.DEBUG, "끝나는 중인 터미널에 쓰지 못했다(pid {0})", pid);
+                LOG.log(Level.DEBUG, "끝나는 중인 터미널에 쓰지 못했다(pid {0})", String.valueOf(pid));
             }
         }
     }
@@ -86,7 +92,7 @@ final class Pty4jTerminalStream implements TerminalStream {
             process.setWinSize(new WinSize(size.columns(), size.rows()));
         } catch (IllegalStateException e) {
             // pty4j 는 이미 닫힌 PTY 의 크기 변경을 IllegalStateException 으로 알린다
-            LOG.log(Level.DEBUG, "끝나는 중인 터미널의 크기를 바꾸지 못했다(pid {0})", pid);
+            LOG.log(Level.DEBUG, "끝나는 중인 터미널의 크기를 바꾸지 못했다(pid {0})", String.valueOf(pid));
         }
     }
 
@@ -96,19 +102,26 @@ final class Pty4jTerminalStream implements TerminalStream {
             return;
         }
         subscribers.clear();
-        // 루트 종료 요청까지는 바로 한다(둘 다 기다리지 않는다) — 부른 쪽이 곧이어 작업 디렉터리를 지워도 덜 부딪힌다
-        List<ProcessHandle> tree = processTree();
-        process.destroy();
+        // 이미 끝난 세션은 아무것도 죽이지 않는다 — PID 로 찾으면 그 PID 를 물려받은 무관한 프로세스일 수 있다
+        boolean alreadyGone = exit.isDone() || !process.isAlive();
+        List<ProcessHandle> tree = alreadyGone ? List.of() : processTree();
+        if (!alreadyGone) {
+            // 루트 종료 요청까지는 바로 한다(둘 다 기다리지 않는다) — 부른 쪽이 곧이어 작업 디렉터리를 지워도 덜 부딪힌다
+            process.destroy();
+        }
         if (started.compareAndSet(false, true)) {
             // 시작 전에 닫혔다 — 출력을 비우고 onExit 를 완료할 읽기 스레드가 있어야 한다
             startReader();
         }
-        Thread.ofVirtual().name("pty-close-" + pid).start(() -> killSurvivors(tree));
+        if (!alreadyGone) {
+            Thread.ofVirtual().name("pty-close-" + pid).start(() -> killSurvivors(tree));
+        }
     }
 
     @Override
     public CompletionStage<Integer> onExit() {
-        return exit;
+        // 받은 쪽이 완료시킬 수 없게 읽기 전용 단계로 준다
+        return exit.minimalCompletionStage();
     }
 
     @Override
@@ -137,18 +150,22 @@ final class Pty4jTerminalStream implements TerminalStream {
                 }
             }
         } catch (IOException e) {
-            LOG.log(Level.DEBUG, "터미널 출력 읽기가 끝났다(pid {0}): {1}", pid, e.getMessage());
+            LOG.log(Level.DEBUG, "터미널 출력 읽기가 끝났다(pid {0}): {1}", String.valueOf(pid), e.getMessage());
+        } finally {
+            // 어떤 이유로 루프를 벗어나도 onExit 는 완료된다(계약: 정확히 한 번, 예외 없이)
+            subscribers.clear();
+            exit.complete(awaitExitCode());
         }
-        int code = awaitExitCode();
-        subscribers.clear();
-        exit.complete(code);
     }
 
     private void deliver(byte[] buffer, int length) {
         for (Subscriber subscriber : subscribers) {
             try {
                 subscriber.consumer().accept(Arrays.copyOf(buffer, length));
-            } catch (RuntimeException e) {
+            } catch (VirtualMachineError e) {
+                throw e;
+            } catch (Throwable e) {
+                // AssertionError 같은 Error 도 그 구독자만의 문제다 — 읽기 스레드와 다른 구독자는 계속 간다
                 subscribers.remove(subscriber);
                 // 출력 내용은 사용자 입력이 섞여 있어 남기지 않는다(java-style 12)
                 LOG.log(Level.WARNING, "터미널 출력 구독자가 예외를 던져 해제했다(pid " + pid + ")", e);
@@ -167,10 +184,11 @@ final class Pty4jTerminalStream implements TerminalStream {
 
     // 자손은 루트가 죽기 전에 잡아 둬야 한다 — 루트가 끝나면 부모 관계로 더는 찾을 수 없다
     private List<ProcessHandle> processTree() {
-        Optional<ProcessHandle> root = ProcessHandle.of(pid);
-        List<ProcessHandle> tree =
-                new ArrayList<>(root.map(r -> r.descendants().toList()).orElse(List.of()));
-        root.ifPresent(tree::add);
+        List<ProcessHandle> tree = new ArrayList<>();
+        root.filter(ProcessHandle::isAlive).ifPresent(handle -> {
+            tree.addAll(handle.descendants().toList());
+            tree.add(handle);
+        });
         return tree;
     }
 
@@ -189,7 +207,11 @@ final class Pty4jTerminalStream implements TerminalStream {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         } catch (ExecutionException | TimeoutException e) {
-            LOG.log(Level.DEBUG, "터미널이 {0}초 안에 끝나지 않아 남은 프로세스를 강제 종료한다(pid {1})", seconds, pid);
+            LOG.log(
+                    Level.DEBUG,
+                    "터미널이 {0}초 안에 끝나지 않아 남은 프로세스를 강제 종료한다(pid {1})",
+                    String.valueOf(seconds),
+                    String.valueOf(pid));
         }
     }
 
