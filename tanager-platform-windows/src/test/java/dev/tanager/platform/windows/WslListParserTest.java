@@ -62,4 +62,37 @@ class WslListParserTest {
         assertThat(WslListParser.parse(utf16le("Ubuntu\r\nubuntu\r\nUbuntu\r\n")))
                 .containsExactly("Ubuntu", "ubuntu");
     }
+
+    @Test
+    @DisplayName("UTF-16LE 끝에 남은 홀수 바이트는 U+FFFD 이름을 만들지 않는다")
+    void oddTrailingByte() {
+        // given
+        ByteArrayOutputStream b = new ByteArrayOutputStream();
+        b.writeBytes(utf16le("Ubuntu\r\n"));
+        b.write(0x41);
+        // when / then
+        assertThat(WslListParser.parse(b.toByteArray())).containsExactly("Ubuntu");
+    }
+
+    @Test
+    @DisplayName("UTF-16BE BOM 입력에서 쓰레기 이름을 만들지 않는다")
+    void utf16beIsNotMisread() {
+        // given
+        ByteArrayOutputStream b = new ByteArrayOutputStream();
+        b.writeBytes(new byte[] {(byte) 0xFE, (byte) 0xFF});
+        b.writeBytes("Ubuntu\r\n".getBytes(StandardCharsets.UTF_16BE));
+        // when / then
+        assertThat(WslListParser.parse(b.toByteArray()))
+                .allSatisfy(name -> assertThat(name).matches("[A-Za-z0-9._-]+"));
+    }
+
+    @Test
+    @DisplayName("종료 코드 0 으로 나온 공백 포함 안내 문구는 배포판 이름이 아니다")
+    void dropsGuidanceMessages() {
+        // given
+        byte[] out = utf16le("Windows Subsystem for Linux has no installed distributions.\r\n"
+                + "Linux용 Windows 하위 시스템에 설치된 배포판이 없습니다.\r\n");
+        // when / then
+        assertThat(WslListParser.parse(out)).isEmpty();
+    }
 }

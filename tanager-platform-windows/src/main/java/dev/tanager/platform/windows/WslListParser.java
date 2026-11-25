@@ -6,20 +6,23 @@ import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /** {@code wsl.exe --list --quiet} 출력에서 배포판 이름을 뽑는다. 기본 출력은 UTF-16LE, {@code WSL_UTF8=1} 이면 UTF-8. */
 final class WslListParser {
     private static final byte[] UTF16LE_BOM = {(byte) 0xFF, (byte) 0xFE};
     private static final byte[] UTF8_BOM = {(byte) 0xEF, (byte) 0xBB, (byte) 0xBF};
+    // WSL 이 허용하는 배포판 이름 문자. 안내 문구 · 잘못 디코딩된 바이트(U+FFFD 등)를 걸러 낸다.
+    private static final Pattern DISTRO_NAME = Pattern.compile("[A-Za-z0-9._-]+");
 
     private WslListParser() {}
 
-    /** 출력 순서대로, 중복은 처음 것만 남긴 불변 목록. 대소문자는 그대로 둔다. */
+    /** 출력 순서대로, 중복은 처음 것만 남긴 불변 목록. 대소문자는 그대로 둔다. 배포판 이름 꼴이 아닌 줄은 버린다. */
     static List<String> parse(byte[] output) {
         Set<String> names = new LinkedHashSet<>();
         for (String line : decode(output).split("\\r?\\n")) {
             String name = line.strip();
-            if (!name.isEmpty()) {
+            if (DISTRO_NAME.matcher(name).matches()) {
                 names.add(name);
             }
         }

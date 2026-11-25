@@ -102,8 +102,8 @@ class WindowsShellCatalogTest {
     void runnerReceivesCommandAndTimeout() {
         FakeCommandRunner runner = new FakeCommandRunner(two());
         new WindowsShellCatalog(runner, ENV, Duration.ofMillis(1234)).shells();
-        assertThat(runner.commands).containsExactly(List.of("C:\\Windows\\System32\\wsl.exe", "--list", "--quiet"));
-        assertThat(runner.timeouts).containsExactly(Duration.ofMillis(1234));
+        assertThat(runner.commands()).containsExactly(List.of("C:\\Windows\\System32\\wsl.exe", "--list", "--quiet"));
+        assertThat(runner.timeouts()).containsExactly(Duration.ofMillis(1234));
     }
 
     @Test
@@ -124,7 +124,7 @@ class WindowsShellCatalogTest {
     void systemRootFallback() {
         FakeCommandRunner runner = new FakeCommandRunner(new CommandOutcome.NotStarted("x"));
         List<ShellProfile> all = new WindowsShellCatalog(runner, key -> Optional.empty(), TIMEOUT).shells();
-        assertThat(runner.commands.get(0).get(0)).isEqualTo("C:\\Windows\\System32\\wsl.exe");
+        assertThat(runner.commands().get(0).get(0)).isEqualTo("C:\\Windows\\System32\\wsl.exe");
         assertThat(all.get(1).launch().executable()).isEqualTo("C:\\Windows\\System32\\cmd.exe");
     }
 
@@ -134,5 +134,71 @@ class WindowsShellCatalogTest {
         List<ShellProfile> all = shells(two());
         assertThatThrownBy(() -> all.add(all.get(0))).isInstanceOf(UnsupportedOperationException.class);
         assertThat(ids(all)).doesNotHaveDuplicates();
+    }
+
+    private static List<String> executables(List<ShellProfile> profiles) {
+        return profiles.stream().map(p -> p.launch().executable()).toList();
+    }
+
+    @Test
+    @DisplayName("ComSpec 이 공백이면 SystemRoot\\System32\\cmd.exe 를 쓴다")
+    void blankComSpecFallsBack() {
+        Function<String, Optional<String>> env = key -> Optional.ofNullable(
+                Map.of("SystemRoot", "C:\\Windows", "ComSpec", "   ").get(key));
+        List<ShellProfile> all = new WindowsShellCatalog(
+                        new FakeCommandRunner(new CommandOutcome.NotStarted("x")), env, TIMEOUT)
+                .shells();
+        assertThat(all.get(1).launch().executable()).isEqualTo("C:\\Windows\\System32\\cmd.exe");
+    }
+
+    @Test
+    @DisplayName("ComSpec 이 상대 경로면 SystemRoot\\System32\\cmd.exe 를 쓴다")
+    void relativeComSpecFallsBack() {
+        Function<String, Optional<String>> env = key -> Optional.ofNullable(
+                Map.of("SystemRoot", "C:\\Windows", "ComSpec", "cmd.exe").get(key));
+        List<ShellProfile> all = new WindowsShellCatalog(
+                        new FakeCommandRunner(new CommandOutcome.NotStarted("x")), env, TIMEOUT)
+                .shells();
+        assertThat(all.get(1).launch().executable()).isEqualTo("C:\\Windows\\System32\\cmd.exe");
+    }
+
+    @Test
+    @DisplayName("SystemRoot 가 상대 경로면 C:\\Windows 를 쓴다")
+    void relativeSystemRootFallsBack() {
+        // given
+        FakeCommandRunner runner = new FakeCommandRunner(new CommandOutcome.NotStarted("x"));
+        Function<String, Optional<String>> env =
+                key -> key.equals("SystemRoot") ? Optional.of("Windows") : Optional.empty();
+        // when
+        List<ShellProfile> all = new WindowsShellCatalog(runner, env, TIMEOUT).shells();
+        // then
+        assertThat(runner.commands().get(0).get(0)).isEqualTo("C:\\Windows\\System32\\wsl.exe");
+        assertThat(executables(all))
+                .containsExactly(
+                        "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+                        "C:\\Windows\\System32\\cmd.exe");
+    }
+
+    @Test
+    @DisplayName("SystemRoot 끝의 역슬래시 때문에 경로에 \\\\ 가 생기지 않는다")
+    void trailingBackslashSystemRoot() {
+        // given
+        FakeCommandRunner runner = new FakeCommandRunner(two());
+        Function<String, Optional<String>> env =
+                key -> key.equals("SystemRoot") ? Optional.of("C:\\Windows\\") : Optional.empty();
+        // when
+        List<ShellProfile> all = new WindowsShellCatalog(runner, env, TIMEOUT).shells();
+        // then
+        assertThat(runner.commands().get(0).get(0)).isEqualTo("C:\\Windows\\System32\\wsl.exe");
+        assertThat(executables(all)).noneMatch(e -> e.contains("\\\\"));
+    }
+
+    @Test
+    @DisplayName("종료 코드 0 이어도 안내 문구만 나오면 WSL 항목이 없다")
+    void guidanceWithExitZeroDropsWsl() {
+        CommandOutcome guidance = new CommandOutcome.Exited(
+                0,
+                "Windows Subsystem for Linux has no installed distributions.\r\n".getBytes(StandardCharsets.UTF_16LE));
+        assertThat(ids(shells(guidance))).containsExactly("powershell", "cmd");
     }
 }

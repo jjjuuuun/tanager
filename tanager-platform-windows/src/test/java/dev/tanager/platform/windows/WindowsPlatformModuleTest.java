@@ -7,7 +7,9 @@ import dev.tanager.application.port.out.PlatformModule;
 import dev.tanager.domain.session.ShellProfile;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
 import java.util.ServiceLoader;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
@@ -49,8 +51,8 @@ class WindowsPlatformModuleTest {
     void shellsDelegatesToCatalog() {
         WindowsShellCatalog catalog = new WindowsShellCatalog(
                 new FakeCommandRunner(new CommandOutcome.NotStarted("x")),
-                key -> java.util.Optional.empty(),
-                java.time.Duration.ofSeconds(1));
+                key -> Optional.empty(),
+                Duration.ofSeconds(1));
         assertThat(new WindowsPlatformModule(catalog).shells()).isEqualTo(catalog.shells());
     }
 

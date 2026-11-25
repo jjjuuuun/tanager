@@ -20,8 +20,8 @@ public interface PlatformModule {
      * 이 OS 에서 띄울 수 있는 셸 프로파일을 탐지한다.
      *
      * <p>예외를 던지지 않는다. 일부 탐지가 실패하면(WSL 미설치 등) 그 항목만 빠진다. 외부 명령을 실행하므로 최대 수 초
-     * 블로킹될 수 있어 EDT 에서 부르지 않는다. 순서에 의미가 있다 — 첫 항목이 기본 프로파일이다. 돌려주는 목록은 수정할 수
-     * 없다.
+     * 블로킹될 수 있어 EDT 에서 부르지 않는다. 순서는 탐지 순서(Windows 는 WSL 배포판 → PowerShell → cmd)이고, 기본
+     * 프로파일 결정은 ListProfiles · 설정(FR-SES-02)이 한다. 돌려주는 목록은 수정할 수 없다.
      */
     List<ShellProfile> shells();
 }

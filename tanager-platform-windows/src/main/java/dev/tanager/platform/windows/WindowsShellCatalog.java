@@ -14,11 +14,14 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
+import java.util.regex.Pattern;
 
 /** Windows 에서 띄울 수 있는 셸(WSL 배포판 · Windows PowerShell 5.1 · cmd)을 탐지한다. */
 final class WindowsShellCatalog {
     private static final Logger LOG = System.getLogger(WindowsShellCatalog.class.getName());
     private static final String DEFAULT_SYSTEM_ROOT = "C:\\Windows";
+    // Path.of(..).isAbsolute() 는 Windows 가 아닌 JVM 에서 "C:\.." 를 상대 경로로 보므로 문자열로 판정한다.
+    private static final Pattern WINDOWS_ABSOLUTE = Pattern.compile("^[A-Za-z]:\\\\.*");
 
     private final CommandRunner runner;
     private final Function<String, Optional<String>> env;
@@ -30,17 +33,37 @@ final class WindowsShellCatalog {
         this.wslTimeout = Objects.requireNonNull(wslTimeout, "wslTimeout");
     }
 
-    /** WSL 배포판(wsl.exe 출력 순서) → powershell → cmd. WSL 탐지가 실패하면 WSL 항목만 빠진다. 불변 목록. */
+    /**
+     * WSL 배포판 → powershell → cmd 의 탐지 순서. WSL 탐지가 실패하면 WSL 항목만 빠진다. 불변 목록.
+     *
+     * <p>배포판은 {@code --list --quiet} 의 순서를 그대로 쓴다. 첫 항목이 기본 배포판이라는 보장은 없다.
+     */
     List<ShellProfile> shells() {
-        String system32 = env.apply("SystemRoot").orElse(DEFAULT_SYSTEM_ROOT) + "\\System32";
+        String systemRoot = windowsAbsolute("SystemRoot").orElse(DEFAULT_SYSTEM_ROOT);
+        String system32 = stripTrailingBackslashes(systemRoot) + "\\System32";
         String wslExe = system32 + "\\wsl.exe";
         List<ShellProfile> profiles = new ArrayList<>();
         for (String distro : distros(wslExe)) {
             profiles.add(wsl(wslExe, distro));
         }
         profiles.add(powershell(system32));
-        profiles.add(cmd(env.apply("ComSpec").orElse(system32 + "\\cmd.exe")));
+        profiles.add(cmd(windowsAbsolute("ComSpec").orElse(system32 + "\\cmd.exe")));
         return List.copyOf(profiles);
+    }
+
+    /** 환경변수 값이 {@code X:\} 로 시작하는 Windows 절대 경로일 때만. 비었거나 상대 경로면 없음으로 본다. */
+    private Optional<String> windowsAbsolute(String name) {
+        return env.apply(name)
+                .map(String::strip)
+                .filter(v -> WINDOWS_ABSOLUTE.matcher(v).matches());
+    }
+
+    private static String stripTrailingBackslashes(String path) {
+        int end = path.length();
+        while (end > 0 && path.charAt(end - 1) == '\\') {
+            end--;
+        }
+        return path.substring(0, end);
     }
 
     private static ShellProfile wsl(String wslExe, String distro) {
