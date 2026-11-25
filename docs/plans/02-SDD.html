@@ -311,9 +311,9 @@ public record ShellProfile(ProfileId id, String name, ShellKind kind, ShellEnvir
                            LaunchTemplate launch, IntegrationMode integration) {}
 
 public sealed interface SessionState {
-    record Starting() implements SessionState {}
-    record Running(long pid, Optional&lt;WorkspacePath&gt; cwd) implements SessionState {}
-    record Exited(int exitCode, Optional&lt;WorkspacePath&gt; lastCwd) implements SessionState {}
+    record Starting(WorkspacePath dir) implements SessionState {}          // 시작 경로는 항상 안다
+    record Running(long pid, WorkspacePath cwd) implements SessionState {}  // OSC 전에는 시작 경로
+    record Exited(int exitCode, WorkspacePath lastCwd) implements SessionState {}
     record Failed(String reason) implements SessionState {}
 }
 

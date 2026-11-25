@@ -26,6 +26,7 @@ JUnit Jupiter · AssertJ · jqwik(속성 기반) · ArchUnit. Mockito 는 쓰지
 ## 작성 규칙
 - 이름: `메서드명_상황_기대결과` 또는 `@DisplayName("한국어 문장")`. 한 테스트 한 행위.
 - 구조: given / when / then 주석으로 구분.
+- jqwik `@Property` 에는 JUnit 의 `@DisplayName` 대신 jqwik 의 `@Label` 을 쓴다. `@DisplayName` 을 붙이면 jqwik 이 그 속성을 조용히 건너뛴다(SKIPPED, 실행 0회 — #41 에서 발견).
 - 시간·ID·파일시스템은 포트로 주입해 결정적으로. `Thread.sleep` 금지 → `FakeClock`, Awaitility.
 - 포트마다 추상 계약 테스트(`HistoryRepositoryContract`)를 두고 Fake 와 실제 구현이 같이 상속한다.
 - 커버리지 게이트: domain 90%, application 80% (JaCoCo line). UI 는 게이트 없음.
