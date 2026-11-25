@@ -3,9 +3,10 @@ package dev.tanager.application.platform;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import dev.tanager.application.port.out.LaunchCommand;
+import dev.tanager.application.port.out.PlatformDirs;
 import dev.tanager.application.port.out.PlatformModule;
-import dev.tanager.domain.history.WorkspacePath;
 import dev.tanager.domain.session.ShellProfile;
+import dev.tanager.domain.session.WorkingDir;
 import dev.tanager.domain.shared.Result;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
@@ -28,7 +29,12 @@ class PlatformSelectionTest {
         }
 
         @Override
-        public LaunchCommand launchCommand(ShellProfile profile, WorkspacePath cwd) {
+        public LaunchCommand launchCommand(ShellProfile profile, WorkingDir dir) {
+            throw new UnsupportedOperationException("선택 테스트에서는 쓰지 않는다");
+        }
+
+        @Override
+        public PlatformDirs dirs() {
             throw new UnsupportedOperationException("선택 테스트에서는 쓰지 않는다");
         }
     }

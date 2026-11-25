@@ -53,7 +53,8 @@ class WindowsPlatformModuleTest {
                 new FakeCommandRunner(new CommandOutcome.NotStarted("x")),
                 key -> Optional.empty(),
                 Duration.ofSeconds(1));
-        assertThat(new WindowsPlatformModule(catalog).shells()).isEqualTo(catalog.shells());
+        assertThat(new WindowsPlatformModule(catalog, key -> Optional.empty()).shells())
+                .isEqualTo(catalog.shells());
     }
 
     @Test
