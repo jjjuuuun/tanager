@@ -1,6 +1,7 @@
 package dev.tanager.domain.session;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import dev.tanager.domain.history.ShellEnvironment;
 import java.util.List;
@@ -76,8 +77,7 @@ class DefaultProfileTest {
     @Test
     @DisplayName("ProfileChoice 는 대체한 id 가 고른 프로파일 id 와 같으면 거부한다")
     void choiceRejectsReplacedEqualToChosen() {
-        org.assertj.core.api.Assertions.assertThatThrownBy(
-                        () -> new ProfileChoice(WSL_A, Optional.of(new ProfileId("wsl:A"))))
+        assertThatThrownBy(() -> new ProfileChoice(WSL_A, Optional.of(new ProfileId("wsl:A"))))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -93,8 +93,7 @@ class DefaultProfileTest {
     Arbitrary<Optional<ProfileId>> preferred() {
         return Arbitraries.of("wsl:A", "wsl:B", "powershell", "cmd", "wsl:Gone")
                 .map(ProfileId::new)
-                .optional()
-                .map(o -> o);
+                .optional();
     }
 
     @Property

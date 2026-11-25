@@ -30,6 +30,7 @@ import dev.tanager.domain.session.ShellProfile;
 import dev.tanager.domain.session.TerminalSession;
 import dev.tanager.domain.session.WorkingDir;
 import dev.tanager.domain.shared.Result;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -75,7 +76,7 @@ class SessionStarterTest {
     }
 
     private static Result<LoadedConfig, ConfigError> configOf(Optional<ProfileId> defaultProfile, String... idAndDir) {
-        Map<ProfileId, ProfileSettings> profiles = new java.util.HashMap<>();
+        Map<ProfileId, ProfileSettings> profiles = new HashMap<>();
         for (int i = 0; i < idAndDir.length; i += 2) {
             profiles.put(new ProfileId(idAndDir[i]), new ProfileSettings(Optional.of(idAndDir[i + 1])));
         }
@@ -282,6 +283,123 @@ class SessionStarterTest {
         // then
         assertThat(result.error()).contains(new StartFailure.NoShellAvailable());
         assertThat(launcher.commands()).isEmpty();
+    }
+
+    // ---- 홈 재시도의 경계 ----
+
+    @Test
+    @DisplayName("홈에서 띄우다 작업 디렉터리 오류가 나면 다시 시도하지 않고 LaunchFailed 다")
+    void homeLaunchMissingDirectoryIsNotRetried() {
+        // given
+        LaunchError error = new LaunchError.WorkingDirectoryNotFound("C:\\Users\\me");
+        launcher.willFail(error);
+
+        // when
+        var result = starter.start(request());
+
+        // then
+        StartFailure.LaunchFailed failed =
+                (StartFailure.LaunchFailed) result.error().orElseThrow();
+        assertThat(failed.error()).isEqualTo(error);
+        assertThat(failed.notices()).isEmpty();
+        assertThat(launcher.commands()).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("시작 경로도 홈도 실패하면 LaunchFailed 이고 시작 경로 알림은 남는다")
+    void missingStartDirThenHomeFailureKeepsNotice() {
+        // given
+        config.willLoad(configOf(Optional.empty(), "powershell", "C:\\없음"));
+        LaunchError error = new LaunchError.WorkingDirectoryNotFound("어디든");
+        launcher.willFail(error);
+
+        // when
+        var result = starter.start(requestFor("powershell"));
+
+        // then
+        StartFailure.LaunchFailed failed =
+                (StartFailure.LaunchFailed) result.error().orElseThrow();
+        assertThat(failed.error()).isEqualTo(error);
+        assertThat(failed.failed().state()).isEqualTo(new SessionState.Failed(error.describe()));
+        assertThat(failed.notices()).containsExactly(new StartNotice.StartDirMissing(winPath("C:\\없음")));
+        assertThat(platform.launchRequests())
+                .containsExactly(
+                        new LaunchRequest(POWERSHELL, new WorkingDir.At(winPath("C:\\없음"))),
+                        new LaunchRequest(POWERSHELL, new WorkingDir.Home()));
+        assertThat(launcher.commands()).hasSize(2);
+    }
+
+    @Test
+    @DisplayName("restart 할 때 마지막 경로가 사라졌으면 홈에서 다시 띄우고 알린다")
+    void restartFallsBackToHomeWhenLastCwdIsMissing() {
+        // given
+        WorkingDir work = new WorkingDir.At(winPath("C:\\work"));
+        StartedSession first = started(
+                starter.start(new StartRequest(Optional.of(new ProfileId("powershell")), Optional.of(work), SIZE)));
+        TerminalSession exited = first.session().exited(0).value().orElseThrow();
+        launcher.willFailFor(
+                command -> command.workingDirectory().equals(Optional.of("C:\\work")),
+                new LaunchError.WorkingDirectoryNotFound("C:\\work"));
+
+        // when
+        StartedSession second = started(starter.restart(exited, SIZE));
+
+        // then
+        assertThat(second.notices()).containsExactly(new StartNotice.StartDirMissing(winPath("C:\\work")));
+        assertThat(second.session().state())
+                .isEqualTo(new SessionState.Running(second.stream().pid(), new WorkingDir.Home()));
+        assertThat(platform.launchRequests())
+                .containsExactly(
+                        new LaunchRequest(POWERSHELL, work),
+                        new LaunchRequest(POWERSHELL, work),
+                        new LaunchRequest(POWERSHELL, new WorkingDir.Home()));
+    }
+
+    @Test
+    @DisplayName("알림은 설정 경고 → 프로파일 대체 → 시작 경로 순서다")
+    void noticesFollowDecisionOrder() {
+        // given
+        ConfigWarning warning = new ConfigWarning.IgnoredValue("profiles.x", "객체가 아니다");
+        config.willLoad(Result.ok(new LoadedConfig(
+                new AppConfig(
+                        Optional.of(new ProfileId("wsl:Gone")),
+                        Map.of(new ProfileId("wsl:A"), new ProfileSettings(Optional.of("/gone")))),
+                List.of(warning))));
+        launcher.willFailFor(
+                command -> command.workingDirectory().equals(Optional.of("/gone")),
+                new LaunchError.WorkingDirectoryNotFound("/gone"));
+
+        // when
+        StartedSession session = started(starter.start(request()));
+
+        // then
+        assertThat(session.notices())
+                .containsExactly(
+                        new StartNotice.ConfigWarned(warning),
+                        new StartNotice.ProfileReplaced(new ProfileId("wsl:Gone"), new ProfileId("wsl:A")),
+                        new StartNotice.StartDirMissing(wslPath("A", "/gone")));
+    }
+
+    @Test
+    @DisplayName("잘못된 시작 경로 알림도 설정 경고와 프로파일 대체 뒤에 온다")
+    void invalidStartDirNoticeComesLast() {
+        // given
+        ConfigWarning warning = new ConfigWarning.IgnoredValue("profiles.x", "객체가 아니다");
+        config.willLoad(Result.ok(new LoadedConfig(
+                new AppConfig(
+                        Optional.of(new ProfileId("wsl:Gone")),
+                        Map.of(new ProfileId("wsl:A"), new ProfileSettings(Optional.of("foo")))),
+                List.of(warning))));
+
+        // when
+        StartedSession session = started(starter.start(request()));
+
+        // then
+        assertThat(session.notices())
+                .containsExactly(
+                        new StartNotice.ConfigWarned(warning),
+                        new StartNotice.ProfileReplaced(new ProfileId("wsl:Gone"), new ProfileId("wsl:A")),
+                        new StartNotice.StartDirInvalid("foo"));
     }
 
     // ---- 종료와 재시작 ----

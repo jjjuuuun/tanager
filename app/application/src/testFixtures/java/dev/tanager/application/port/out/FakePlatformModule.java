@@ -15,7 +15,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  * {@link PlatformModule} 의 수작업 Fake. 셸 목록을 지정하고 {@code shells()} 호출 수와 {@code launchCommand} 인자를 기록한다.
  *
  * <p>{@code launchCommand} 규칙: argv 는 {@code [실행 파일, 템플릿 인자...]} 이고 Home 이면 {@code "--home"} 이 붙는다. 작업
- * 디렉터리는 {@code At} 이면 그 경로 문자열, Home 이면 비어 있다. 스레드 안전.
+ * 디렉터리는 {@code At} 이면 그 경로 문자열, Home 이면 비어 있다. 경로 환경이 프로파일과 다르면 포트 계약대로
+ * {@link IllegalArgumentException}. 스레드 안전.
  */
 public final class FakePlatformModule implements PlatformModule {
     private final List<ShellProfile> shells;
@@ -23,6 +24,7 @@ public final class FakePlatformModule implements PlatformModule {
     private final List<LaunchRequest> launchRequests = new ArrayList<>();
     private Path appData = Path.of("fake-appdata", "Tanager");
     private CountDownLatch shellsGate;
+    private Optional<RuntimeException> shellsFailure = Optional.empty();
 
     public FakePlatformModule(List<ShellProfile> shells) {
         this.shells = List.copyOf(shells);
@@ -31,6 +33,12 @@ public final class FakePlatformModule implements PlatformModule {
     /** {@code shells()} 가 이 래치가 열릴 때까지 막힌다(호출 수는 막히기 전에 센다). 동시 호출 테스트용. */
     public synchronized FakePlatformModule blockShellsUntil(CountDownLatch release) {
         this.shellsGate = release;
+        return this;
+    }
+
+    /** {@code shells()} 가 이 예외를 던진다(포트 계약 위반 흉내 — 호출 수는 센다). */
+    public synchronized FakePlatformModule failShellsWith(RuntimeException failure) {
+        this.shellsFailure = Optional.of(failure);
         return this;
     }
 
@@ -56,8 +64,13 @@ public final class FakePlatformModule implements PlatformModule {
     public List<ShellProfile> shells() {
         shellsCalls.incrementAndGet();
         CountDownLatch gate;
+        Optional<RuntimeException> failure;
         synchronized (this) {
             gate = shellsGate;
+            failure = shellsFailure;
+        }
+        if (failure.isPresent()) {
+            throw failure.get();
         }
         if (gate != null) {
             try {
@@ -71,6 +84,11 @@ public final class FakePlatformModule implements PlatformModule {
 
     @Override
     public synchronized LaunchCommand launchCommand(ShellProfile profile, WorkingDir dir) {
+        // 포트 계약과 같게: 다른 환경의 경로는 거부한다(기록하지 않는다)
+        if (dir instanceof WorkingDir.At at && !at.path().env().equals(profile.env())) {
+            throw new IllegalArgumentException(
+                    "프로파일 환경 " + profile.env() + " 과 경로 환경 " + at.path().env() + " 이 다르다");
+        }
         launchRequests.add(new LaunchRequest(profile, dir));
         List<String> argv = new ArrayList<>();
         argv.add(profile.launch().executable());

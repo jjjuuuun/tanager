@@ -1,6 +1,7 @@
 package dev.tanager.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 
 import dev.tanager.application.port.out.FakePlatformModule;
@@ -12,10 +13,9 @@ import dev.tanager.domain.session.ShellKind;
 import dev.tanager.domain.session.ShellProfile;
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -63,18 +63,86 @@ class ProfileCatalogTest {
         CountDownLatch release = new CountDownLatch(1);
         FakePlatformModule platform = new FakePlatformModule(List.of(CMD)).blockShellsUntil(release);
         ProfileCatalog catalog = new ProfileCatalog(platform);
+        CompletableFuture<List<ShellProfile>> first = new CompletableFuture<>();
+        CompletableFuture<List<ShellProfile>> second = new CompletableFuture<>();
+        Thread detecting = Thread.ofPlatform().start(() -> first.complete(catalog.list()));
+        await().atMost(Duration.ofSeconds(10)).until(() -> platform.shellsCalls() >= 1);
 
-        try (ExecutorService pool = Executors.newFixedThreadPool(2)) {
+        // when — 두 번째 호출이 탐지를 기다리는 상태가 된 뒤에 탐지를 끝낸다
+        Thread waiting = Thread.ofPlatform().start(() -> second.complete(catalog.list()));
+        await().atMost(Duration.ofSeconds(10)).until(() -> isParked(waiting));
+        release.countDown();
+        detecting.join(Duration.ofSeconds(10));
+        waiting.join(Duration.ofSeconds(10));
+
+        // then
+        assertThat(first).isCompletedWithValue(List.of(CMD));
+        assertThat(second).isCompletedWithValue(List.of(CMD));
+        assertThat(platform.shellsCalls()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("셸 탐지가 예외로 끝나면 그 뒤의 list 도 다시 탐지하지 않고 IllegalStateException 이다")
+    void detectionFailureIsCached() {
+        // given
+        FakePlatformModule platform =
+                new FakePlatformModule(List.of(CMD)).failShellsWith(new IllegalArgumentException("탐지 실패"));
+        ProfileCatalog catalog = new ProfileCatalog(platform);
+
+        // when / then
+        assertThatThrownBy(catalog::list).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(catalog::list).isInstanceOf(IllegalStateException.class);
+        assertThat(platform.shellsCalls()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("탐지를 기다리던 스레드가 인터럽트되어도 결과를 받고 인터럽트 표시는 남는다")
+    void interruptedWaiterStillGetsResultAndKeepsFlag() throws Exception {
+        // given
+        CountDownLatch release = new CountDownLatch(1);
+        FakePlatformModule platform = new FakePlatformModule(List.of(CMD)).blockShellsUntil(release);
+        ProfileCatalog catalog = new ProfileCatalog(platform);
+        Thread detecting = Thread.ofPlatform().start(catalog::list);
+        await().atMost(Duration.ofSeconds(10)).until(() -> platform.shellsCalls() >= 1);
+        CompletableFuture<List<ShellProfile>> result = new CompletableFuture<>();
+        AtomicBoolean interruptedAfter = new AtomicBoolean();
+        Thread waiting = Thread.ofPlatform().start(() -> {
+            result.complete(catalog.list());
+            interruptedAfter.set(Thread.currentThread().isInterrupted());
+        });
+        await().atMost(Duration.ofSeconds(10)).until(() -> isParked(waiting));
+
+        // when
+        waiting.interrupt();
+        release.countDown();
+        waiting.join(Duration.ofSeconds(10));
+        detecting.join(Duration.ofSeconds(10));
+
+        // then
+        assertThat(result).isCompletedWithValue(List.of(CMD));
+        assertThat(interruptedAfter).isTrue();
+    }
+
+    @Test
+    @DisplayName("이미 인터럽트된 스레드가 불러도 결과를 받고 인터럽트 표시는 남는다")
+    void alreadyInterruptedCallerKeepsFlag() {
+        // given
+        ProfileCatalog catalog = new ProfileCatalog(new FakePlatformModule(List.of(CMD)));
+        Thread.currentThread().interrupt();
+        try {
             // when
-            Future<List<ShellProfile>> first = pool.submit(catalog::list);
-            Future<List<ShellProfile>> second = pool.submit(catalog::list);
-            await().atMost(Duration.ofSeconds(10)).until(() -> platform.shellsCalls() >= 1);
-            release.countDown();
+            List<ShellProfile> shells = catalog.list();
 
             // then
-            assertThat(first.get()).containsExactly(CMD);
-            assertThat(second.get()).containsExactly(CMD);
-            assertThat(platform.shellsCalls()).isEqualTo(1);
+            assertThat(shells).containsExactly(CMD);
+            assertThat(Thread.currentThread().isInterrupted()).isTrue();
+        } finally {
+            Thread.interrupted();
         }
+    }
+
+    private static boolean isParked(Thread thread) {
+        Thread.State state = thread.getState();
+        return state == Thread.State.WAITING || state == Thread.State.BLOCKED;
     }
 }

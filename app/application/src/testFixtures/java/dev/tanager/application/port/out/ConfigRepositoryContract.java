@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import dev.tanager.domain.session.ProfileId;
 import dev.tanager.domain.shared.Result;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
@@ -14,7 +15,7 @@ import org.junit.jupiter.api.Test;
 @Tag("contract")
 public abstract class ConfigRepositoryContract {
 
-    /** 비어 있는(아직 저장한 적 없는) 저장소. 같은 테스트 안에서는 같은 인스턴스를 돌려준다. */
+    /** 비어 있는(아직 저장한 적 없는) 저장소. 같은 테스트 안에서 여러 번 불러도 같은 저장소(같은 저장 위치)를 돌려준다. */
     protected abstract ConfigRepository repository();
 
     private static AppConfig sample() {
@@ -33,7 +34,7 @@ public abstract class ConfigRepositoryContract {
         Result<LoadedConfig, ConfigError> result = repository().load();
 
         // then
-        assertThat(result.value()).contains(new LoadedConfig(AppConfig.defaults(), java.util.List.of()));
+        assertThat(result.value()).contains(new LoadedConfig(AppConfig.defaults(), List.of()));
     }
 
     @Test
@@ -48,7 +49,7 @@ public abstract class ConfigRepositoryContract {
 
         // then
         assertThat(saved.value()).contains(sample());
-        assertThat(loaded.value()).contains(new LoadedConfig(sample(), java.util.List.of()));
+        assertThat(loaded.value()).contains(new LoadedConfig(sample(), List.of()));
     }
 
     @Test
@@ -62,6 +63,6 @@ public abstract class ConfigRepositoryContract {
         repository.save(AppConfig.defaults());
 
         // then
-        assertThat(repository.load().value()).contains(new LoadedConfig(AppConfig.defaults(), java.util.List.of()));
+        assertThat(repository.load().value()).contains(new LoadedConfig(AppConfig.defaults(), List.of()));
     }
 }

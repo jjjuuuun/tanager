@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -25,6 +26,8 @@ import net.jqwik.api.Provide;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 class JsonConfigRepositoryTest {
     @TempDir
@@ -76,6 +79,21 @@ class JsonConfigRepositoryTest {
                                 Optional.of(new ProfileId("wsl:A")),
                                 Map.of(new ProfileId("wsl:A"), new ProfileSettings(Optional.of("/home/me")))),
                         List.of()));
+    }
+
+    @Test
+    @DisplayName("끝 쉼표가 있어도 읽는다")
+    void readsTrailingComma() throws IOException {
+        // given
+        write("{ \"defaultProfile\": \"cmd\", \"profiles\": { \"cmd\": { \"startDir\": \"C:\\\\a\", }, }, }");
+
+        // when
+        LoadedConfig loaded = repository().load().value().orElseThrow();
+
+        // then
+        assertThat(loaded.config().defaultProfile()).contains(new ProfileId("cmd"));
+        assertThat(loaded.config().startDirOf(new ProfileId("cmd"))).contains("C:\\a");
+        assertThat(loaded.warnings()).isEmpty();
     }
 
     @Test
@@ -247,8 +265,8 @@ class JsonConfigRepositoryTest {
     }
 
     @Test
-    @DisplayName("대상이 디렉터리면 WriteFailed 이고 원본은 그대로다")
-    void saveToDirectoryFails() throws IOException {
+    @DisplayName("대상이 디렉터리라 기존 파일을 읽지 못하면 쓰지 않고 WriteFailed 이며 원본은 그대로다")
+    void saveFailsWhenTargetCannotBeRead() throws IOException {
         // given
         Files.createDirectories(file());
         Files.writeString(file().resolve("keep.txt"), "x");
@@ -260,6 +278,101 @@ class JsonConfigRepositoryTest {
         assertThat(result.error().orElseThrow()).isInstanceOf(ConfigError.WriteFailed.class);
         assertThat(file()).isDirectory();
         assertThat(file().resolve("keep.txt")).exists();
+    }
+
+    @Test
+    @DisplayName("임시 파일을 쓰지 못하면 WriteFailed 이고 원본 바이트는 그대로다")
+    void saveFailsWhenTmpCannotBeWritten() throws IOException {
+        // given
+        write("{ \"defaultProfile\": \"cmd\" }");
+        byte[] before = Files.readAllBytes(file());
+        Path tmp = dir.resolve("config.json.tmp");
+        Files.createDirectories(tmp);
+        Files.writeString(tmp.resolve("keep.txt"), "x");
+
+        // when
+        Result<AppConfig, ConfigError> result = repository().save(configWith("cmd", "C:\\x"));
+
+        // then
+        assertThat(result.error().orElseThrow()).isInstanceOf(ConfigError.WriteFailed.class);
+        assertThat(Files.readAllBytes(file())).isEqualTo(before);
+        assertThat(tmp.resolve("keep.txt")).exists();
+    }
+
+    // ---- 병합(아는 키만 바꾼다) ----
+
+    private JsonNode savedTree() throws IOException {
+        return JsonMapper.builder().build().readTree(Files.readString(file(), StandardCharsets.UTF_8));
+    }
+
+    @Test
+    @DisplayName("설정에서 빠진 프로파일이 startDir 만 가졌으면 항목을 지운다")
+    void removedProfileWithOnlyStartDirIsDeleted() throws IOException {
+        // given
+        write("{ \"profiles\": { \"cmd\": { \"startDir\": \"C:\\\\a\" },"
+                + " \"powershell\": { \"startDir\": \"C:\\\\b\" } } }");
+
+        // when
+        repository().save(configWith("powershell", "C:\\b"));
+
+        // then
+        JsonNode profiles = savedTree().get("profiles");
+        assertThat(profiles.has("cmd")).isFalse();
+        assertThat(profiles.get("powershell").get("startDir").stringValue()).isEqualTo("C:\\b");
+    }
+
+    @Test
+    @DisplayName("설정에서 빠진 프로파일에 다른 키가 있으면 startDir 만 지운다")
+    void removedProfileKeepsOtherKeys() throws IOException {
+        // given
+        write("{ \"profiles\": { \"cmd\": { \"startDir\": \"C:\\\\a\", \"foo\": 1 } } }");
+
+        // when
+        repository().save(AppConfig.defaults());
+
+        // then
+        JsonNode cmd = savedTree().get("profiles").get("cmd");
+        assertThat(cmd.has("startDir")).isFalse();
+        assertThat(cmd.get("foo").intValue()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("객체가 아닌 프로파일 값은 설정에 없으면 그대로 둔다")
+    void nonObjectProfileValueIsKept() throws IOException {
+        // given
+        write("{ \"profiles\": { \"cmd\": 5 } }");
+
+        // when
+        repository().save(AppConfig.defaults());
+
+        // then
+        assertThat(savedTree().get("profiles").get("cmd").intValue()).isEqualTo(5);
+    }
+
+    @Test
+    @DisplayName("기본 프로파일이 비면 defaultProfile 키를 지운다")
+    void emptyDefaultProfileRemovesKey() throws IOException {
+        // given
+        write("{ \"defaultProfile\": \"cmd\" }");
+
+        // when
+        repository().save(AppConfig.defaults());
+
+        // then
+        assertThat(savedTree().has("defaultProfile")).isFalse();
+    }
+
+    @Test
+    @DisplayName("남은 프로파일이 없으면 profiles 키를 지운다")
+    void emptyProfilesRemovesKey() throws IOException {
+        // given
+        write("{ \"profiles\": { \"cmd\": { \"startDir\": \"C:\\\\a\" } } }");
+
+        // when
+        repository().save(AppConfig.defaults());
+
+        // then
+        assertThat(savedTree().has("profiles")).isFalse();
     }
 
     @Test
@@ -314,8 +427,7 @@ class JsonConfigRepositoryTest {
             assertThat(repository.load().value()).contains(new LoadedConfig(config, List.of()));
         } finally {
             try (var walk = Files.walk(tmp)) {
-                walk.sorted(java.util.Comparator.reverseOrder())
-                        .forEach(p -> p.toFile().delete());
+                walk.sorted(Comparator.reverseOrder()).forEach(p -> p.toFile().delete());
             }
         }
     }

@@ -10,10 +10,12 @@ import dev.tanager.domain.session.ShellKind;
 import dev.tanager.domain.session.ShellProfile;
 import dev.tanager.domain.session.WorkingDir;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.DisplayName;
@@ -51,11 +53,24 @@ class WindowsWslHomeTest {
         ProcessBuilder builder = new ProcessBuilder(argv).redirectErrorStream(true);
         builder.environment().put("WSL_UTF8", "1");
         Process process = builder.start();
-        String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        // 출력은 따로 읽는다 — wsl.exe 가 끝나지 않아도 테스트가 waitFor 의 시간 제한에서 멈추게
+        CompletableFuture<String> output = CompletableFuture.supplyAsync(() -> readAll(process));
+        boolean finished = process.waitFor(10, TimeUnit.SECONDS);
+        if (!finished) {
+            process.destroyForcibly();
+        }
 
         // then
-        assertThat(process.waitFor(20, TimeUnit.SECONDS)).isTrue();
-        assertThat(output).contains("SAME_AS_HOME");
+        assertThat(finished).as("wsl.exe 가 10초 안에 끝나야 한다").isTrue();
+        assertThat(output.get(10, TimeUnit.SECONDS)).contains("SAME_AS_HOME");
+    }
+
+    private static String readAll(Process process) {
+        try {
+            return new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 
     private static String firstDistro() throws IOException, InterruptedException {
