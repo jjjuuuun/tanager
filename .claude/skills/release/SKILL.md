@@ -40,6 +40,12 @@ argument-hint: "[vX.Y.Z]"
 10. `git fetch origin && git switch main && git pull --ff-only`
 11. `git tag -a <버전> -m "<버전> — <마일스톤 제목>"` → **승인 창** → `git push origin <버전>` → **승인 창**
 12. `gh run watch` 로 release 워크플로를 본다. 실패하면 원인을 보고(태그 삭제·재태그는 사용자 결정).
+    - 일시적 실패(네트워크 등)면 `gh run rerun <id> --failed`.
+    - 워크플로 자체가 틀렸으면 `hotfix/<n>-<slug>`(main 에서 분기) PR 로 고친다. 병합은 사용자.
+    - 병합 후 사용자에게 고르게 한다.
+      - A: 태그 옮기기. Release 가 아직 없을 때만 고를 수 있다. `git push origin :refs/tags/<버전>`(승인 창) → `git tag -d <버전>` → `git tag -a <버전> -m "…" <hotfix 병합 커밋>` → `git push origin <버전>`(승인 창). v0.1.0 은 A 로 했다(2026-11-25).
+      - B: 다음 패치 버전으로 릴리스.
+    - 어느 쪽이든 끝나면 역병합 PR 을 연다(`/pr` D).
 13. 마일스톤 닫기: `gh api -X PATCH "repos/{owner}/{repo}/milestones/<번호>" -f state=closed`
 14. `git switch dev && git pull --ff-only` 로 돌아와 다음 마일스톤을 알린다.
 
