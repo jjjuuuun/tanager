@@ -4,7 +4,7 @@ import java.util.EnumSet;
 import java.util.Map;
 
 /** 한 테마의 토큰 12개 색. 모두 있어야 한다. */
-public record ThemeTokens(Map<ColorToken, Rgb> colors) {
+record ThemeTokens(Map<ColorToken, Rgb> colors) {
     public ThemeTokens {
         colors = Map.copyOf(colors);
         EnumSet<ColorToken> missing = EnumSet.allOf(ColorToken.class);

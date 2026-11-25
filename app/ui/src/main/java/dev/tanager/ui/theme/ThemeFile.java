@@ -13,7 +13,7 @@ import java.util.Set;
  *
  * @param variables {@code "@이름"} → 값({@code "#RRGGBB"} 또는 {@code "@다른이름"})
  */
-public record ThemeFile(Map<String, String> variables) {
+record ThemeFile(Map<String, String> variables) {
     public ThemeFile {
         variables = Map.copyOf(variables);
     }

@@ -31,7 +31,7 @@ public enum SoftTheme {
     }
 
     /** 테마 파일의 색 변수(대비 검사용). */
-    public ThemeFile load() {
+    ThemeFile load() {
         try (InputStream in = open()) {
             return ThemeFile.parse(new String(in.readAllBytes(), StandardCharsets.UTF_8));
         } catch (IOException e) {

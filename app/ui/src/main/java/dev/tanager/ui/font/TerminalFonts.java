@@ -76,7 +76,7 @@ public final class TerminalFonts {
 
     /** 이 글꼴이 {@link #HANGUL_SAMPLE} 을 모두 그릴 수 있는가. */
     public static boolean supportsHangul(Font font) {
-        return font.canDisplayUpTo(HANGUL_SAMPLE) == -1;
+        return supportsHangul(font::canDisplay);
     }
 
     /** 코드 포인트마다 그릴 수 있는지 판정하는 함수로 본 한글 지원 여부(테스트용 순수 판정). */

@@ -4,8 +4,8 @@ import java.util.List;
 import java.util.Objects;
 
 /** 터미널 색: 전경 · 배경(테마의 term) · 커서 · 선택 배경 · ANSI 16색. */
-public record TerminalPalette(Rgb foreground, Rgb background, Rgb cursor, Rgb selection, List<Rgb> ansi) {
-    public static final int ANSI_COLORS = 16;
+record TerminalPalette(Rgb foreground, Rgb background, Rgb cursor, Rgb selection, List<Rgb> ansi) {
+    static final int ANSI_COLORS = 16;
 
     public TerminalPalette {
         Objects.requireNonNull(foreground, "foreground");
