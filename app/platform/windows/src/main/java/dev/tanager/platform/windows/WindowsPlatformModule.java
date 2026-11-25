@@ -35,13 +35,22 @@ public final class WindowsPlatformModule implements PlatformModule {
 
     /** 환경 변수({@code USERPROFILE} · {@code APPDATA})는 여기서 한 번 읽는다 — 기동 명령 계산을 순수하게 두려고. */
     WindowsPlatformModule(WindowsShellCatalog shellCatalog, Function<String, Optional<String>> env) {
+        this(shellCatalog, env, System.getProperty("user.home"));
+    }
+
+    /**
+     * {@code fallbackHome} 은 {@code USERPROFILE} 이 없거나 공백일 때의 홈이고, {@code APPDATA} 가 없을 때 {@code
+     * <fallbackHome>\AppData\Roaming} 의 기준이다. 보통 {@code user.home}.
+     */
+    WindowsPlatformModule(
+            WindowsShellCatalog shellCatalog, Function<String, Optional<String>> env, String fallbackHome) {
         this.shellCatalog = Objects.requireNonNull(shellCatalog, "shellCatalog");
         Objects.requireNonNull(env, "env");
-        String userHome = System.getProperty("user.home");
-        this.userProfile = nonBlank(env, "USERPROFILE").orElse(userHome);
+        Objects.requireNonNull(fallbackHome, "fallbackHome");
+        this.userProfile = nonBlank(env, "USERPROFILE").orElse(fallbackHome);
         this.appData = nonBlank(env, "APPDATA")
                 .map(dir -> Path.of(dir, APP_FOLDER))
-                .orElseGet(() -> Path.of(userHome, "AppData", "Roaming", APP_FOLDER));
+                .orElseGet(() -> Path.of(fallbackHome, "AppData", "Roaming", APP_FOLDER));
     }
 
     private static Optional<String> nonBlank(Function<String, Optional<String>> env, String name) {

@@ -45,6 +45,28 @@ class WindowsPlatformModuleLaunchTest {
     }
 
     @Test
+    @DisplayName("USERPROFILE 이 없거나 공백이면 주입한 대체 홈이 작업 디렉터리가 된다")
+    void homeFallsBackToInjectedHomeWithoutUserProfile() {
+        for (Optional<String> userProfile : List.of(Optional.<String>empty(), Optional.of("   "))) {
+            // given
+            WindowsShellCatalog catalog = new WindowsShellCatalog(
+                    new FakeCommandRunner(new CommandOutcome.NotStarted("x")),
+                    key -> Optional.empty(),
+                    Duration.ofSeconds(1));
+            WindowsPlatformModule module = new WindowsPlatformModule(
+                    catalog, key -> key.equals("USERPROFILE") ? userProfile : Optional.empty(), "E:\\대체\\홈");
+
+            // when
+            var command = module.launchCommand(POWERSHELL, new WorkingDir.Home());
+
+            // then
+            assertThat(command.workingDirectory())
+                    .as("USERPROFILE %s", userProfile)
+                    .contains("E:\\대체\\홈");
+        }
+    }
+
+    @Test
     @DisplayName("launchCommand 는 WindowsLaunchCommands 에 위임한다")
     void delegatesToWindowsLaunchCommands() {
         // given
