@@ -277,4 +277,25 @@ class TerminalSessionTest {
         assertThat(r.error()).contains(new SessionError.IllegalTransition(before, event));
         assertThat(from.state()).isEqualTo(before);
     }
+
+    @Test
+    @DisplayName("생성자는 상태의 경로 환경이 프로파일과 다르면 거부한다")
+    void constructorRejectsEnvironmentMismatch() {
+        // given
+        ShellProfile profile = wslProfile();
+        SessionState running = new SessionState.Running(1, winPath("C:\\work"));
+        // when / then
+        assertThatThrownBy(() -> new TerminalSession(profile, running)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("생성자는 경로가 없는 Failed 상태를 환경 검사 없이 받는다")
+    void constructorAcceptsFailed() {
+        // given
+        ShellProfile profile = wslProfile();
+        // when
+        TerminalSession s = new TerminalSession(profile, new SessionState.Failed("x"));
+        // then
+        assertThat(s.state()).isEqualTo(new SessionState.Failed("x"));
+    }
 }

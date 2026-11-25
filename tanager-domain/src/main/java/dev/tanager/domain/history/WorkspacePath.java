@@ -86,12 +86,9 @@ public final class WorkspacePath {
         return Optional.empty();
     }
 
-    // "C:" 또는 "C:\…" 만 절대 경로다. "C:foo" 는 드라이브의 현재 디렉터리 기준 상대 경로라 거부한다.
+    // "C:\…" 만 절대 경로다. "C:" · "C:foo" 는 그 드라이브의 현재 디렉터리 기준 상대 경로라 거부한다.
     private static boolean isDriveAbsolute(String s) {
-        return s.length() >= 2
-                && isAsciiLetter(s.charAt(0))
-                && s.charAt(1) == ':'
-                && (s.length() == 2 || s.charAt(2) == '\\');
+        return s.length() >= 3 && isAsciiLetter(s.charAt(0)) && s.charAt(1) == ':' && s.charAt(2) == '\\';
     }
 
     private static boolean isAsciiLetter(char c) {
@@ -99,9 +96,10 @@ public final class WorkspacePath {
     }
 
     // \\host\share 가 UNC 의 루트다. '..' 은 share 위로 올라가지 않는다.
+    // 확장 길이 접두 \\?\ 와 장치 경로 \\.\ 는 작업 경로로 받지 않는다(셸이 알려 주는 경로에는 없다).
     private static Optional<String> normalizeUnc(String rest) {
         List<String> parts = segments(rest, WIN_SEP);
-        if (parts.size() < 2 || isDot(parts.get(0)) || isDot(parts.get(1))) {
+        if (parts.size() < 2 || isDot(parts.get(0)) || parts.get(0).equals("?") || isDot(parts.get(1))) {
             return Optional.empty();
         }
         StringBuilder sb = new StringBuilder(WIN_SEP + WIN_SEP)

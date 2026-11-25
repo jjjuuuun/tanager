@@ -62,7 +62,7 @@ class WorkspacePathTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"C:", "C:\\", "c:/"})
+    @ValueSource(strings = {"C:\\", "c:/"})
     @DisplayName("Windows 드라이브 루트는 끝 역슬래시를 유지한다")
     void windowsDriveRootKeepsTrailingBackslash(String raw) {
         // given / when
@@ -93,6 +93,17 @@ class WorkspacePathTest {
     }
 
     @Test
+    @DisplayName("UNC 경로의 .. 은 share 위로 올라가지 않는다")
+    void uncDotDotStopsAtShare() {
+        // given
+        String raw = "\\\\host\\share\\a\\..\\..\\..";
+        // when
+        String path = norm(WIN, raw);
+        // then
+        assertThat(path).isEqualTo("\\\\host\\share");
+    }
+
+    @Test
     @DisplayName("UNC 경로도 중복 구분자와 끝 구분자를 정규화한다")
     void uncNormalizesRest() {
         // given
@@ -117,7 +128,24 @@ class WorkspacePathTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"work\\src", "\\work", "work", "~\\x"})
+    @ValueSource(
+            strings = {
+                "work\\src",
+                "\\work",
+                "work",
+                "~\\x",
+                // "C:" · "C:foo" 는 드라이브의 현재 디렉터리 기준 상대 경로
+                "C:",
+                "C:foo",
+                // 호스트나 share 가 없거나 . · .. 인 UNC
+                "\\\\host",
+                "\\\\.\\x",
+                "\\\\..\\share",
+                "\\\\host\\..",
+                // 확장 길이 접두(\\?\) 는 받지 않는다
+                "\\\\?\\C:\\Work",
+                "\\\\?\\UNC\\srv\\share"
+            })
     @DisplayName("Windows 에서 드라이브 없는 경로는 NotAbsolute 이다")
     void windowsRelativeIsNotAbsolute(String raw) {
         // given / when
@@ -219,7 +247,7 @@ class WorkspacePathTest {
                             for (int i = 0; i < segs.size(); i++) {
                                 sb.append(seps.get(i)).append(segs.get(i));
                             }
-                            return sb.append(segs.isEmpty() ? "" : tail).toString();
+                            return sb.append(segs.isEmpty() ? "\\" : tail).toString();
                         }))));
     }
 

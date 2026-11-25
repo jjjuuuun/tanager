@@ -3,6 +3,7 @@ package dev.tanager.domain.session;
 import dev.tanager.domain.history.WorkspacePath;
 import dev.tanager.domain.shared.Result;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * 창 하나에서 도는 셸 프로세스 1개의 상태 기계. 전이는 새 세션을 돌려주고, 허용되지 않은 전이는
@@ -13,6 +14,21 @@ public record TerminalSession(ShellProfile profile, SessionState state) {
     public TerminalSession {
         Objects.requireNonNull(profile, "profile");
         Objects.requireNonNull(state, "state");
+        // 복원처럼 생성자를 직접 부르는 곳에서도 "경로는 프로파일의 환경" 불변식을 지킨다.
+        pathOf(state).ifPresent(path -> {
+            if (!path.env().equals(profile.env())) {
+                throw new IllegalArgumentException("상태의 경로 환경이 프로파일과 다르다: " + path.env() + " ≠ " + profile.env());
+            }
+        });
+    }
+
+    private static Optional<WorkspacePath> pathOf(SessionState state) {
+        return switch (state) {
+            case SessionState.Starting s -> Optional.of(s.dir());
+            case SessionState.Running r -> Optional.of(r.cwd());
+            case SessionState.Exited e -> Optional.of(e.lastCwd());
+            case SessionState.Failed _ -> Optional.empty();
+        };
     }
 
     /** {@code dir} 에서 시작하는 새 세션. 경로 환경이 프로파일과 다르면 거부한다. */
