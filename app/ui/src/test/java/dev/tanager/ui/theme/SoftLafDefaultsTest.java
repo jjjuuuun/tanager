@@ -89,11 +89,16 @@ class SoftLafDefaultsTest {
 
     @Test
     @DisplayName("테마가 설치되지 않아 값이 없으면 ThemeColors 는 IllegalStateException")
-    void themeColorsWithoutThemeThrows() {
-        // given: 소프트 테마를 설치하지 않은 기본 LaF 에는 Tanager.* 키가 없다
+    void themeColorsWithoutThemeThrows() throws Exception {
+        // given: 소프트 테마가 아닌 LaF 를 명시적으로 깐다(LaF 는 JVM 전역 — 다른 테스트가 남긴 테마에 기대지 않는다)
+        javax.swing.LookAndFeel previous = javax.swing.UIManager.getLookAndFeel();
+        javax.swing.UIManager.setLookAndFeel(new javax.swing.plaf.metal.MetalLookAndFeel());
         javax.swing.UIManager.put(ColorToken.ACCENT.key(), null);
-
-        // when / then
-        assertThatIllegalStateException().isThrownBy(() -> ThemeColors.get(ColorToken.ACCENT));
+        try {
+            // when / then
+            assertThatIllegalStateException().isThrownBy(() -> ThemeColors.get(ColorToken.ACCENT));
+        } finally {
+            javax.swing.UIManager.setLookAndFeel(previous);
+        }
     }
 }

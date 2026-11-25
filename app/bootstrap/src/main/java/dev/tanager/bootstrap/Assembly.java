@@ -1,6 +1,7 @@
 package dev.tanager.bootstrap;
 
 import dev.tanager.adapter.persistence.JsonConfigRepository;
+import dev.tanager.application.port.in.ListProfilesUseCase;
 import dev.tanager.application.port.in.StartSessionUseCase;
 import dev.tanager.application.port.out.PlatformModule;
 import dev.tanager.application.port.out.PtyLauncher;
@@ -9,11 +10,12 @@ import dev.tanager.application.service.SessionStarter;
 import java.util.Objects;
 
 /** 조립한 유스케이스들. 포트 구현을 골라 서비스에 넣는 일은 여기서만 한다(ADR-0002). */
-record Assembly(StartSessionUseCase sessions) {
+record Assembly(ListProfilesUseCase profiles, StartSessionUseCase sessions) {
     private static final System.Logger LOG = System.getLogger(Assembly.class.getName());
     private static final String CONFIG_FILE = "config.json";
 
     Assembly {
+        Objects.requireNonNull(profiles, "profiles");
         Objects.requireNonNull(sessions, "sessions");
     }
 
@@ -32,6 +34,6 @@ record Assembly(StartSessionUseCase sessions) {
         });
         JsonConfigRepository config =
                 new JsonConfigRepository(platform.dirs().appData().resolve(CONFIG_FILE));
-        return new Assembly(new SessionStarter(catalog, config, platform, launcher));
+        return new Assembly(catalog, new SessionStarter(catalog, config, platform, launcher));
     }
 }
