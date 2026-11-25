@@ -48,11 +48,11 @@ class TerminalFontsTest {
     @DisplayName("번들 글꼴을 등록하면 D2Coding 이고 Bold 도 있으며 한글을 그릴 수 있다")
     void registersBundledFont() {
         // when
-        Result<java.awt.Font, String> result = TerminalFonts.registerBundled();
+        Result<TerminalFontSet, String> result = TerminalFonts.registerBundled();
 
         // then
         assertThat(result).isInstanceOf(Result.Ok.class);
-        java.awt.Font font = ((Result.Ok<java.awt.Font, String>) result).get();
+        java.awt.Font font = ((Result.Ok<TerminalFontSet, String>) result).get().regular();
         assertThat(font.getFamily()).isEqualTo(TerminalFonts.FAMILY);
         assertThat(java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().getAvailableFontFamilyNames())
                 .contains("D2Coding");
@@ -76,7 +76,7 @@ class TerminalFontsTest {
     @Test
     @DisplayName("리소스가 없으면 Err")
     void missingResourceIsErr() {
-        Result<java.awt.Font, String> result =
+        Result<TerminalFontSet, String> result =
                 TerminalFonts.register(java.util.List.of("/fonts/nope.ttf"), TerminalFonts.class::getResourceAsStream);
 
         assertThat(result.error()).hasValueSatisfying(e -> assertThat(e).contains("/fonts/nope.ttf"));
@@ -85,7 +85,7 @@ class TerminalFontsTest {
     @Test
     @DisplayName("글꼴이 아닌 바이트면 Err")
     void notAFontIsErr() {
-        Result<java.awt.Font, String> result =
+        Result<TerminalFontSet, String> result =
                 TerminalFonts.register(java.util.List.of("/fonts/OFL.txt"), TerminalFonts.class::getResourceAsStream);
 
         assertThat(result.isOk()).isFalse();
@@ -94,7 +94,7 @@ class TerminalFontsTest {
     @Test
     @DisplayName("열다가 RuntimeException 이 나도 예외 대신 Err(창은 떠야 한다)")
     void runtimeExceptionIsErr() {
-        Result<java.awt.Font, String> result = TerminalFonts.register(java.util.List.of("/fonts/x.ttf"), name -> {
+        Result<TerminalFontSet, String> result = TerminalFonts.register(java.util.List.of("/fonts/x.ttf"), name -> {
             throw new IllegalStateException("주입된 실패");
         });
 
@@ -104,11 +104,30 @@ class TerminalFontsTest {
     @Test
     @DisplayName("VirtualMachineError 가 아닌 Error(AWTError 등)도 Err")
     void nonVmErrorIsErr() {
-        Result<java.awt.Font, String> result = TerminalFonts.register(java.util.List.of("/fonts/x.ttf"), name -> {
+        Result<TerminalFontSet, String> result = TerminalFonts.register(java.util.List.of("/fonts/x.ttf"), name -> {
             throw new java.awt.AWTError("주입된 AWT 오류");
         });
 
         assertThat(result.isOk()).isFalse();
+    }
+
+    @Test
+    @DisplayName("글꼴 열기 함수가 InternalError 를 던져도 Err(글꼴 하위 시스템 오류로 창이 안 뜨면 안 된다)")
+    void internalErrorIsErr() {
+        Result<TerminalFontSet, String> result = TerminalFonts.register(java.util.List.of("/fonts/x.ttf"), name -> {
+            throw new InternalError("주입된 글꼴 오류");
+        });
+
+        assertThat(result.error()).hasValueSatisfying(e -> assertThat(e).contains("주입된 글꼴 오류"));
+    }
+
+    @Test
+    @DisplayName("sized 는 Regular · Bold 를 같은 크기로 만든다")
+    void sizedAppliesToBothFaces() {
+        TerminalFontSet sized = TerminalFontSet.fallback().sized(14f);
+
+        assertThat(sized.regular().getSize2D()).isEqualTo(14f);
+        assertThat(sized.bold().getSize2D()).isEqualTo(14f);
     }
 
     @Test
