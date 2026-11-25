@@ -20,6 +20,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import tools.jackson.core.JacksonException;
+import tools.jackson.core.TokenStreamLocation;
 import tools.jackson.core.json.JsonReadFeature;
 import tools.jackson.core.util.DefaultIndenter;
 import tools.jackson.core.util.DefaultPrettyPrinter;
@@ -29,9 +30,9 @@ import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.node.ObjectNode;
 
 /**
- * config.json(SDD §9.3) 을 읽고 쓴다(ADR-0009). 사람이 고치는 파일이라 읽기는 관대하고(주석 · 끝 쉼표 · BOM 허용, 형식이 틀린
- * 키는 그 키만 무시) 쓰기는 보수적이다(디스크 파일을 다시 읽어 모르는 키를 보존하고, 손상 · 상위 버전 파일은 덮어쓰지 않으며,
- * 임시 파일에 쓴 뒤 원자적으로 바꾼다).
+ * config.json(SDD §9.3) 을 읽고 쓴다(ADR-0009). 사람이 고치는 파일이라 읽기는 관대하고(주석 · 끝 쉼표 · BOM 허용, 빈 파일은
+ * 없는 파일처럼, 형식이 틀린 키는 그 키만 무시) 쓰기는 보수적이다(디스크 파일을 다시 읽어 모르는 키를 보존하고, 손상 · 상위 버전 ·
+ * 해석할 수 없는 schemaVersion 의 파일은 덮어쓰지 않으며, 임시 파일에 쓴 뒤 원자적으로 바꾼다).
  */
 public final class JsonConfigRepository implements ConfigRepository {
     private static final System.Logger LOG = System.getLogger(JsonConfigRepository.class.getName());
@@ -76,9 +77,9 @@ public final class JsonConfigRepository implements ConfigRepository {
             case Disk.Missing _ -> MAPPER.createObjectNode();
             case Disk.Parsed parsed -> parsed.root();
         };
-        Optional<Integer> newer = schemaVersion(root).filter(v -> v > SCHEMA_VERSION);
-        if (newer.isPresent()) {
-            return Result.err(new ConfigError.WouldOverwrite("새 버전(schemaVersion " + newer.get() + ")이 쓴 파일이다"));
+        Optional<String> refused = versionRefusal(root);
+        if (refused.isPresent()) {
+            return Result.err(new ConfigError.WouldOverwrite(refused.get()));
         }
         merge(root, config);
         return write(root).map(_ -> config);
@@ -101,12 +102,16 @@ public final class JsonConfigRepository implements ConfigRepository {
         } catch (IOException e) {
             return Result.err(new ConfigError.Unreadable(file + ": " + e));
         }
+        int offset = startsWithBom(bytes) ? UTF8_BOM.length : 0;
+        // 빈 파일은 사용자가 내용을 지운 것이다 — 지킬 내용이 없으니 없는 파일과 같게 다룬다
+        if (isBlank(bytes, offset)) {
+            return Result.ok(new Disk.Missing());
+        }
         JsonNode root;
         try {
-            int offset = startsWithBom(bytes) ? UTF8_BOM.length : 0;
             root = MAPPER.readTree(bytes, offset, bytes.length - offset);
         } catch (JacksonException e) {
-            return Result.err(new ConfigError.Corrupt(e.getOriginalMessage()));
+            return Result.err(new ConfigError.Corrupt(describe(e)));
         }
         if (root instanceof ObjectNode object) {
             return Result.ok(new Disk.Parsed(object));
@@ -119,6 +124,27 @@ public final class JsonConfigRepository implements ConfigRepository {
                 && bytes[0] == UTF8_BOM[0]
                 && bytes[1] == UTF8_BOM[1]
                 && bytes[2] == UTF8_BOM[2];
+    }
+
+    private static boolean isBlank(byte[] bytes, int offset) {
+        for (int i = offset; i < bytes.length; i++) {
+            byte b = bytes[i];
+            if (b != ' ' && b != '\t' && b != '\r' && b != '\n') {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static String describe(JacksonException e) {
+        String message = Optional.ofNullable(e.getOriginalMessage())
+                .filter(m -> !m.isBlank())
+                .orElse("JSON 문법 오류");
+        TokenStreamLocation location = e.getLocation();
+        if (location == null || location.getLineNr() < 1) {
+            return message;
+        }
+        return message + " (줄 " + location.getLineNr() + ", 열 " + location.getColumnNr() + ")";
     }
 
     private static LoadedConfig interpret(ObjectNode root) {
@@ -184,6 +210,18 @@ public final class JsonConfigRepository implements ConfigRepository {
     }
 
     // ---- 쓰기 ----
+
+    // 덮어써도 되는 것은 schemaVersion 이 없거나 정수 1 일 때뿐이다. 해석할 수 없는 값도 사용자의 의도를 모르니 지킨다.
+    private static Optional<String> versionRefusal(ObjectNode root) {
+        JsonNode version = root.get(KEY_SCHEMA_VERSION);
+        if (version == null || (version.isInt() && version.intValue() == SCHEMA_VERSION)) {
+            return Optional.empty();
+        }
+        return Optional.of(schemaVersion(root)
+                .filter(v -> v > SCHEMA_VERSION)
+                .map(v -> "새 버전(schemaVersion " + v + ")이 쓴 파일이다")
+                .orElse("schemaVersion " + version + " 을 해석할 수 없다"));
+    }
 
     // 읽지 못한 파일은 덮어쓰지 않는다. 손상은 사용자의 내용을 지키려는 거부이고, 그 밖은 쓰기 실패다.
     private static ConfigError refusal(ConfigError readError) {

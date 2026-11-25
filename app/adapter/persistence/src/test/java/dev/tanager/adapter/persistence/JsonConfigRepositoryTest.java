@@ -173,6 +173,49 @@ class JsonConfigRepositoryTest {
     }
 
     @Test
+    @DisplayName("Corrupt 의 설명에는 오류가 난 줄과 열이 있다")
+    void corruptDetailHasLocation() throws IOException {
+        // given
+        write("{\n  \"defaultProfile\": ,\n}");
+
+        // when
+        ConfigError error = repository().load().error().orElseThrow();
+
+        // then
+        assertThat(error).isInstanceOf(ConfigError.Corrupt.class);
+        assertThat(((ConfigError.Corrupt) error).detail()).contains("줄 2").contains("열 ");
+    }
+
+    @Test
+    @DisplayName("빈 파일 · 공백뿐인 파일은 없는 파일처럼 기본값이고 경고가 없다")
+    void blankFileLoadsDefaults() throws IOException {
+        for (String text : List.of("", "  \n\t\r\n", "\uFEFF")) {
+            // given
+            write(text);
+
+            // when
+            Result<LoadedConfig, ConfigError> result = repository().load();
+
+            // then
+            assertThat(result.value()).as("내용 %s", text).contains(new LoadedConfig(AppConfig.defaults(), List.of()));
+        }
+    }
+
+    @Test
+    @DisplayName("빈 파일 위에는 정상으로 저장한다")
+    void saveOverBlankFile() throws IOException {
+        // given
+        write("  \n");
+
+        // when
+        Result<AppConfig, ConfigError> saved = repository().save(configWith("cmd", "C:\\x"));
+
+        // then
+        assertThat(saved.isOk()).isTrue();
+        assertThat(repository().load().value()).contains(new LoadedConfig(configWith("cmd", "C:\\x"), List.of()));
+    }
+
+    @Test
     @DisplayName("루트가 객체가 아니면 Corrupt 다")
     void nonObjectRootIsCorrupt() throws IOException {
         // given
@@ -222,6 +265,24 @@ class JsonConfigRepositoryTest {
         // then
         assertThat(result.error().orElseThrow()).isInstanceOf(ConfigError.WouldOverwrite.class);
         assertThat(Files.readAllBytes(file())).isEqualTo(before);
+    }
+
+    @Test
+    @DisplayName("schemaVersion 을 정수로 해석할 수 없으면(문자열 숫자 · int 범위 밖) 저장하지 않는다")
+    void saveRefusesUninterpretableSchemaVersion() throws IOException {
+        for (String version : List.of("\"2\"", "99999999999", "1.5")) {
+            // given
+            write("{ \"schemaVersion\": " + version + " }");
+            byte[] before = Files.readAllBytes(file());
+
+            // when
+            Result<AppConfig, ConfigError> result = repository().save(configWith("cmd", "C:\\x"));
+
+            // then
+            assertThat(result.error()).as("schemaVersion %s", version).isPresent();
+            assertThat(result.error().orElseThrow()).isInstanceOf(ConfigError.WouldOverwrite.class);
+            assertThat(Files.readAllBytes(file())).isEqualTo(before);
+        }
     }
 
     @Test

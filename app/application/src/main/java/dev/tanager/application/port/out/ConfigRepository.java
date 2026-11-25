@@ -9,7 +9,7 @@ public interface ConfigRepository {
     Result<LoadedConfig, ConfigError> load();
 
     /**
-     * 아는 키만 덮어써 저장한다. 파일의 모르는 키는 보존한다. 디스크의 파일이 손상됐거나 상위 버전이면 쓰지 않고
+     * 아는 키만 덮어써 저장한다. 파일의 모르는 키는 보존한다. 디스크의 파일이 손상됐거나 상위 버전(또는 버전을 해석할 수 없음)이면 쓰지 않고
      * {@link ConfigError.WouldOverwrite} 를 돌려준다.
      */
     Result<AppConfig, ConfigError> save(AppConfig config);
