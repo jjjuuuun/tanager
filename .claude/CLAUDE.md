@@ -68,7 +68,7 @@ OS 차이(셸 탐지, 경로 변환, 앱 디렉터리, 셸 통합, 기동 명령
 ## 함정
 
 - 모듈 폴더는 `app/` 아래, 이름에 `-` 없음(ADR-0008). Gradle 경로 = `app/` 아래 폴더 경로(`app/adapter/pty` = `:adapter:pty`).
-- WSL 과 Windows 의 Gradle 이 프로젝트 `.gradle/` 을 함께 쓴다. "Cannot lock file hash cache" 가 나면 `./gradlew --stop` 과 `cmd.exe /c gradlew.bat --stop` 으로 양쪽 데몬을 멈춘다.
+- WSL 과 Windows 의 Gradle 이 프로젝트 캐시 잠금으로 부딪히지 않게, Claude Code 가 WSL 에서 부르는 Gradle 은 `.claude/settings.json` 의 `env.GRADLE_OPTS`(`-Dorg.gradle.projectcachedir=.gradle-wsl`)로 `.gradle-wsl/` 을 쓴다(저장소 루트에서 실행). 손으로 WSL 터미널에서 돌릴 때 "Cannot lock file hash cache" 가 나면 같은 값을 주거나 `./gradlew --stop` · `cmd.exe /c gradlew.bat --stop` 으로 양쪽 데몬을 멈춘다.
 - jpackage 실행 파일 `Tanager.exe` 는 같은 이름의 자식 프로세스를 띄우고 창은 자식이 가진다. 창이 떴는지 확인할 때는 자식 프로세스의 창을 본다.
 - `wsl.exe --list --quiet` 출력은 UTF-16LE. `WSL_UTF8=1` 을 주거나 UTF-16LE 로 디코딩.
 - JediTerm 은 Maven Central 에 없다 → `https://packages.jetbrains.team/maven/p/ij/intellij-dependencies` 저장소. 글자 단위 대체 글꼴이 없고 IME 조합 중 글자는 기본 글꼴로만 그리므로 **터미널 기본 글꼴은 한글 글리프가 있어야 한다**(D2Coding 번들).

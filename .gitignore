@@ -1,5 +1,7 @@
 # Gradle
 .gradle/
+# WSL 에서 Claude 가 부르는 Gradle 의 프로젝트 캐시(Windows 쪽 .gradle/ 과 잠금이 부딪히지 않게, #58)
+.gradle-wsl/
 build/
 !gradle/wrapper/gradle-wrapper.jar
 
