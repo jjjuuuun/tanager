@@ -37,16 +37,18 @@ import org.junit.jupiter.api.condition.OS;
 /**
  * DA1 응답으로 ConPTY 의 3초 지연이 사라졌는지 실제 PowerShell 5.1 로 확인한다(ADR-0011).
  *
- * <p>제한(각 2.5초)은 3초 지연이 돌아오면 깨지도록만 잡았다 — 시작 성능 목표(NFR-02)를 재는 테스트가 아니다. 실측은 로그로 남긴다.
+ * <p>실제 셸과 위젯이 연결되는지 보는 기능 테스트다. CI 러너의 PowerShell 콜드 스타트는 수 초가 걸려 제한(10초)을 넉넉히 둔다.
+ * ConPTY DA1 3초 지연이 사라졌는지는 headless 단위 테스트({@code TanagerTermWidgetTest})가 결정적으로 본다.
+ * 시작 성능 목표(NFR-02)를 재는 테스트도 아니다. 실측(개발 PC 약 0.35초)은 로그로 남긴다.
  */
 @Tag("windows")
 @EnabledOnOs(OS.WINDOWS)
 class PowerShellSmokeTest {
     private static final System.Logger LOG = System.getLogger(PowerShellSmokeTest.class.getName());
-    private static final Duration LIMIT = Duration.ofMillis(2500);
+    private static final Duration LIMIT = Duration.ofSeconds(10);
 
     @Test
-    @DisplayName("PowerShell 이 2.5초 안에 프롬프트를 그리고 exit 2 는 2.5초 안에 종료 코드 2 로 끝난다")
+    @DisplayName("실제 PowerShell 이 위젯에 프롬프트를 그리고 exit 2 는 종료 코드 2 로 끝난다")
     void promptAppearsQuicklyAndExitCodeArrives() throws Exception {
         // given
         PlatformModule platform = currentPlatform();
