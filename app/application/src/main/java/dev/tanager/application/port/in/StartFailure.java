@@ -2,6 +2,7 @@ package dev.tanager.application.port.in;
 
 import dev.tanager.application.port.out.LaunchError;
 import dev.tanager.domain.session.SessionError;
+import dev.tanager.domain.session.SessionState;
 import dev.tanager.domain.session.TerminalSession;
 import java.util.List;
 import java.util.Objects;
@@ -30,6 +31,9 @@ public sealed interface StartFailure {
         public LaunchFailed {
             Objects.requireNonNull(failed, "failed");
             Objects.requireNonNull(error, "error");
+            if (!(failed.state() instanceof SessionState.Failed)) {
+                throw new IllegalArgumentException("기동 실패 세션은 Failed 여야 한다: " + failed.state());
+            }
             notices = List.copyOf(notices);
         }
     }

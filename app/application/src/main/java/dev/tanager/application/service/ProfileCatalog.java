@@ -8,7 +8,11 @@ import java.util.Objects;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.FutureTask;
 
-/** 플랫폼이 탐지한 셸 프로파일을 한 번만 탐지해 기억한다. 탐지는 외부 명령을 띄우므로 수 초가 걸릴 수 있다. */
+/**
+ * 플랫폼이 탐지한 셸 프로파일을 한 번만 탐지해 기억한다. 탐지는 외부 명령을 띄우므로 수 초가 걸릴 수 있다.
+ *
+ * <p>StateActor 가 없는 M2 의 메모이제이션이다(ADR-0009). 공유 상태는 이 불변 목록 하나뿐이다.
+ */
 public final class ProfileCatalog implements ListProfilesUseCase {
     // FutureTask.run 은 처음 한 번만 실행되고, 동시에 부른 다른 스레드는 get 에서 그 결과를 기다린다.
     private final FutureTask<List<ShellProfile>> detection;

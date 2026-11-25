@@ -1,13 +1,15 @@
 package dev.tanager.application.port.in;
 
 import dev.tanager.application.port.out.TerminalStream;
+import dev.tanager.domain.session.SessionState;
 import dev.tanager.domain.session.TerminalSession;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletionStage;
 
 /**
- * 띄운 세션.
+ * 띄운 세션. 받은 쪽이 {@code stream} 을 소유한다 — 쓰지 않고 버리더라도 반드시 {@link TerminalStream#close()} 해야 프로세스와
+ * PTY 가 정리된다.
  *
  * @param session {@code Running} 상태의 세션
  * @param stream 셸 입출력. 아직 {@link TerminalStream#start()} 하지 않았다 — 구독을 붙인 뒤 부른다
@@ -23,6 +25,9 @@ public record StartedSession(
         Objects.requireNonNull(session, "session");
         Objects.requireNonNull(stream, "stream");
         Objects.requireNonNull(exited, "exited");
+        if (!(session.state() instanceof SessionState.Running)) {
+            throw new IllegalArgumentException("띄운 세션은 Running 이어야 한다: " + session.state());
+        }
         notices = List.copyOf(notices);
     }
 }
