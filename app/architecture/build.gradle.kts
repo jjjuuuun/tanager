@@ -7,6 +7,9 @@ dependencies {
     testImplementation(libs.pty4j)
     // 위반 픽스처(ui 가 JediTerm 색을 직접 만드는 경우)를 컴파일하려고
     testImplementation(libs.jediterm.core)
+    // OS 판별 금지 규칙의 위반 픽스처(FlatLaf SystemInfo)를 컴파일하려고
+    testImplementation(libs.flatlaf)
+    testImplementation(libs.jna)
     testImplementation(project(":domain"))
     testImplementation(project(":application"))
     testImplementation(project(":adapter:pty"))

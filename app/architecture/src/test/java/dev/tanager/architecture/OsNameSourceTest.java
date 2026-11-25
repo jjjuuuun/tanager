@@ -19,7 +19,6 @@ import org.junit.jupiter.api.Test;
 class OsNameSourceTest {
     // Gradle 은 테스트를 모듈 폴더(app/architecture)에서 돌린다
     private static final Path APP = Path.of("..");
-    private static final Path BOOTSTRAP = APP.resolve("bootstrap");
 
     @Test
     @DisplayName("bootstrap 밖의 제품 소스는 os.name 을 읽지 않는다")
@@ -28,7 +27,7 @@ class OsNameSourceTest {
         List<Path> files;
         try (Stream<Path> walk = Files.walk(APP)) {
             files = walk.filter(p -> p.toString().endsWith(".java"))
-                    .filter(p -> p.toString().replace('\\', '/').contains("/src/main/java/"))
+                    .filter(OsNameReads::isProductionSource)
                     .toList();
         }
         // when
@@ -36,7 +35,7 @@ class OsNameSourceTest {
         int inBootstrap = 0;
         for (Path file : files) {
             int hits = OsNameReads.count(Files.readString(file, StandardCharsets.UTF_8));
-            if (file.normalize().startsWith(BOOTSTRAP.normalize())) {
+            if (OsNameReads.isBootstrap(file)) {
                 inBootstrap += hits;
             } else if (hits > 0) {
                 outside.add(APP.relativize(file).toString());
@@ -62,5 +61,25 @@ class OsNameSourceTest {
                 .isZero();
         assertThat(OsNameReads.count("/* \"os.name\" 을 읽지 않는다 */")).isZero();
         assertThat(OsNameReads.count("String s = \"os.name.extra\";")).isZero();
+    }
+
+    @Test
+    @DisplayName("제품 소스 · bootstrap 판정: src/main/java 만, bootstrap 모듈만 허용(경로 구분자와 상관없이)")
+    void classifiesPaths() {
+        assertThat(OsNameReads.isProductionSource(
+                        Path.of("..", "platform", "windows", "src", "main", "java", "X.java")))
+                .isTrue();
+        assertThat(OsNameReads.isProductionSource(
+                        Path.of("..", "platform", "windows", "src", "test", "java", "T.java")))
+                .isFalse();
+        assertThat(OsNameReads.isProductionSource(Path.of("..", "ui", "build", "wsl", "src", "main", "java", "G.java")))
+                .as("build 산출물 아래는 제품 소스가 아니다")
+                .isFalse();
+        assertThat(OsNameReads.isBootstrap(Path.of("..", "bootstrap", "src", "main", "java", "Z.java")))
+                .isTrue();
+        assertThat(OsNameReads.isBootstrap(Path.of("..", "platform", "windows", "src", "main", "java", "X.java")))
+                .isFalse();
+        assertThat(OsNameReads.isBootstrap(Path.of("..\\ui\\src\\main\\java\\Y.java")))
+                .isFalse();
     }
 }

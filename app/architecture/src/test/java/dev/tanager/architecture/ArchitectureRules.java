@@ -102,6 +102,24 @@ final class ArchitectureRules {
                 .because("pty4j 는 adapter.pty 안에 가둔다 — 나머지는 TerminalStream 포트만 본다");
     }
 
+    /**
+     * OS 판별은 bootstrap 의 플랫폼 선택 한 곳에서만 한다(architecture.md). 클래스패스에 있는 라이브러리의 OS 판별
+     * ({@code com.sun.jna.Platform}, FlatLaf {@code SystemInfo})도 bootstrap 밖에서는 쓰지 않는다. {@code "os.name"}
+     * 문자열은 {@link OsNameSourceTest} 가 소스에서 본다.
+     */
+    static ArchRule onlyBootstrapDetectsOs(String base) {
+        return noClasses()
+                .that()
+                .resideOutsideOfPackage(base + ".bootstrap..")
+                .should()
+                .dependOnClassesThat()
+                .haveFullyQualifiedName("com.sun.jna.Platform")
+                .orShould()
+                .dependOnClassesThat()
+                .haveFullyQualifiedName("com.formdev.flatlaf.util.SystemInfo")
+                .because("OS 분기는 bootstrap 의 플랫폼 선택(ServiceLoader) 한 곳에만 둔다 — 나머지는 PlatformModule 포트만 본다");
+    }
+
     /** 색은 ui.theme 의 토큰에서만 온다. 그 밖의 ui 코드는 색을 만들지 않는다(SDD §8.5, ADR-0010). */
     static ArchRule colorsOnlyFromThemeTokens(String base) {
         return classes()

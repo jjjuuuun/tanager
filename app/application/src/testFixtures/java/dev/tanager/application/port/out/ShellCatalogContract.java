@@ -32,7 +32,7 @@ public abstract class ShellCatalogContract {
     void isUnmodifiable() {
         List<ShellProfile> shells = platform().shells();
         assertThatThrownBy(() -> shells.add(shells.isEmpty() ? null : shells.getFirst()))
-                .isInstanceOfAny(UnsupportedOperationException.class, NullPointerException.class);
+                .isInstanceOf(UnsupportedOperationException.class);
     }
 
     @Test
