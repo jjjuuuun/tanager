@@ -4,5 +4,5 @@
 tasks.register("jacocoCoverageVerification") {
     group = "verification"
     description = "커버리지 하한 검증(domain 90% · application 80%)"
-    dependsOn(":tanager-domain:jacocoTestCoverageVerification", ":tanager-application:jacocoTestCoverageVerification")
+    dependsOn(":domain:jacocoTestCoverageVerification", ":application:jacocoTestCoverageVerification")
 }

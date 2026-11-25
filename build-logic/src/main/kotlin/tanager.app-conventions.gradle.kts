@@ -1,4 +1,4 @@
-// 실행 모듈(tanager-app): application 실행 + jpackage app-image(jlink 로 필요한 모듈만)
+// 실행 모듈(app/bootstrap): application 실행 + jpackage app-image(jlink 로 필요한 모듈만)
 plugins {
     id("tanager.java-conventions")
     application

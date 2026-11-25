@@ -17,7 +17,7 @@ argument-hint: "[vX.Y.Z]"
 ## B. 변경 내역
 5. `git cliff origin/main..origin/dev --tag <버전> --strip all` (없으면 `git log --oneline --no-merges origin/main..origin/dev`).
 6. 버전이 맞는지 SemVer 로 검사: `!`/`BREAKING CHANGE` → MAJOR(1.0 전에는 MINOR), `feat` → MINOR, `fix`/`perf` → PATCH. 다르면 사용자에게 알리고 제안 버전을 같이 적는다.
-7. WSL 통합 테스트(CI 에서 안 도는 `@Tag("wsl")`): `cmd.exe /c gradlew.bat :tanager-platform-windows:test` 결과를 기록한다(M1 이후).
+7. WSL 통합 테스트(CI 에서 안 도는 `@Tag("wsl")`): `cmd.exe /c gradlew.bat :platform:windows:test` 결과를 기록한다(M1 이후).
 7-1. 포함된 PR 모으기: `gh pr list --base dev --state merged --search 'milestone:"<마일스톤>"' --json number,title,url,mergedAt` → PR 마다 `gh api repos/{owner}/{repo}/pulls/<n>/reviews` 에서 `## Claude 리뷰` 로 시작하는 마지막 코멘트의 **권고 줄**과 **남은 지적** 항목을 뽑는다. 사용자가 손으로 확인해야 하는 항목(UI · 한글 입력 · 설치 등)은 따로 모은다.
 
 ## C. 릴리스 PR (dev → main)

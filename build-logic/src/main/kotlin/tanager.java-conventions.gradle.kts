@@ -13,6 +13,9 @@ java {
     toolchain { languageVersion = JavaLanguageVersion.of(ver("java").toInt()) }
 }
 
+// 프로젝트 이름(pty · windows …)만으로는 jar 이름이 겹치거나 뜻이 흐려진다 → tanager-<경로>.jar (ADR-0008)
+base { archivesName = "tanager-" + project.path.removePrefix(":").replace(':', '-') }
+
 tasks.withType<JavaCompile>().configureEach {
     options.encoding = "UTF-8"
     options.compilerArgs.addAll(listOf("-Xlint:all", "-Xlint:-serial", "-Xlint:-processing"))

@@ -15,18 +15,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 ./gradlew check                                   # 포맷 검사 + 전체 테스트 + ArchUnit + 커버리지
 ./gradlew spotlessApply                           # 포맷 자동 수정 (손으로 맞추지 말 것)
-./gradlew :tanager-domain:test                    # 모듈 하나
-./gradlew :tanager-domain:test --tests 'dev.tanager.domain.layout.LayoutNodeTest'           # 클래스 하나
-./gradlew :tanager-domain:test --tests 'dev.tanager.domain.layout.LayoutNodeTest.split*'    # 메서드 패턴
+./gradlew :domain:test                            # 모듈 하나
+./gradlew :domain:test --tests 'dev.tanager.domain.layout.LayoutNodeTest'           # 클래스 하나
+./gradlew :domain:test --tests 'dev.tanager.domain.layout.LayoutNodeTest.split*'    # 메서드 패턴
 ./gradlew check -PexcludeTags=wsl                 # WSL 통합 테스트 제외 (CI 와 동일)
-./gradlew :tanager-app:run                        # 앱 실행
-./gradlew :tanager-app:jpackageImage              # 실행 파일 폴더(app-image) 생성 — jdeps 로 모듈 축소(목록: build/jpackage/runtime-modules.txt)
+./gradlew :bootstrap:run                          # 앱 실행
+./gradlew :bootstrap:jpackageImage                # 실행 파일 폴더(app-image) 생성 — jdeps 로 모듈 축소(목록: build/jpackage/runtime-modules.txt)
 ```
 
 ### WSL ↔ Windows 실행 구분
 저장소는 `/mnt/c/...` 에 있고 Claude 는 WSL 에서 돈다.
 - domain / application / ArchUnit 테스트 → WSL 의 `./gradlew` 로 충분.
-- ConPTY·PowerShell·wsl.exe 를 쓰는 `tanager-platform-windows`, `tanager-adapter-pty` 테스트와 앱 실행 → **Windows JDK** 로: `cmd.exe /c gradlew.bat <task>`
+- ConPTY·PowerShell·wsl.exe 를 쓰는 `app/platform/windows`, `app/adapter/pty` 테스트와 앱 실행 → **Windows JDK** 로: `cmd.exe /c gradlew.bat <task>`
 - 빌드 산출물은 WSL 이 `build/wsl/`, Windows 가 `build/` 로 나뉘어 있어 양쪽을 번갈아 돌려도 된다(리스크 R8). 리포트 경로도 WSL 은 `<모듈>/build/wsl/reports/…`.
 
 ### 최초 설정 (클론 직후 1회)
@@ -42,7 +42,7 @@ git config core.autocrlf false        # 줄바꿈은 .gitattributes 가 결정
 헥사고날 + Gradle 멀티 모듈(ADR-0002). 의존 방향과 바운디드 컨텍스트는 `.claude/rules/architecture.md`(자동 로드)에 있다. 여러 파일을 읽어야 보이는 큰 흐름만 적는다.
 
 **cwd 추적 → 이력 → 트리** (ADR-0003)
-`tanager-app` 이 플랫폼 셸 통합 스크립트를 `%APPDATA%\Tanager\shell-integration\` 에 풀고 → 세션 기동 시 rc/프로필로 주입 → 셸이 프롬프트마다 OSC 7(bash/zsh) 또는 OSC 9;9(PowerShell)를 출력 → `tanager-adapter-pty` 의 읽기 가상 스레드가 바이트를 `TerminalStream` 구독자들에게 전달 → (1) UI 의 JediTerm 이 화면을 그리고 (2) application 의 `CwdTracker` 가 스트리밍 스캐너로 OSC 를 뽑아 `RecordVisitUseCase` 호출 → `StateActor` 에서 `WorkHistory` 갱신 → 디바운스 저장 + `HistoryChanged` 이벤트 → UI 가 EDT 에서 트리 갱신.
+`app/bootstrap` 이 플랫폼 셸 통합 스크립트를 `%APPDATA%\Tanager\shell-integration\` 에 풀고 → 세션 기동 시 rc/프로필로 주입 → 셸이 프롬프트마다 OSC 7(bash/zsh) 또는 OSC 9;9(PowerShell)를 출력 → `app/adapter/pty` 의 읽기 가상 스레드가 바이트를 `TerminalStream` 구독자들에게 전달 → (1) UI 의 JediTerm 이 화면을 그리고 (2) application 의 `CwdTracker` 가 스트리밍 스캐너로 OSC 를 뽑아 `RecordVisitUseCase` 호출 → `StateActor` 에서 `WorkHistory` 갱신 → 디바운스 저장 + `HistoryChanged` 이벤트 → UI 가 EDT 에서 트리 갱신.
 
 **레이아웃**
 `LayoutNode`(sealed: `Split(orientation, ratio, first, second)` | `Leaf(paneId)`)는 불변이며 split/close/resize/swap 은 새 트리를 반환하는 순수 함수다. 포커스 이동은 `LayoutGeometry.rects(tree, bounds)` 로 사각형을 계산해 방향 기준 가장 가까운 창을 고른다. 마우스 조작도 판정(경계선 위치 `dividers`, 놓을 곳 `dropZone`, 드래그 비율 `ratioAt`)은 `LayoutGeometry` 순수 함수가 하고, 키보드와 같은 유스케이스를 부른다. UI 는 트리를 그리고 미리보기만 하며 상태를 갖지 않는다. 드래그 중에는 셸 크기를 바꾸지 않고 놓을 때 한 번만 바꾼다.
@@ -51,10 +51,10 @@ git config core.autocrlf false        # 줄바꿈은 .gitattributes 가 결정
 `state.json`(스키마 버전 포함)에 이력 + 탭/레이아웃 + 창(pane)별 프로파일·마지막 cwd + 창 위치를 저장한다. 시작 시 레이아웃을 그대로 만들고 각 창을 마지막 cwd 에서 새 셸로 띄운다(프로세스 자체는 복원하지 않는다). 경로가 사라졌으면 홈에서 띄우고 알림.
 
 **도구함(toolkit)**
-사이드바에서 폴더·세션을 선택 → `QueryToolkitUseCase(WorkspacePath)` → 등록된 `ToolkitProvider` 들(지금은 `tanager-adapter-toolkit-claude` 하나)이 그 경로의 프로젝트 범위(경로와 상위 디렉터리의 `.claude/`, `CLAUDE.md`, `.mcp.json`)와 해당 **환경의 홈**(WSL 세션이면 `\\wsl.localhost\<배포판>\home\<user>\.claude`, Windows 면 `%USERPROFILE%\.claude`)의 사용자 범위를 읽어 `ToolkitItem` 목록을 돌려준다. 읽기 전용이며 비밀값은 마스킹. 경로 변환은 `PlatformModule.paths()` 를 쓴다.
+사이드바에서 폴더·세션을 선택 → `QueryToolkitUseCase(WorkspacePath)` → 등록된 `ToolkitProvider` 들(지금은 `app/adapter/toolkit/claude` 하나)이 그 경로의 프로젝트 범위(경로와 상위 디렉터리의 `.claude/`, `CLAUDE.md`, `.mcp.json`)와 해당 **환경의 홈**(WSL 세션이면 `\\wsl.localhost\<배포판>\home\<user>\.claude`, Windows 면 `%USERPROFILE%\.claude`)의 사용자 범위를 읽어 `ToolkitItem` 목록을 돌려준다. 읽기 전용이며 비밀값은 마스킹. 경로 변환은 `PlatformModule.paths()` 를 쓴다.
 
 **플랫폼 확장**
-OS 차이(셸 탐지, 경로 변환, 앱 디렉터리, 셸 통합, 기동 명령, 리소스 수집, 다크/라이트·애니메이션 설정 감지)는 전부 application 의 `PlatformModule` 포트 뒤에 있다. `tanager-app` 이 `ServiceLoader` 로 현재 OS 구현 하나를 고른다. macOS 추가 시 다른 모듈을 바꾸게 된다면 설계 결함이다.
+OS 차이(셸 탐지, 경로 변환, 앱 디렉터리, 셸 통합, 기동 명령, 리소스 수집, 다크/라이트·애니메이션 설정 감지)는 전부 application 의 `PlatformModule` 포트 뒤에 있다. `app/bootstrap` 이 `ServiceLoader` 로 현재 OS 구현 하나를 고른다. macOS 추가 시 다른 모듈을 바꾸게 된다면 설계 결함이다.
 
 ## 작업 방식
 
@@ -67,6 +67,9 @@ OS 차이(셸 탐지, 경로 변환, 앱 디렉터리, 셸 통합, 기동 명령
 
 ## 함정
 
+- 모듈 폴더는 `app/` 아래, 이름에 `-` 없음(ADR-0008). Gradle 경로 = `app/` 아래 폴더 경로(`app/adapter/pty` = `:adapter:pty`).
+- WSL 과 Windows 의 Gradle 이 프로젝트 `.gradle/` 을 함께 쓴다. "Cannot lock file hash cache" 가 나면 `./gradlew --stop` 과 `cmd.exe /c gradlew.bat --stop` 으로 양쪽 데몬을 멈춘다.
+- jpackage 실행 파일 `Tanager.exe` 는 같은 이름의 자식 프로세스를 띄우고 창은 자식이 가진다. 창이 떴는지 확인할 때는 자식 프로세스의 창을 본다.
 - `wsl.exe --list --quiet` 출력은 UTF-16LE. `WSL_UTF8=1` 을 주거나 UTF-16LE 로 디코딩.
 - JediTerm 은 Maven Central 에 없다 → `https://packages.jetbrains.team/maven/p/ij/intellij-dependencies` 저장소. 글자 단위 대체 글꼴이 없고 IME 조합 중 글자는 기본 글꼴로만 그리므로 **터미널 기본 글꼴은 한글 글리프가 있어야 한다**(D2Coding 번들).
 - Java 25 + JNA(pty4j): 실행 옵션에 `--enable-native-access=ALL-UNNAMED`.

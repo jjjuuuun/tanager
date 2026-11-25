@@ -9,7 +9,10 @@ build/
 .vscode/
 # IntelliJ 출력 폴더는 루트 · 모듈 바로 아래만. "out/" 로 쓰면 port/out 패키지까지 무시된다
 /out/
-/*/out/
+/app/*/out/
+/app/*/*/out/
+/app/*/*/*/out/
+/build-logic/out/
 
 # OS
 .DS_Store

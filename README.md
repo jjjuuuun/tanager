@@ -79,9 +79,9 @@ git clone https://github.com/jjjuuuun/tanager.git
 cd tanager
 git switch dev                         # development happens on dev; main holds the latest release
 
-./gradlew check                        # format check + all tests + architecture rules + coverage
-./gradlew :tanager-app:run             # run the app
-./gradlew :tanager-app:jpackageImage   # Windows: tanager-app/build/jpackage/Tanager/Tanager.exe
+./gradlew check                      # format check + all tests + architecture rules + coverage
+./gradlew :bootstrap:run             # run the app
+./gradlew :bootstrap:jpackageImage   # Windows: app/bootstrap/build/jpackage/Tanager/Tanager.exe
 ```
 
 On Windows use `gradlew.bat` instead of `./gradlew`. When the same working tree is built from both WSL and Windows, WSL writes to `build/wsl/` so the two never mix.
@@ -91,16 +91,21 @@ On Windows use `gradlew.bat` instead of `./gradlew`. When the same working tree 
 Hexagonal architecture in Gradle modules ([ADR-0002](docs/adr/0002-hexagonal-multimodule.md)). Dependencies point inwards and are enforced by ArchUnit.
 
 ```
-tanager-domain                 pure Java rules (no I/O, UI or threads)
-tanager-application            use cases and ports
-tanager-adapter-pty            terminals via pty4j / ConPTY
-tanager-adapter-persistence    state and settings (JSON)
-tanager-adapter-toolkit-claude reads Claude Code configuration (read-only)
-tanager-platform-windows       WSL · PowerShell 5.1 · cmd specifics
-tanager-platform-macos         macOS specifics (v1.1.0)
-tanager-ui-swing               Swing + FlatLaf + JediTerm UI
-tanager-app                    composition root and packaging
-tanager-architecture-test      ArchUnit rules
+app/
+├── domain/                pure Java rules (no I/O, UI or threads)
+├── application/           use cases and ports
+├── adapter/
+│   ├── pty/               terminals via pty4j / ConPTY
+│   ├── persistence/       state and settings (JSON)
+│   └── toolkit/claude/    reads Claude Code configuration (read-only)
+├── platform/
+│   ├── windows/           WSL · PowerShell 5.1 · cmd specifics
+│   └── macos/             macOS specifics (v1.1.0)
+├── ui/                    Swing + FlatLaf + JediTerm UI
+├── bootstrap/             composition root and packaging
+└── architecture/          ArchUnit rules
+build-logic/               shared Gradle convention plugins
+docs/                      plans (HTML) and ADRs
 ```
 
 Tech stack: Java 25 · Gradle 9.9 · Swing + FlatLaf · JediTerm · pty4j · Jackson · JUnit 6 · jqwik · ArchUnit · jpackage.
