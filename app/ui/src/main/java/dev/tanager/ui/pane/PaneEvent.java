@@ -29,6 +29,16 @@ sealed interface PaneEvent {
         }
     }
 
+    /**
+     * 기동 유스케이스가 계약을 어기고 예외를 던졌다(버그). application 포트의 {@code StartFailure} 를 늘리지 않고 화면 쪽 사건으로
+     * 다룬다 — 다시 시도할 수 있다.
+     */
+    record StartErrored(String detail) implements PaneEvent {
+        public StartErrored {
+            Objects.requireNonNull(detail, "detail");
+        }
+    }
+
     /** 안내 띠 · 실패 화면에서 Enter. */
     record EnterPressed() implements PaneEvent {}
 

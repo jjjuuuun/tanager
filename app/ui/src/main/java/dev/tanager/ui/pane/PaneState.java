@@ -55,6 +55,14 @@ sealed interface PaneState {
         }
     }
 
+    /** 기동이 예외로 끝났다({@link PaneEvent.StartErrored}). {@code retry} 로 다시 띄울 수 있다. */
+    record Errored(String detail, Attempt retry) implements PaneState {
+        public Errored {
+            Objects.requireNonNull(detail, "detail");
+            Objects.requireNonNull(retry, "retry");
+        }
+    }
+
     /** 닫혔다. */
     record Closed() implements PaneState {}
 
@@ -68,6 +76,7 @@ sealed interface PaneState {
             case Running running -> running(running, event);
             case Exited exited -> exited(exited, event);
             case Failed failed -> failed(failed, event);
+            case Errored errored -> errored(errored, event);
             case Closed closed -> Transition.stay(closed);
         };
     }
@@ -87,6 +96,7 @@ sealed interface PaneState {
                 }
                 yield new Transition(new Failed(failure, state.attempt()), effects);
             }
+            case PaneEvent.StartErrored(String detail) -> Transition.stay(new Errored(detail, state.attempt()));
             case PaneEvent.CloseRequested _ -> Transition.stay(new Closed());
             case PaneEvent.ShellExited _, PaneEvent.EnterPressed _, PaneEvent.EscPressed _ -> Transition.stay(state);
         };
@@ -94,11 +104,16 @@ sealed interface PaneState {
 
     private static Transition running(Running state, PaneEvent event) {
         return switch (event) {
-            case PaneEvent.ShellExited(TerminalSession session) -> Transition.stay(new Exited(session));
+            // 셸이 끝나면 JediTerm 이 EOF 에서 커넥터(스트림)를 이미 닫는다. 소유권을 분명히 하려고 한 번 더 닫는다(멱등)
+            case PaneEvent.ShellExited(TerminalSession session) ->
+                new Transition(new Exited(session), List.of(new PaneEffect.CloseStream(state.session().stream())));
             case PaneEvent.CloseRequested _ ->
                 new Transition(new Closed(), List.of(new PaneEffect.CloseStream(state.session().stream())));
-            case PaneEvent.Started _, PaneEvent.StartFailed _, PaneEvent.EnterPressed _, PaneEvent.EscPressed _ ->
-                Transition.stay(state);
+            case PaneEvent.Started _,
+                    PaneEvent.StartFailed _,
+                    PaneEvent.StartErrored _,
+                    PaneEvent.EnterPressed _,
+                    PaneEvent.EscPressed _ -> Transition.stay(state);
         };
     }
 
@@ -110,7 +125,8 @@ sealed interface PaneState {
             }
             case PaneEvent.EscPressed _ -> new Transition(new Closed(), List.of(new PaneEffect.RemovePane()));
             case PaneEvent.CloseRequested _ -> Transition.stay(new Closed());
-            case PaneEvent.Started _, PaneEvent.StartFailed _, PaneEvent.ShellExited _ -> Transition.stay(state);
+            case PaneEvent.Started _, PaneEvent.StartFailed _, PaneEvent.StartErrored _, PaneEvent.ShellExited _ ->
+                Transition.stay(state);
         };
     }
 
@@ -122,7 +138,19 @@ sealed interface PaneState {
                         : Transition.stay(state);
             case PaneEvent.EscPressed _ -> new Transition(new Closed(), List.of(new PaneEffect.RemovePane()));
             case PaneEvent.CloseRequested _ -> Transition.stay(new Closed());
-            case PaneEvent.Started _, PaneEvent.StartFailed _, PaneEvent.ShellExited _ -> Transition.stay(state);
+            case PaneEvent.Started _, PaneEvent.StartFailed _, PaneEvent.StartErrored _, PaneEvent.ShellExited _ ->
+                Transition.stay(state);
+        };
+    }
+
+    private static Transition errored(Errored state, PaneEvent event) {
+        return switch (event) {
+            case PaneEvent.EnterPressed _ ->
+                new Transition(new Launching(state.retry()), List.of(new PaneEffect.Launch(state.retry())));
+            case PaneEvent.EscPressed _ -> new Transition(new Closed(), List.of(new PaneEffect.RemovePane()));
+            case PaneEvent.CloseRequested _ -> Transition.stay(new Closed());
+            case PaneEvent.Started _, PaneEvent.StartFailed _, PaneEvent.StartErrored _, PaneEvent.ShellExited _ ->
+                Transition.stay(state);
         };
     }
 

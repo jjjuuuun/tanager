@@ -83,7 +83,8 @@ public final class PaneController {
     private TanagerTermWidget widget;
     private boolean widgetConnected;
     private boolean disposed;
-    private Optional<TerminalStream> stream = Optional.empty();
+    // 진행 중인 기동이 내놓을 스트림. 기동 중에 앱이 끝나도 그 스트림을 닫고 종료를 기다리려고 들고 있다
+    private CompletableFuture<Optional<TerminalStream>> launching = CompletableFuture.completedFuture(Optional.empty());
 
     public PaneController(
             Executor ui, Executor background, StartSessionUseCase sessions, TerminalSettings settings, Host host) {
@@ -109,14 +110,37 @@ public final class PaneController {
     }
 
     /**
-     * 앱 종료: 셸을 닫고 위젯을 정리한다. 돌려주는 단계는 셸 프로세스가 끝나면 완료된다(기다릴지는 부른 쪽이 정한다).
+     * 앱 종료: 셸을 닫고 위젯을 정리한다. 돌려주는 단계는 셸 프로세스가 끝나면 완료된다(기다릴지는 부른 쪽이 정한다). 기동 중이면
+     * 기동이 끝나기를 기다렸다가 뜬 스트림을 닫고 그 종료까지 기다린다 — EDT 를 거치지 않으므로 창이 사라진 뒤에도 완료된다.
      */
     public CompletionStage<?> shutdown() {
-        CompletionStage<?> exited =
-                stream.<CompletionStage<?>>map(TerminalStream::onExit).orElse(CompletableFuture.completedFuture(0));
+        CompletionStage<?> exited = switch (state) {
+            case PaneState.Running running -> running.session().stream().onExit();
+            case PaneState.Launching _ -> launching.thenCompose(PaneController::closeAndAwait);
+            case PaneState.Exited _, PaneState.Failed _, PaneState.Errored _, PaneState.Closed _ ->
+                CompletableFuture.completedFuture(0);
+        };
         dispatch(new PaneEvent.CloseRequested());
         dispose();
         return exited;
+    }
+
+    /** 지금 상태(테스트용). */
+    PaneState state() {
+        return state;
+    }
+
+    /** 지금 놓인 위젯(테스트용). */
+    TanagerTermWidget widget() {
+        return widget;
+    }
+
+    private static CompletionStage<Integer> closeAndAwait(Optional<TerminalStream> started) {
+        return started.map(stream -> {
+                    stream.close();
+                    return stream.onExit();
+                })
+                .orElse(CompletableFuture.completedFuture(0));
     }
 
     private void dispatch(PaneEvent event) {
@@ -149,10 +173,37 @@ public final class PaneController {
             widgetConnected = false;
             render();
         }
+        CompletableFuture<Optional<TerminalStream>> pending = new CompletableFuture<>();
+        launching = pending;
         ui.execute(() -> {
+            if (state instanceof PaneState.Closed) {
+                // 크기를 읽기 전에 닫혔다 — 셸을 띄우지 않는다
+                pending.complete(Optional.empty());
+                return;
+            }
             TerminalSize size = widget.currentSize().orElse(TerminalSize.DEFAULT);
-            background.execute(() -> deliver(start(attempt, size)));
+            background.execute(() -> {
+                PaneEvent event = attemptStart(attempt, size);
+                pending.complete(streamOf(event));
+                ui.execute(() -> dispatch(event));
+            });
         });
+    }
+
+    // 유스케이스는 실패를 값으로 돌려주기로 돼 있다. 그래도 예외가 나면(버그) 창이 "시작하는 중"에 멈추지 않게 사건으로 바꾼다
+    private PaneEvent attemptStart(Attempt attempt, TerminalSize size) {
+        try {
+            return start(attempt, size).<PaneEvent>fold(PaneEvent.Started::new, PaneEvent.StartFailed::new);
+        } catch (RuntimeException e) {
+            LOG.log(System.Logger.Level.WARNING, "셸 기동이 예외로 끝났다", e);
+            return new PaneEvent.StartErrored(e.toString());
+        }
+    }
+
+    private static Optional<TerminalStream> streamOf(PaneEvent event) {
+        return event instanceof PaneEvent.Started(StartedSession session)
+                ? Optional.of(session.stream())
+                : Optional.empty();
     }
 
     private Result<StartedSession, StartFailure> start(Attempt attempt, TerminalSize size) {
@@ -162,15 +213,9 @@ public final class PaneController {
         };
     }
 
-    private void deliver(Result<StartedSession, StartFailure> result) {
-        PaneEvent event = result.<PaneEvent>fold(PaneEvent.Started::new, PaneEvent.StartFailed::new);
-        ui.execute(() -> dispatch(event));
-    }
-
     private void connect(StartedSession session) {
         StreamTtyConnector connector = StreamTtyConnector.attach(
                 session.stream(), session.session().profile().name());
-        stream = Optional.of(session.stream());
         widgetConnected = true;
         // setTtyConnector 가 현재 위젯 크기로 PTY 크기를 한 번 맞춘다(TerminalPanel.setTerminalStarter → postResize)
         widget.setTtyConnector(connector);
@@ -187,17 +232,23 @@ public final class PaneController {
     }
 
     private void render() {
+        if (state instanceof PaneState.Closed) {
+            // 닫힌 창은 곧 사라진다 — 다시 그리지 않는다
+            return;
+        }
         PaneView view = PaneView.of(state);
         header.setText(view.header());
         host.viewChanged(PaneView.tabTitle(state), view.status());
         body.removeAll();
         switch (state) {
             case PaneState.Exited _ -> {
+                // 끝난 터미널을 눌러도 포커스가 띠에 남아 Enter · Esc 가 창으로 온다(JediTerm 패널은 키 바인딩을 거치지 않는다)
+                widget.getTerminalPanel().setFocusable(false);
                 body.add(widget, BorderLayout.CENTER);
                 notice.band(view.overlay().orElse("") + " · " + view.hint().orElse(""));
                 body.add(notice, BorderLayout.SOUTH);
             }
-            case PaneState.Failed _ -> {
+            case PaneState.Failed _, PaneState.Errored _ -> {
                 notice.screen(view.overlay().orElse(""), view.hint().orElse(""));
                 body.add(notice, BorderLayout.CENTER);
             }
@@ -206,7 +257,9 @@ public final class PaneController {
         }
         body.revalidate();
         body.repaint();
-        if (state instanceof PaneState.Exited || state instanceof PaneState.Failed) {
+        if (state instanceof PaneState.Exited
+                || state instanceof PaneState.Failed
+                || state instanceof PaneState.Errored) {
             // 배치가 끝난 뒤에 포커스를 옮긴다
             ui.execute(notice::requestFocusInWindow);
         }
@@ -230,9 +283,10 @@ public final class PaneController {
         });
     }
 
+    // 창(root) 안 어디에 포커스가 있든 받는다. 실행 중에는 터미널 패널이 키를 직접 먹고, 상태 기계도 무시한다
     private void bind(KeyStroke key, String name, Runnable action) {
-        notice.getInputMap(JComponent.WHEN_FOCUSED).put(key, name);
-        notice.getActionMap().put(name, new AbstractAction() {
+        root.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(key, name);
+        root.getActionMap().put(name, new AbstractAction() {
             @Override
             public void actionPerformed(ActionEvent e) {
                 action.run();

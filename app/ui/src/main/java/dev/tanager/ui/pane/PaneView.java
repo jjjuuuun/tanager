@@ -45,6 +45,12 @@ record PaneView(String header, String status, Optional<String> overlay, Optional
                         Optional.of("종료 코드 " + exitCode(session)),
                         Optional.of(EXITED_HINT));
             case PaneState.Failed failed -> failed(failed);
+            case PaneState.Errored(String detail, Attempt retry) ->
+                new PaneView(
+                        profileOf(retry).map(PaneView::shell).orElse("Tanager"),
+                        profileOf(retry).map(PaneView::status).orElse(""),
+                        Optional.of("셸을 시작하다 예상하지 못한 오류가 났다 — " + detail),
+                        Optional.of(RETRY_HINT));
             case PaneState.Closed _ -> plain("", "");
         };
     }
@@ -89,7 +95,15 @@ record PaneView(String header, String status, Optional<String> overlay, Optional
             case PaneState.Exited(TerminalSession session) -> Optional.of(session.profile());
             case PaneState.Failed(StartFailure.LaunchFailed launch, Attempt _) ->
                 Optional.of(launch.failed().profile());
+            case PaneState.Errored(String _, Attempt retry) -> profileOf(retry);
             case PaneState.Failed _, PaneState.Closed _ -> Optional.empty();
+        };
+    }
+
+    private static Optional<ShellProfile> profileOf(Attempt attempt) {
+        return switch (attempt) {
+            case Attempt.Fresh _ -> Optional.empty();
+            case Attempt.Restart(TerminalSession exited) -> Optional.of(exited.profile());
         };
     }
 

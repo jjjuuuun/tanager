@@ -28,8 +28,8 @@ import javax.swing.border.EmptyBorder;
 /**
  * 메인 창(시안 D 의 M2 부분): 제목 표시줄 안 탭 · 터미널 창 하나 · 상태줄. EDT 에서만 만진다.
  *
- * <p>앱 종료 순서(ADR-0011): 셸 닫기 → 창 dispose(바로 사라진다) → 가상 스레드에서 셸 종료를 최대 2초 기다림 → {@code
- * System.exit(0)}. 기다리는 동안 pty 어댑터가 남은 자손을 정리한다.
+ * <p>앱 종료 순서(ADR-0011): 셸 닫기(기동 중이면 기동이 끝난 뒤) → 창 dispose(바로 사라진다) → 비데몬 스레드에서 셸 종료를
+ * 최대 4초 기다림 → {@code System.exit(0)}.
  */
 final class MainWindow implements PaneController.Host {
     private static final System.Logger LOG = System.getLogger(MainWindow.class.getName());
@@ -39,7 +39,10 @@ final class MainWindow implements PaneController.Host {
     private static final int MIN_HEIGHT = 400;
     private static final int GAP = 6;
     private static final int STATUS_HEIGHT = 28;
-    private static final long EXIT_WAIT_SECONDS = 2;
+    // pty 어댑터는 close 뒤 3초 유예하고 남은 자손을 강제 종료한다(그 뒤에야 루트의 onExit 가 완료될 수 있다). 그보다 길게
+    // 기다려 강제 종료 경로까지 덮는다. 루트가 유예 안에 끝나면 자손 정리 스레드(어댑터의 가상 스레드)가 System.exit 와
+    // 경합할 수 있다 — 포트에 "정리 끝" 신호가 없어서 남은 한계다(ADR-0011)
+    private static final long EXIT_WAIT_SECONDS = 4;
 
     private final JFrame frame = new JFrame("Tanager");
     private final JLabel tab = new JLabel("Tanager");
@@ -109,7 +112,8 @@ final class MainWindow implements PaneController.Host {
         closing = true;
         CompletionStage<?> exited = pane.shutdown();
         frame.dispose();
-        Thread.ofVirtual().name("tanager-exit").start(() -> {
+        // 비데몬 스레드: 마지막 창이 사라져도 이 대기가 끝나기 전에 JVM 이 멈추지 않는다
+        Thread.ofPlatform().daemon(false).name("tanager-exit").start(() -> {
             awaitQuietly(exited);
             System.exit(0);
         });
