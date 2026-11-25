@@ -6,8 +6,10 @@ import com.jediterm.terminal.model.TerminalTextBuffer;
 import com.jediterm.terminal.ui.JediTermWidget;
 import com.jediterm.terminal.ui.TerminalPanel;
 import com.jediterm.terminal.ui.settings.SettingsProvider;
+import dev.tanager.application.port.out.TerminalSize;
 import dev.tanager.ui.font.TerminalFontSet;
 import java.awt.Font;
+import java.util.Optional;
 import javax.swing.JScrollBar;
 
 /**
@@ -26,6 +28,12 @@ public final class TanagerTermWidget extends JediTermWidget {
             SettingsProvider settingsProvider, StyleState styleState, TerminalTextBuffer terminalTextBuffer) {
         TerminalFontSet fonts = ((TerminalSettings) settingsProvider).fonts();
         return new BundledBoldPanel(settingsProvider, terminalTextBuffer, styleState, fonts.bold());
+    }
+
+    /** 지금 컴포넌트 크기에 들어가는 열 · 행. 아직 배치되지 않아 크기가 없으면 비어 있다. */
+    public Optional<TerminalSize> currentSize() {
+        return Optional.ofNullable(getTerminalPanel().getTerminalSizeFromComponent())
+                .map(size -> TerminalSizes.of(size.getColumns(), size.getRows()));
     }
 
     /** JediTerm 의 찾기 결과 표시용 스크롤바 대신 테마(FlatLaf)가 그리는 기본 스크롤바. */

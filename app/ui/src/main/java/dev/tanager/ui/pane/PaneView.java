@@ -94,11 +94,16 @@ record PaneView(String header, String status, Optional<String> overlay, Optional
     }
 
     private static String header(TerminalSession session) {
-        return switch (session.state()) {
-            case SessionState.Starting(WorkingDir dir) -> shell(session.profile()) + " · " + path(dir);
-            case SessionState.Running(long _, WorkingDir cwd) -> shell(session.profile()) + " · " + path(cwd);
-            case SessionState.Exited(int _, WorkingDir lastCwd) -> shell(session.profile()) + " · " + path(lastCwd);
-            case SessionState.Failed _ -> shell(session.profile());
+        String shell = shell(session.profile());
+        return dirOf(session.state()).map(dir -> shell + " · " + path(dir)).orElse(shell);
+    }
+
+    private static Optional<WorkingDir> dirOf(SessionState state) {
+        return switch (state) {
+            case SessionState.Starting(WorkingDir dir) -> Optional.of(dir);
+            case SessionState.Running(long _, WorkingDir cwd) -> Optional.of(cwd);
+            case SessionState.Exited(int _, WorkingDir lastCwd) -> Optional.of(lastCwd);
+            case SessionState.Failed _ -> Optional.empty();
         };
     }
 

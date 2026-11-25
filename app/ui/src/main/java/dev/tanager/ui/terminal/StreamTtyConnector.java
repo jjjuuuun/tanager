@@ -5,7 +5,6 @@ import com.jediterm.terminal.TtyConnector;
 import com.jediterm.terminal.TtyConnectorResizeStrategy;
 import com.jediterm.terminal.TtyConnectorResizeStrategyProvider;
 import dev.tanager.application.port.out.Subscription;
-import dev.tanager.application.port.out.TerminalSize;
 import dev.tanager.application.port.out.TerminalStream;
 import java.io.InterruptedIOException;
 import java.nio.charset.StandardCharsets;
@@ -109,7 +108,7 @@ public final class StreamTtyConnector implements TtyConnector, TtyConnectorResiz
     /** 1 미만은 1, 상한은 {@link TerminalSize} 의 범위로 맞춘다. */
     @Override
     public void resize(TermSize size) {
-        stream.resize(new TerminalSize(clamp(size.getColumns()), clamp(size.getRows())));
+        stream.resize(TerminalSizes.of(size.getColumns(), size.getRows()));
     }
 
     @Override
@@ -186,9 +185,5 @@ public final class StreamTtyConnector implements TtyConnector, TtyConnectorResiz
     private void replaceDecoded(String text) {
         decoded = text;
         decodedOffset = 0;
-    }
-
-    private static int clamp(int value) {
-        return Math.clamp(value, 1, Short.MAX_VALUE);
     }
 }

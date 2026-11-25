@@ -1,6 +1,5 @@
 package dev.tanager.ui.pane;
 
-import com.jediterm.core.util.TermSize;
 import dev.tanager.application.port.in.StartFailure;
 import dev.tanager.application.port.in.StartNotice;
 import dev.tanager.application.port.in.StartRequest;
@@ -151,7 +150,7 @@ public final class PaneController {
             render();
         }
         ui.execute(() -> {
-            TerminalSize size = currentSize();
+            TerminalSize size = widget.currentSize().orElse(TerminalSize.DEFAULT);
             background.execute(() -> deliver(start(attempt, size)));
         });
     }
@@ -185,13 +184,6 @@ public final class PaneController {
             }
         });
         widget.requestFocusInWindow();
-    }
-
-    private TerminalSize currentSize() {
-        Optional<TermSize> size = Optional.ofNullable(widget.getTerminalPanel().getTerminalSizeFromComponent());
-        return size.map(s -> new TerminalSize(
-                        Math.clamp(s.getColumns(), 1, Short.MAX_VALUE), Math.clamp(s.getRows(), 1, Short.MAX_VALUE)))
-                .orElse(TerminalSize.DEFAULT);
     }
 
     private void render() {
