@@ -3,6 +3,7 @@ package dev.tanager.application.platform;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import dev.tanager.application.port.out.PlatformModule;
+import dev.tanager.domain.session.ShellProfile;
 import dev.tanager.domain.shared.Result;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
@@ -17,6 +18,11 @@ class PlatformSelectionTest {
         @Override
         public boolean supports(OperatingSystem os) {
             return os.name().startsWith(osPrefix);
+        }
+
+        @Override
+        public List<ShellProfile> shells() {
+            return List.of();
         }
     }
 

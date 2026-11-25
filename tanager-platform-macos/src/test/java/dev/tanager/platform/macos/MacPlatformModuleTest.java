@@ -34,4 +34,10 @@ class MacPlatformModuleTest {
         assertThat(ServiceLoader.load(PlatformModule.class).stream().map(ServiceLoader.Provider::type))
                 .contains(MacPlatformModule.class);
     }
+
+    @Test
+    @DisplayName("shells() 는 M7 전까지 빈 목록이다")
+    void shellsIsEmpty() {
+        assertThat(module.shells()).isEmpty();
+    }
 }

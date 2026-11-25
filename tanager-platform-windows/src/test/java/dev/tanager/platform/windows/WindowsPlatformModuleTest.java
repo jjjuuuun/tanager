@@ -4,9 +4,18 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import dev.tanager.application.platform.OperatingSystem;
 import dev.tanager.application.port.out.PlatformModule;
+import dev.tanager.domain.session.ShellProfile;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.Duration;
+import java.util.List;
+import java.util.Optional;
 import java.util.ServiceLoader;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 
 class WindowsPlatformModuleTest {
     private final WindowsPlatformModule module = new WindowsPlatformModule();
@@ -35,5 +44,30 @@ class WindowsPlatformModuleTest {
     void isRegisteredAsService() {
         assertThat(ServiceLoader.load(PlatformModule.class).stream().map(ServiceLoader.Provider::type))
                 .contains(WindowsPlatformModule.class);
+    }
+
+    @Test
+    @DisplayName("shells() 는 catalog 에 위임한다")
+    void shellsDelegatesToCatalog() {
+        WindowsShellCatalog catalog = new WindowsShellCatalog(
+                new FakeCommandRunner(new CommandOutcome.NotStarted("x")),
+                key -> Optional.empty(),
+                Duration.ofSeconds(1));
+        assertThat(new WindowsPlatformModule(catalog).shells()).isEqualTo(catalog.shells());
+    }
+
+    @Test
+    @Tag("windows")
+    @EnabledOnOs(OS.WINDOWS)
+    @DisplayName("실제 Windows 에서 powershell 과 cmd 가 있고 실행 파일이 디스크에 있다")
+    void realShellsExist() {
+        List<ShellProfile> shells = new WindowsPlatformModule().shells();
+        assertThat(shells).extracting(p -> p.id().value()).contains("powershell", "cmd");
+        shells.stream()
+                .filter(p ->
+                        p.id().value().equals("powershell") || p.id().value().equals("cmd"))
+                .forEach(p -> assertThat(Files.exists(Path.of(p.launch().executable())))
+                        .as(p.launch().executable())
+                        .isTrue());
     }
 }
