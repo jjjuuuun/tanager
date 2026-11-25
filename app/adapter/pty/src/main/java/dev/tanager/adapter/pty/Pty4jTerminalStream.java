@@ -120,8 +120,10 @@ final class Pty4jTerminalStream implements TerminalStream {
         return closed.get() || exit.isDone();
     }
 
+    // 플랫폼 스레드: Windows 의 pty4j 읽기는 JNA ReadFile 블로킹 호출이라 가상 스레드면 carrier 가 고정(pinning)된다.
+    // 세션 수가 코어 수에 이르면 다른 가상 스레드가 굶을 수 있어 세션당 데몬 플랫폼 스레드 1개를 쓴다(ADR-0007).
     private void startReader() {
-        Thread.ofVirtual().name("pty-read-" + pid).start(this::readLoop);
+        Thread.ofPlatform().daemon().name("pty-read-" + pid).start(this::readLoop);
     }
 
     private void readLoop() {

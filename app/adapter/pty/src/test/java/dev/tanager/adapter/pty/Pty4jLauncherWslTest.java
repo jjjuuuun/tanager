@@ -108,10 +108,13 @@ class Pty4jLauncherWslTest {
     }
 
     @Test
-    @DisplayName("L3 없는 리눅스 경로는 기동 오류가 아니라 0 이 아닌 종료 코드로 나타난다")
-    void missingLinuxDirectoryShowsUpAsNonZeroExit() {
+    @DisplayName("L3 없는 리눅스 경로는 기동 오류가 아니다 — wsl.exe 가 chdir 실패를 알리고 / 에서 실행한다(종료 코드 0)")
+    void missingLinuxDirectoryFallsBackToRoot() {
+        // given / when
         TerminalStream stream = launchBash("/없는/경로", "pwd");
 
-        assertThat(stream.onExit().toCompletableFuture()).succeedsWithin(WAIT).isNotEqualTo(0);
+        // then: wsl.exe 2.5 의 동작(출력에 "chdir(…) failed", 종료 코드 0). 미리 확인하는 일은 복원(M5)이 맡는다
+        assertThat(stream.onExit().toCompletableFuture()).succeedsWithin(WAIT).isEqualTo(0);
+        assertThat(out.text()).contains("chdir(");
     }
 }
