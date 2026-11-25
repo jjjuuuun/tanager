@@ -42,3 +42,4 @@ ADR-0006 과 SDD §8.5 의 색 토큰 12개를 실제 FlatLaf 테마로 만든�
   - Windows 의 jpackage `--app-content` 는 `app/` 이 아니라 **이미지 루트(`Tanager.exe` 옆)** 에 풀린다: `Tanager\THIRD-PARTY-NOTICES.md`, `Tanager\licenses\D2Coding-OFL.txt`. `:bootstrap:verifyAppImage` 가 이것과 ui jar 안의 `fonts/` 를 검사한다(CI package-smoke).
   - FlatLaf 3.8 은 기본으로 `TitlePane.unifiedBackground = true` 라서 제목 표시줄을 window 색으로 칠한다. 시안 D 의 header 단을 보이려고 두 테마 모두 `false` 로 둔다.
   - headless 리눅스(CI)에서도 `registerBundled()` 와 한글 판정이 통과한다.
+  - #22 에서 app-content 에 저장소의 `LICENSE`(MIT)를 `LICENSE.txt` 로 더했다. zip 과 MSI 설치 폴더 모두에 들어가고 `verifyAppImage` 가 검사한다(SDD §11).

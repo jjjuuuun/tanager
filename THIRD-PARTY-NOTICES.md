@@ -10,7 +10,7 @@ Tanager 는 아래 제3자 구성 요소를 포함하거나 실행 시 함께 �
 - 저작권: Copyright (c) 2015, NAVER Corporation (https://www.navercorp.com), with Reserved Font Names D2Coding, D2Coding-Bold.
 - 출처: https://github.com/naver/d2-coding-font (릴리스 `VER1.4.0`, `D2Coding/` 표준 빌드 TTF 두 개를 수정 없이 포함)
 - 번들 위치: 소스 `app/ui/src/main/resources/fonts/`(`tanager-ui` jar 안 `fonts/`), 라이선스 전문 `fonts/OFL.txt`.
-  실행 파일 폴더(app-image)에는 `licenses/D2Coding-OFL.txt` 로도 들어간다.
+  실행 파일 폴더(app-image)와 MSI 설치 폴더에는 `licenses/D2Coding-OFL.txt` 로도 들어간다.
 - 무결성: `fonts/SHA256SUMS`, 결정 기록 `docs/adr/0010-soft-theme-tokens-and-d2coding-bundle.md`.
 
 ## 라이브러리 (실행 클래스패스)

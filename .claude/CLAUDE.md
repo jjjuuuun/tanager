@@ -21,6 +21,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ./gradlew check -PexcludeTags=wsl                 # WSL 통합 테스트 제외 (CI 와 동일)
 ./gradlew :bootstrap:run                          # 앱 실행
 ./gradlew :bootstrap:jpackageImage                # 실행 파일 폴더(app-image) 생성 — jdeps 로 모듈 축소(목록: build/jpackage/runtime-modules.txt)
+./gradlew :bootstrap:jpackageInstaller            # MSI(사용자 단위 설치) — Windows · WiX 5.0.2 필요(이 PC 에는 없음 → CI package-smoke 아티팩트 tanager-windows-msi)
 ```
 
 ### WSL ↔ Windows 실행 구분
