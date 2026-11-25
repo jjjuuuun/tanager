@@ -77,6 +77,11 @@ class ArchitectureTest {
     }
 
     @Test
+    void onlyBootstrapDetectsOs() {
+        ArchitectureRules.onlyBootstrapDetectsOs(BASE).allowEmptyShould(true).check(production);
+    }
+
+    @Test
     void onlyPtyAdapterUsesPty4j() {
         ArchitectureRules.onlyPtyAdapterUsesPty4j(BASE).allowEmptyShould(true).check(production);
     }

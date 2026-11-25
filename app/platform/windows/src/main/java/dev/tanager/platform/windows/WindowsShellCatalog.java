@@ -11,6 +11,7 @@ import java.lang.System.Logger.Level;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
@@ -96,10 +97,24 @@ final class WindowsShellCatalog {
                 IntegrationMode.OSC9_9);
     }
 
+    // Docker Desktop · Rancher Desktop 이 만드는 배포판은 셸 용도가 아니다. 기본 프로파일이 "첫 WSL 배포판"이라
+    // 이것들이 앞에 오면 엉뚱한 곳이 열린다(#57). 배포판 이름은 대소문자를 구분하지 않고 비교한다.
+    private static boolean isNonShellDistro(String name) {
+        String lower = name.toLowerCase(Locale.ROOT);
+        return lower.equals("docker-desktop")
+                || lower.equals("docker-desktop-data")
+                || lower.equals("rancher-desktop")
+                || lower.equals("rancher-desktop-data");
+    }
+
     private List<String> distros(String wslExe) {
         CommandOutcome outcome = runner.run(List.of(wslExe, "--list", "--quiet"), wslTimeout);
         return switch (outcome) {
-            case CommandOutcome.Exited(int code, byte[] stdout) when code == 0 -> WslListParser.parse(stdout);
+            case CommandOutcome.Exited(int code, byte[] stdout)
+            when code == 0 ->
+                WslListParser.parse(stdout).stream()
+                        .filter(name -> !isNonShellDistro(name))
+                        .toList();
             case CommandOutcome.Exited(int code, var _) -> {
                 // WSL 미설치 · 배포판 없음이 흔한 경우라 경고하지 않는다.
                 LOG.log(Level.DEBUG, "wsl.exe --list 종료 코드 {0} — WSL 배포판 없음으로 처리", code);

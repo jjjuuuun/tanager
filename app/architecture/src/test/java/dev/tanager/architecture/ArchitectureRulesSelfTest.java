@@ -62,6 +62,18 @@ class ArchitectureRulesSelfTest {
     }
 
     @Test
+    void osDetectionRuleCatchesLibrarySniffersOutsideBootstrap() {
+        EvaluationResult result =
+                ArchitectureRules.onlyBootstrapDetectsOs(FIXTURE).evaluate(fixtures);
+
+        assertThat(result.hasViolation()).isTrue();
+        assertThat(result.getFailureReport().getDetails())
+                .anyMatch(d -> d.contains("SniffsOs") && d.contains("com.sun.jna.Platform"))
+                .anyMatch(d -> d.contains("SniffsOs") && d.contains("SystemInfo"))
+                .noneMatch(d -> d.contains("ChoosesPlatform"));
+    }
+
+    @Test
     void pty4jRuleCatchesUiUsingPty4jButAllowsPtyAdapter() {
         EvaluationResult result =
                 ArchitectureRules.onlyPtyAdapterUsesPty4j(FIXTURE).evaluate(fixtures);
