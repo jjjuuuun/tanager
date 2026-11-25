@@ -4,6 +4,7 @@
 
 [![CI](https://github.com/jjjuuuun/tanager/actions/workflows/ci.yml/badge.svg?branch=dev)](https://github.com/jjjuuuun/tanager/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/jjjuuuun/tanager?include_prereleases)](https://github.com/jjjuuuun/tanager/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 Windows 용 데스크톱 터미널 관리 프로그램입니다. **WSL**, **Windows PowerShell 5.1**, **cmd** 터미널을 tmux 처럼 한 창에서 나눠 쓰고, 지금까지 작업한 모든 경로를 **폴더 트리**로 남겨 둡니다. 컴퓨터를 다시 켜도 어디서 무엇을 하고 있었는지 바로 알 수 있습니다.
 
@@ -139,4 +140,4 @@ tanager-architecture-test      ArchUnit 규칙
 
 ## 라이선스
 
-아직 라이선스를 정하지 않았습니다. `LICENSE` 파일이 추가되기 전까지는 모든 권리가 저작자에게 있습니다. 함께 쓰는 외부 구성 요소(JediTerm, pty4j, JNA, FlatLaf, Jackson 등)는 각자의 라이선스를 따릅니다.
+Tanager 는 [MIT 라이선스](LICENSE)로 배포합니다. 함께 쓰는 외부 구성 요소(JediTerm, pty4j, JNA, FlatLaf, Jackson 등)는 각자의 라이선스를 따릅니다.
