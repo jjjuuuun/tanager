@@ -68,6 +68,9 @@ class SoftLafDefaultsTest {
         assertThat(d.getInt("Tanager.pane.arc")).isEqualTo(6);
         assertThat(rgb(d.getColor("Panel.background"))).isEqualTo(t.get(ColorToken.WINDOW));
         assertThat(rgb(d.getColor("Component.focusColor"))).isEqualTo(t.get(ColorToken.ACCENT));
+        // 시안 D: 제목 표시줄은 본문(window)보다 한 단 어두운 header 색이다 — FlatLaf 기본 unifiedBackground(true)를 끈다
+        assertThat(d.getBoolean("TitlePane.unifiedBackground")).isFalse();
+        assertThat(rgb(d.getColor("TitlePane.background"))).isEqualTo(t.get(ColorToken.HEADER));
     }
 
     @Test
