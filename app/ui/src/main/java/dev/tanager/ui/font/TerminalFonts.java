@@ -23,18 +23,24 @@ public final class TerminalFonts {
 
     private TerminalFonts() {}
 
-    /** Regular · Bold 를 이 JVM 에 등록하고 Regular(크기 1 — 쓰는 쪽이 deriveFont)를 돌려준다. 실패는 모두 Err. */
-    public static Result<Font, String> registerBundled() {
+    /**
+     * Regular · Bold 를 이 JVM 에 등록하고 두 글꼴 객체(크기 1 — 쓰는 쪽이 {@link TerminalFontSet#sized})를 돌려준다. 실패는 모두
+     * Err.
+     */
+    public static Result<TerminalFontSet, String> registerBundled() {
         return register(RESOURCES, TerminalFonts.class::getResourceAsStream);
     }
 
     /**
      * 글꼴 하위 시스템의 RuntimeException · Error 도 Err 로 바꾼다 — 글꼴이 없어도 창은 떠야 한다.
-     * VirtualMachineError(메모리 부족 등)만은 삼키지 않는다. 실패 주입 테스트가 {@code open} 을 바꾼다.
+     * VirtualMachineError(메모리 부족 등)만은 삼키지 않는다. 단 InternalError 는 VirtualMachineError 의 하위지만 글꼴 하위
+     * 시스템(FontManager)이 던지는 일이 있어 Err 로 바꾼다. 실패 주입 테스트가 {@code open} 을 바꾼다.
      */
-    static Result<Font, String> register(List<String> resources, Function<String, InputStream> open) {
+    static Result<TerminalFontSet, String> register(List<String> resources, Function<String, InputStream> open) {
         try {
             return loadAndRegister(resources, open);
+        } catch (InternalError e) {
+            return Result.err("글꼴 등록 실패: " + e);
         } catch (VirtualMachineError e) {
             throw e;
         } catch (RuntimeException | Error e) {
@@ -42,7 +48,8 @@ public final class TerminalFonts {
         }
     }
 
-    private static Result<Font, String> loadAndRegister(List<String> resources, Function<String, InputStream> open) {
+    private static Result<TerminalFontSet, String> loadAndRegister(
+            List<String> resources, Function<String, InputStream> open) {
         List<Font> fonts = new ArrayList<>();
         for (String resource : resources) {
             switch (load(resource, open)) {
@@ -55,12 +62,13 @@ public final class TerminalFonts {
         GraphicsEnvironment env = GraphicsEnvironment.getLocalGraphicsEnvironment();
         for (Font font : fonts) {
             if (!env.registerFont(font)) {
-                // 같은 이름의 글꼴이 이미 있다(시스템에 설치된 D2Coding 또는 두 번째 호출). 이때 이름으로 찾으면
-                // 번들이 아니라 설치본(다른 버전일 수 있음)이 쓰인다. 돌려주는 Font 객체를 쓸지 이름으로 찾을지는 #46 에서 정한다
+                // 같은 이름의 글꼴이 이미 있다(시스템에 설치된 D2Coding 또는 두 번째 호출). 터미널은 돌려주는 Font 객체를
+                // 직접 쓰므로 영향이 없다(ADR-0011). 등록은 이후 설정 화면에서 이름을 보여 주려고 한다
                 LOG.log(System.Logger.Level.INFO, "같은 이름의 글꼴이 이미 있어 번들을 등록하지 않음: {0}", font.getFontName());
             }
         }
-        return Result.ok(fonts.getFirst());
+        // 첫째가 Regular, 둘째가 Bold. 하나만 주면(실패 주입 테스트) Bold 자리에도 같은 글꼴을 쓴다
+        return Result.ok(new TerminalFontSet(fonts.getFirst(), fonts.getLast()));
     }
 
     private static Result<Font, String> load(String resource, Function<String, InputStream> open) {
