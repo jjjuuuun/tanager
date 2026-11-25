@@ -42,7 +42,7 @@ git config core.autocrlf false        # 줄바꿈은 .gitattributes 가 결정
 헥사고날 + Gradle 멀티 모듈(ADR-0002). 의존 방향과 바운디드 컨텍스트는 `.claude/rules/architecture.md`(자동 로드)에 있다. 여러 파일을 읽어야 보이는 큰 흐름만 적는다.
 
 **cwd 추적 → 이력 → 트리** (ADR-0003)
-`app/bootstrap` 이 플랫폼 셸 통합 스크립트를 `%APPDATA%\Tanager\shell-integration\` 에 풀고 → 세션 기동 시 rc/프로필로 주입 → 셸이 프롬프트마다 OSC 7(bash/zsh) 또는 OSC 9;9(PowerShell)를 출력 → `app/adapter/pty` 의 읽기 가상 스레드가 바이트를 `TerminalStream` 구독자들에게 전달 → (1) UI 의 JediTerm 이 화면을 그리고 (2) application 의 `CwdTracker` 가 스트리밍 스캐너로 OSC 를 뽑아 `RecordVisitUseCase` 호출 → `StateActor` 에서 `WorkHistory` 갱신 → 디바운스 저장 + `HistoryChanged` 이벤트 → UI 가 EDT 에서 트리 갱신.
+`app/bootstrap` 이 플랫폼 셸 통합 스크립트를 `%APPDATA%\Tanager\shell-integration\` 에 풀고 → 세션 기동 시 rc/프로필로 주입 → 셸이 프롬프트마다 OSC 7(bash/zsh) 또는 OSC 9;9(PowerShell)를 출력 → `app/adapter/pty` 의 읽기 스레드(세션당 1개)가 바이트를 `TerminalStream` 구독자들에게 전달 → (1) UI 의 JediTerm 이 화면을 그리고 (2) application 의 `CwdTracker` 가 스트리밍 스캐너로 OSC 를 뽑아 `RecordVisitUseCase` 호출 → `StateActor` 에서 `WorkHistory` 갱신 → 디바운스 저장 + `HistoryChanged` 이벤트 → UI 가 EDT 에서 트리 갱신.
 
 **레이아웃**
 `LayoutNode`(sealed: `Split(orientation, ratio, first, second)` | `Leaf(paneId)`)는 불변이며 split/close/resize/swap 은 새 트리를 반환하는 순수 함수다. 포커스 이동은 `LayoutGeometry.rects(tree, bounds)` 로 사각형을 계산해 방향 기준 가장 가까운 창을 고른다. 마우스 조작도 판정(경계선 위치 `dividers`, 놓을 곳 `dropZone`, 드래그 비율 `ratioAt`)은 `LayoutGeometry` 순수 함수가 하고, 키보드와 같은 유스케이스를 부른다. UI 는 트리를 그리고 미리보기만 하며 상태를 갖지 않는다. 드래그 중에는 셸 크기를 바꾸지 않고 놓을 때 한 번만 바꾼다.
