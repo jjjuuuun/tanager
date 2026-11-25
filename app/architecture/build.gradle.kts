@@ -5,6 +5,8 @@ dependencies {
     testImplementation(libs.archunit)
     // 위반 픽스처(UI 가 pty4j 를 직접 쓰는 경우)를 컴파일하려고
     testImplementation(libs.pty4j)
+    // 위반 픽스처(ui 가 JediTerm 색을 직접 만드는 경우)를 컴파일하려고
+    testImplementation(libs.jediterm.core)
     testImplementation(project(":domain"))
     testImplementation(project(":application"))
     testImplementation(project(":adapter:pty"))

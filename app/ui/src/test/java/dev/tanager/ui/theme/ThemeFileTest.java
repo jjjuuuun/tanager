@@ -39,7 +39,7 @@ class ThemeFileTest {
     void cycleThrows() {
         ThemeFile file = ThemeFile.parse("@a = @b\n@b = @a\n");
 
-        assertThatThrownBy(() -> file.resolve("@a")).isInstanceOf(RuntimeException.class);
+        assertThatThrownBy(() -> file.resolve("@a")).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
@@ -47,7 +47,7 @@ class ThemeFileTest {
     void undefinedThrows() {
         ThemeFile file = ThemeFile.parse("@a = @missing\n");
 
-        assertThatThrownBy(() -> file.resolve("@a")).isInstanceOf(RuntimeException.class);
-        assertThatThrownBy(() -> file.resolve("@nothing")).isInstanceOf(RuntimeException.class);
+        assertThatThrownBy(() -> file.resolve("@a")).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> file.resolve("@nothing")).isInstanceOf(IllegalArgumentException.class);
     }
 }

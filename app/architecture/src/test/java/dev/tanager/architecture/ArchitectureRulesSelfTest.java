@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.lang.EvaluationResult;
+import java.util.List;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -81,5 +82,55 @@ class ArchitectureRulesSelfTest {
                 .anyMatch(d -> d.contains("PaintsWithLiteral") && d.contains("java.awt.Color.<init>"))
                 .anyMatch(d -> d.contains("PaintsWithLiteral") && d.contains("RED"))
                 .noneMatch(d -> d.contains("ThemeOwnsColors"));
+    }
+
+    @Test
+    void colorRuleCatchesFactoriesReferencesAndPalettes() {
+        // when
+        List<String> details = ArchitectureRules.colorsOnlyFromThemeTokens(FIXTURE)
+                .evaluate(fixtures)
+                .getFailureReport()
+                .getDetails();
+
+        // then
+        assertThat(details)
+                .as("Color.decode 호출")
+                .anyMatch(d -> d.contains("decoded()") && d.contains("java.awt.Color.decode"));
+        assertThat(details)
+                .as("new ColorUIResource")
+                .anyMatch(d -> d.contains("uiResource()") && d.contains("javax.swing.plaf.ColorUIResource.<init>"));
+        assertThat(details)
+                .as("TerminalColor.rgb")
+                .anyMatch(d -> d.contains("terminalRgb()") && d.contains("com.jediterm.terminal.TerminalColor.rgb"));
+        assertThat(details)
+                .as("Color::new")
+                .anyMatch(d -> d.contains("constructorRef()") && d.contains("java.awt.Color.<init>"));
+        assertThat(details)
+                .as("Color::decode")
+                .anyMatch(d -> d.contains("decodeRef()") && d.contains("java.awt.Color.decode"));
+        assertThat(details)
+                .as("ColorPaletteImpl.XTERM_PALETTE")
+                .anyMatch(d -> d.contains("palette()") && d.contains("XTERM_PALETTE"));
+        assertThat(details)
+                .as("SystemColor")
+                .anyMatch(d -> d.contains("system()") && d.contains("java.awt.SystemColor"));
+        assertThat(details)
+                .as("new Rgb")
+                .anyMatch(d -> d.contains("rgb()") && d.contains("archfixture.ui.theme.Rgb.<init>"));
+        assertThat(details)
+                .as("Rgb.parse")
+                .anyMatch(d -> d.contains("parsed()") && d.contains("archfixture.ui.theme.Rgb.parse"));
+    }
+
+    @Test
+    void colorRuleAllowsOnlyThemePackageItselfAndIndexedColors() {
+        List<String> details = ArchitectureRules.colorsOnlyFromThemeTokens(FIXTURE)
+                .evaluate(fixtures)
+                .getFailureReport()
+                .getDetails();
+
+        assertThat(details).as("ui.theme 하위 패키지는 허용 범위가 아니다").anyMatch(d -> d.contains("NestedThemeColors"));
+        assertThat(details).as("TerminalColor.index · 받은 색 읽기는 허용").noneMatch(d -> d.contains("UsesIndexedColor"));
+        assertThat(details).as("ui.theme 자체는 허용").noneMatch(d -> d.contains("ThemeOwnsColors"));
     }
 }

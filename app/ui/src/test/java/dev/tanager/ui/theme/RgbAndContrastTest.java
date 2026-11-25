@@ -55,6 +55,29 @@ class RgbAndContrastTest {
         assertThat(WHITE.relativeLuminance()).isCloseTo(1.0, org.assertj.core.data.Offset.offset(1e-9));
     }
 
+    @Test
+    @DisplayName("WCAG 기준값: #767676/흰색 ≈ 4.54(통과), #777777/흰색 ≈ 4.48(미달)")
+    void wcagReferenceRatios() {
+        // given
+        Rgb passes = Rgb.parse("#767676");
+        Rgb fails = Rgb.parse("#777777");
+
+        // when / then
+        assertThat(Contrast.ratio(passes, WHITE))
+                .isCloseTo(4.54, org.assertj.core.data.Offset.offset(0.01))
+                .isGreaterThanOrEqualTo(4.5);
+        assertThat(Contrast.ratio(fails, WHITE))
+                .isCloseTo(4.48, org.assertj.core.data.Offset.offset(0.01))
+                .isLessThan(4.5);
+    }
+
+    @Test
+    @DisplayName("중간 회색 #808080 의 상대 휘도는 약 0.2159 이다(sRGB 감마)")
+    void midGrayLuminance() {
+        assertThat(Rgb.parse("#808080").relativeLuminance())
+                .isCloseTo(0.2159, org.assertj.core.data.Offset.offset(0.0001));
+    }
+
     @Property
     @Label("대비는 대칭이며 1 이상 21 이하이다")
     void ratioIsSymmetricAndBounded(

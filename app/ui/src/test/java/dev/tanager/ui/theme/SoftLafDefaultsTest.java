@@ -1,6 +1,7 @@
 package dev.tanager.ui.theme;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 
 import java.awt.Color;
 import javax.swing.UIDefaults;
@@ -78,8 +79,21 @@ class SoftLafDefaultsTest {
     void themeColorsReadsUiManager() {
         // given
         javax.swing.UIManager.put(ColorToken.ACCENT.key(), new Color(1, 2, 3));
+        try {
+            // when / then
+            assertThat(ThemeColors.get(ColorToken.ACCENT)).isEqualTo(new Color(1, 2, 3));
+        } finally {
+            javax.swing.UIManager.put(ColorToken.ACCENT.key(), null);
+        }
+    }
+
+    @Test
+    @DisplayName("테마가 설치되지 않아 값이 없으면 ThemeColors 는 IllegalStateException")
+    void themeColorsWithoutThemeThrows() {
+        // given: 소프트 테마를 설치하지 않은 기본 LaF 에는 Tanager.* 키가 없다
+        javax.swing.UIManager.put(ColorToken.ACCENT.key(), null);
 
         // when / then
-        assertThat(ThemeColors.get(ColorToken.ACCENT)).isEqualTo(new Color(1, 2, 3));
+        assertThatIllegalStateException().isThrownBy(() -> ThemeColors.get(ColorToken.ACCENT));
     }
 }
