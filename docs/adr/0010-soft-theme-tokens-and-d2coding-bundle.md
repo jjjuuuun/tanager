@@ -43,3 +43,4 @@ ADR-0006 과 SDD §8.5 의 색 토큰 12개를 실제 FlatLaf 테마로 만든�
   - FlatLaf 3.8 은 기본으로 `TitlePane.unifiedBackground = true` 라서 제목 표시줄을 window 색으로 칠한다. 시안 D 의 header 단을 보이려고 두 테마 모두 `false` 로 둔다.
   - headless 리눅스(CI)에서도 `registerBundled()` 와 한글 판정이 통과한다.
   - #22 에서 app-content 에 저장소의 `LICENSE`(MIT)를 `LICENSE.txt` 로 더했다. zip 과 MSI 설치 폴더 모두에 들어가고 `verifyAppImage` 가 검사한다(SDD §11).
+  - #67 에서 저장소 루트 `licenses/`(제3자 라이선스 전문 · NOTICE)를 app-content 의 `licenses/` 에 함께 넣었다. D2Coding OFL 은 지금처럼 ui 리소스에서 복사되어 같은 폴더의 `licenses/D2Coding-OFL.txt` 에 있다. `verifyAppImage` 는 `THIRD-PARTY-NOTICES.md` 에 적힌 파일 · jar 목록과 이미지를 양쪽으로 대조한다.

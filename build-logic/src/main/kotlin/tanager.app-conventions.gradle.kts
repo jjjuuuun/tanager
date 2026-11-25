@@ -54,11 +54,13 @@ val computeRuntimeModules = tasks.register("computeRuntimeModules") {
     }
 }
 
-// app-image 에 함께 넣을 고지: Tanager LICENSE(MIT) + 루트 THIRD-PARTY-NOTICES.md + D2Coding OFL(원본은 ui 리소스 하나, ADR-0010)
+// app-image 에 함께 넣을 고지: Tanager LICENSE(MIT) + 루트 THIRD-PARTY-NOTICES.md
+// + 루트 licenses/(제3자 라이선스 전문 · NOTICE, #67) + D2Coding OFL(원본은 ui 리소스 하나, ADR-0010)
 val appContentDir = layout.buildDirectory.dir("jpackage-content")
 val appContent = listOf("LICENSE.txt", "THIRD-PARTY-NOTICES.md", "licenses")
 val licenseFile = rootProject.layout.projectDirectory.file("LICENSE")
 val noticesFile = rootProject.layout.projectDirectory.file("THIRD-PARTY-NOTICES.md")
+val thirdPartyLicensesDir = rootProject.layout.projectDirectory.dir("licenses")
 val d2CodingOfl = rootProject.layout.projectDirectory.file("app/ui/src/main/resources/fonts/OFL.txt")
 val prepareAppContent = tasks.register<Sync>("prepareAppContent") {
     group = "distribution"
@@ -66,6 +68,7 @@ val prepareAppContent = tasks.register<Sync>("prepareAppContent") {
     // 확장자가 없으면 Windows 탐색기에서 바로 열리지 않는다
     from(licenseFile) { rename { "LICENSE.txt" } }
     from(noticesFile)
+    from(thirdPartyLicensesDir) { into("licenses") }
     from(d2CodingOfl) {
         into("licenses")
         rename { "D2Coding-OFL.txt" }
@@ -103,10 +106,14 @@ val jpackageImage = tasks.register<Exec>("jpackageImage") {
     }
 }
 
-// app-image 에 고지 · 글꼴이 빠지지 않았는지 검사한다(CI package-smoke). 위치는 jpackage 가 정하므로 재귀로 찾는다
+// app-image 에 고지 · 글꼴이 빠지지 않았는지 검사한다(CI package-smoke). 위치는 jpackage 가 정하므로 재귀로 찾는다.
+// 제3자 고지는 이미지 안 THIRD-PARTY-NOTICES.md 에 적힌 `licenses/<파일>` 과 `<이름>.jar` 를 목록으로 삼아 양쪽으로 대조한다(#67):
+// 적힌 파일 · jar 가 이미지에 없거나, 이미지의 licenses/ 파일 · 제3자 jar 가 문서에 없으면 실패
+val noticedLicenseFile = Regex("`(licenses/[A-Za-z0-9._-]+)`")
+val noticedJar = Regex("`([A-Za-z0-9._-]+\\.jar)`")
 val verifyAppImage = tasks.register("verifyAppImage") {
     group = "verification"
-    description = "app-image 안에 LICENSE · 제3자 고지 · D2Coding 글꼴과 OFL 이 들어 있는지 검사한다"
+    description = "app-image 안에 LICENSE · 제3자 고지와 라이선스 전문 · 런타임 legal · D2Coding 글꼴과 OFL 이 들어 있는지 검사한다"
     dependsOn(jpackageImage)
     inputs.dir(imageDir)
     doLast {
@@ -127,6 +134,37 @@ val verifyAppImage = tasks.register("verifyAppImage") {
             if ("fonts/OFL.txt" !in entries) problems += "${jar.name} 안 fonts/OFL.txt 없음"
             logger.lifecycle("ok  ${jar.relativeTo(root)}: $fonts")
         }
+        // 고지 파일이 여러 개면 대조를 건너뛰지 않고 실패한다(조용한 통과 방지)
+        val noticeFiles = files.filter { it.name == "THIRD-PARTY-NOTICES.md" }
+        if (noticeFiles.size > 1) problems += "THIRD-PARTY-NOTICES.md 가 ${noticeFiles.size}개: $noticeFiles"
+        noticeFiles.singleOrNull()?.let { notices ->
+            val contentRoot = notices.parentFile
+            val text = notices.readText(Charsets.UTF_8)
+            val listed = noticedLicenseFile.findAll(text).map { it.groupValues[1] }.toSortedSet()
+            if (listed.isEmpty()) problems += "THIRD-PARTY-NOTICES.md 에 licenses/ 파일이 하나도 적혀 있지 않음"
+            val licenseEntries = File(contentRoot, "licenses").listFiles().orEmpty()
+            // licenses/ 는 평평하게 둔다 — 하위 폴더가 생기면 대조에서 빠지므로 실패로 알린다
+            licenseEntries.filter { it.isDirectory }.forEach { problems += "licenses/${it.name}/ 하위 폴더는 두지 않는다" }
+            val shipped = licenseEntries.filter { it.isFile }.map { "licenses/${it.name}" }.toSortedSet()
+            (listed - shipped).forEach { problems += "$it 없음(THIRD-PARTY-NOTICES.md 에 적혀 있음)" }
+            (shipped - listed).forEach { problems += "$it 가 THIRD-PARTY-NOTICES.md 에 없음" }
+            if (listed == shipped) logger.lifecycle("ok  licenses/ ${shipped.size}개 = THIRD-PARTY-NOTICES.md")
+            // 제3자 jar = 앱 jar 들(tanager-ui*.jar 가 있는 폴더) 중 tanager-* 가 아닌 것. 런타임 안의 jar 는 보지 않는다
+            val appDir = uiJars.firstOrNull()?.parentFile
+            if (appDir != null) {
+                val bundled = appDir.listFiles().orEmpty().map { it.name }
+                    .filter { it.endsWith(".jar") && !it.startsWith("tanager-") }.toSortedSet()
+                val noticed = noticedJar.findAll(text).map { it.groupValues[1] }.toSortedSet()
+                (bundled - noticed).forEach { problems += "${appDir.relativeTo(root)}/$it 가 THIRD-PARTY-NOTICES.md 에 없음" }
+                (noticed - bundled).forEach { problems += "THIRD-PARTY-NOTICES.md 의 $it 가 이미지에 없음(버전이 바뀌었나?)" }
+                if (bundled == noticed) logger.lifecycle("ok  제3자 jar ${bundled.size}개 = THIRD-PARTY-NOTICES.md")
+            }
+        }
+        // 런타임(JDK) 고지는 jlink 가 넣는 runtime/legal/ 을 가리킨다(THIRD-PARTY-NOTICES.md '실행 환경')
+        val legal = root.walkTopDown()
+            .filter { it.isDirectory && it.name == "legal" && "runtime/" in it.relativeTo(root).invariantSeparatorsPath }
+            .firstOrNull { dir -> dir.walkTopDown().any { it.isFile } }
+        if (legal == null) problems += "runtime/legal/ 없음(또는 비어 있음)" else logger.lifecycle("ok  ${legal.relativeTo(root)}")
         check(problems.isEmpty()) { "app-image 검사 실패(${root}):\n" + problems.joinToString("\n") { "  - $it" } }
     }
 }
