@@ -4,6 +4,7 @@
 
 [![CI](https://github.com/jjjuuuun/tanager/actions/workflows/ci.yml/badge.svg?branch=dev)](https://github.com/jjjuuuun/tanager/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/jjjuuuun/tanager?include_prereleases)](https://github.com/jjjuuuun/tanager/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 A desktop terminal manager for Windows. Split **WSL**, **Windows PowerShell 5.1** and **cmd** terminals in one window like tmux, and keep every directory you have worked in as a **folder tree** — so after a reboot you know exactly where you left off.
 
@@ -139,4 +140,4 @@ The full rules (in Korean) are in [`.claude/rules/git.md`](.claude/rules/git.md)
 
 ## License
 
-No license has been chosen yet, so all rights are reserved until a `LICENSE` file is added. Third-party components (JediTerm, pty4j, JNA, FlatLaf, Jackson and others) are used under their own licenses.
+Tanager is released under the [MIT License](LICENSE). Third-party components (JediTerm, pty4j, JNA, FlatLaf, Jackson and others) are used under their own licenses.
