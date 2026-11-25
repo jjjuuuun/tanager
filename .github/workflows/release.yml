@@ -45,8 +45,11 @@ jobs:
         run: ./gradlew check -PexcludeTags=wsl
       - name: jpackage (app-image → zip)
         shell: pwsh
+        # PowerShell 은 '-' 로 시작하는 따옴표 없는 인수의 $env: 를 펼치지 않는다 → 따옴표 필수.
+        # 외부 명령의 종료 코드로는 멈추지 않으므로 $LASTEXITCODE 를 직접 본다.
         run: |
-          ./gradlew :tanager-app:jpackageImage -Pversion=$env:TANAGER_VERSION
+          ./gradlew :tanager-app:jpackageImage "-Pversion=$env:TANAGER_VERSION"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Compress-Archive -Path tanager-app/build/jpackage/Tanager -DestinationPath "Tanager-$env:TANAGER_VERSION-windows-x64.zip"
       # MSI 설치 파일(jpackageInstaller · WiX)은 #22 에서 추가한다. 그때까지는 zip(app-image)만 배포.
       - uses: actions/upload-artifact@v4
