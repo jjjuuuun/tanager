@@ -380,12 +380,12 @@ Closes: #12</code></pre>
 <li>Draft PR · CI 대응 · 리뷰 후 <b>PR 에 리뷰 코멘트</b>(병합 권장/보류 권장) · Ready 전환(<code>/pr</code>)</li>
 <li><b>작업 PR 의 dev squash 병합</b> — CI green · 차단 0건 · "병합 권장"일 때만</li>
 <li>릴리스 PR dev → main — 포함된 PR · 리뷰 권고 · 남은 지적 · 수동 확인 항목을 모아 정리(<code>/release</code>)</li>
-<li>사용자 승인 후 태그 생성 · 푸시 · 마일스톤 닫기</li>
+<li>hotfix → main · 역병합(main → dev) PR 의 merge commit 병합</li>
+<li>태그 생성 · 푸시 · GitHub Release · 마일스톤 닫기 (묻지 않고, ADR-0005 개정 2026-11-25)</li>
 </ul></div>
 <div class="card"><h4>사용자가 하는 것</h4><ul class="small">
 <li><b>마일스톤마다 한 번, 릴리스 PR 을 보고 main 병합 결정</b> — 사용자 확인 지점(ADR-0005)</li>
-<li>hotfix → main · 역병합 PR 병합, PR 닫기, Claude 가 넘긴(보류 권장) 작업 PR 결정</li>
-<li>태그 생성 · 태그 푸시 승인 (승인 창)</li>
+<li>Claude 가 넘긴(보류 권장) 작업 PR 결정, 제품 범위 · 디자인 같은 결정</li>
 <li>저장소 최초 설정 <code>bootstrap-repo.sh</code></li>
 <li>Claude 가 확인할 수 없는 수동 확인(실제 화면 · 한글 입력 · 설치 파일)</li>
 </ul></div>
