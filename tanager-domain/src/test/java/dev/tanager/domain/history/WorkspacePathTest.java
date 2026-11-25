@@ -209,21 +209,18 @@ class WorkspacePathTest {
                 .ofMaxLength(6);
         Arbitrary<String> mid = Arbitraries.of("\\", "/", "\\\\", "\\.\\", "/./");
         Arbitrary<String> drive = Arbitraries.chars().range('a', 'z').map(c -> c + ":");
-        return Arbitraries.strings()
-                .withCharRange('a', 'z')
-                .ofMaxLength(0)
-                .flatMap(x -> drive.flatMap(d -> seg.list()
-                        .ofMinSize(0)
-                        .ofMaxSize(4)
-                        .flatMap(segs -> mid.list()
-                                .ofSize(segs.size() + 1)
-                                .flatMap(seps -> Arbitraries.of("", "\\", "/").map(tail -> {
-                                    StringBuilder sb = new StringBuilder(d);
-                                    for (int i = 0; i < segs.size(); i++) {
-                                        sb.append(seps.get(i)).append(segs.get(i));
-                                    }
-                                    return sb.append(segs.isEmpty() ? "" : tail).toString();
-                                })))));
+        return drive.flatMap(d -> seg.list()
+                .ofMinSize(0)
+                .ofMaxSize(4)
+                .flatMap(segs -> mid.list()
+                        .ofSize(segs.size() + 1)
+                        .flatMap(seps -> Arbitraries.of("", "\\", "/").map(tail -> {
+                            StringBuilder sb = new StringBuilder(d);
+                            for (int i = 0; i < segs.size(); i++) {
+                                sb.append(seps.get(i)).append(segs.get(i));
+                            }
+                            return sb.append(segs.isEmpty() ? "" : tail).toString();
+                        }))));
     }
 
     @Provide

@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.regex.Pattern;
 
 /**
  * 환경별로 정규화된 절대 작업 경로. 경로를 {@code String} 으로 비교하지 않도록 비교 규칙을 이 타입이 가진다 —
@@ -80,7 +81,7 @@ public final class WorkspacePath {
         }
         if (isDriveAbsolute(s)) {
             String root = Character.toUpperCase(s.charAt(0)) + ":" + WIN_SEP;
-            return Optional.of(root + String.join(WIN_SEP, resolveDots(segments(s.substring(2), "\\\\"))));
+            return Optional.of(root + String.join(WIN_SEP, resolveDots(segments(s.substring(2), WIN_SEP))));
         }
         return Optional.empty();
     }
@@ -99,7 +100,7 @@ public final class WorkspacePath {
 
     // \\host\share 가 UNC 의 루트다. '..' 은 share 위로 올라가지 않는다.
     private static Optional<String> normalizeUnc(String rest) {
-        List<String> parts = segments(rest, "\\\\");
+        List<String> parts = segments(rest, WIN_SEP);
         if (parts.size() < 2 || isDot(parts.get(0)) || isDot(parts.get(1))) {
             return Optional.empty();
         }
@@ -120,8 +121,8 @@ public final class WorkspacePath {
         return Optional.of(WSL_SEP + String.join(WSL_SEP, resolveDots(segments(raw, WSL_SEP))));
     }
 
-    private static List<String> segments(String s, String separatorRegex) {
-        return Arrays.stream(s.split(separatorRegex))
+    private static List<String> segments(String s, String separator) {
+        return Arrays.stream(s.split(Pattern.quote(separator)))
                 .filter(seg -> !seg.isEmpty())
                 .toList();
     }
