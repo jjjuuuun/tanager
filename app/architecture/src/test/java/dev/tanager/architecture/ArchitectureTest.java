@@ -80,4 +80,9 @@ class ArchitectureTest {
     void onlyPtyAdapterUsesPty4j() {
         ArchitectureRules.onlyPtyAdapterUsesPty4j(BASE).allowEmptyShould(true).check(production);
     }
+
+    @Test
+    void colorsOnlyFromThemeTokens() {
+        ArchitectureRules.colorsOnlyFromThemeTokens(BASE).allowEmptyShould(true).check(production);
+    }
 }

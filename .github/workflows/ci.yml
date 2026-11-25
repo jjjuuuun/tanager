@@ -117,6 +117,9 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - run: ./gradlew :bootstrap:jpackageImage
         shell: pwsh
+      # 고지(THIRD-PARTY-NOTICES · D2Coding OFL)와 글꼴이 이미지에 들어갔는지 검사(ADR-0010)
+      - run: ./gradlew :bootstrap:verifyAppImage
+        shell: pwsh
       - uses: actions/upload-artifact@v4
         with:
           name: tanager-windows-app-image

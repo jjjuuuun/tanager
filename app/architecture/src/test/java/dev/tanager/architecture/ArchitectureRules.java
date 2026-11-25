@@ -1,10 +1,21 @@
 package dev.tanager.architecture;
 
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static com.tngtech.archunit.library.Architectures.layeredArchitecture;
 import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.slices;
 
+import com.tngtech.archunit.core.domain.JavaAccess;
+import com.tngtech.archunit.core.domain.JavaClass;
+import com.tngtech.archunit.core.domain.JavaCodeUnitAccess;
+import com.tngtech.archunit.core.domain.JavaModifier;
+import com.tngtech.archunit.lang.ArchCondition;
 import com.tngtech.archunit.lang.ArchRule;
+import com.tngtech.archunit.lang.ConditionEvents;
+import com.tngtech.archunit.lang.SimpleConditionEvent;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
 
 /**
  * Tanager 의 아키텍처 규칙(ADR-0002, .claude/rules/architecture.md).
@@ -89,5 +100,86 @@ final class ArchitectureRules {
                 .dependOnClassesThat()
                 .resideInAPackage("com.pty4j..")
                 .because("pty4j 는 adapter.pty 안에 가둔다 — 나머지는 TerminalStream 포트만 본다");
+    }
+
+    /** 색은 ui.theme 의 토큰에서만 온다. 그 밖의 ui 코드는 색을 만들지 않는다(SDD §8.5, ADR-0010). */
+    static ArchRule colorsOnlyFromThemeTokens(String base) {
+        return classes()
+                .that()
+                .resideInAPackage(base + ".ui..")
+                // 허용은 ui.theme 패키지 자체뿐이다(하위 패키지 제외)
+                .and()
+                .resideOutsideOfPackage(base + ".ui.theme")
+                .should(new NotCreateColors(base + ".ui.theme.Rgb"))
+                .because("색 리터럴은 테마 토큰(themes/*.properties)에만 둔다 — 대비는 SoftThemeTokensTest 가 검사");
+    }
+
+    /**
+     * 색 타입의 생성 · 상수 · 정적 팩터리 · 파생(brighter/darker)과 {@code Rgb} 생성 · 파싱을 위반으로 본다.
+     * 호출과 참조({@code Color::new}, {@code Color::decode}) 모두. 받은 색을 읽는 인스턴스 메서드는 허용한다.
+     */
+    private static final class NotCreateColors extends ArchCondition<JavaClass> {
+        private static final Set<String> COLOR_TYPES = Set.of(
+                "java.awt.Color",
+                "java.awt.SystemColor",
+                "javax.swing.plaf.ColorUIResource",
+                "com.formdev.flatlaf.util.HSLColor",
+                "com.jediterm.core.Color",
+                "com.jediterm.terminal.TerminalColor",
+                "com.jediterm.terminal.emulator.ColorPaletteImpl");
+        /** 인스턴스 메서드지만 새 색을 만든다. */
+        private static final Set<String> DERIVING_METHODS = Set.of("brighter", "darker");
+        /** 정적 여부를 클래스패스에서 못 읽을 때를 위한 알려진 팩터리 이름. */
+        private static final Set<String> KNOWN_FACTORIES =
+                Set.of("decode", "getColor", "getHSBColor", "rgb", "color", "fromColor", "toRGB");
+        /** ANSI 번호로 가리킬 뿐 색 값을 만들지 않는다. */
+        private static final String ALLOWED_STATIC = "com.jediterm.terminal.TerminalColor.index";
+
+        private final String rgbType;
+
+        NotCreateColors(String rgbType) {
+            super("not create colors");
+            this.rgbType = rgbType;
+        }
+
+        @Override
+        public void check(JavaClass item, ConditionEvents events) {
+            List<JavaAccess<?>> constructors = new ArrayList<>(item.getConstructorCallsFromSelf());
+            constructors.addAll(item.getConstructorReferencesFromSelf());
+            for (JavaAccess<?> access : constructors) {
+                String owner = access.getTargetOwner().getName();
+                if (COLOR_TYPES.contains(owner) || owner.equals(rgbType)) {
+                    events.add(SimpleConditionEvent.violated(access, access.getDescription()));
+                }
+            }
+            for (JavaAccess<?> access : item.getFieldAccessesFromSelf()) {
+                if (COLOR_TYPES.contains(access.getTargetOwner().getName())) {
+                    events.add(SimpleConditionEvent.violated(access, access.getDescription()));
+                }
+            }
+            List<JavaCodeUnitAccess<?>> methods = new ArrayList<>(item.getMethodCallsFromSelf());
+            methods.addAll(item.getMethodReferencesFromSelf());
+            for (JavaCodeUnitAccess<?> access : methods) {
+                if (createsColor(access)) {
+                    events.add(SimpleConditionEvent.violated(access, access.getDescription()));
+                }
+            }
+        }
+
+        private boolean createsColor(JavaCodeUnitAccess<?> access) {
+            String owner = access.getTargetOwner().getName();
+            String name = access.getName();
+            if (owner.equals(rgbType)) {
+                return name.equals("parse");
+            }
+            if (!COLOR_TYPES.contains(owner) || (owner + "." + name).equals(ALLOWED_STATIC)) {
+                return false;
+            }
+            boolean isStatic = access.getTarget()
+                    .resolveMember()
+                    .map(m -> m.getModifiers().contains(JavaModifier.STATIC))
+                    .orElse(false);
+            return isStatic || DERIVING_METHODS.contains(name) || KNOWN_FACTORIES.contains(name);
+        }
     }
 }
