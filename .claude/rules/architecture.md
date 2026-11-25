@@ -12,7 +12,7 @@ app/adapter/{pty, persistence, toolkit/claude}   app/platform/{windows, macos}  
    ↑                       (서로 의존 금지. application 의 포트만 구현/사용)
 app/bootstrap        ← 조립 루트(composition root). 유일하게 모든 모듈을 안다
 ```
-모듈 폴더는 모두 `app/` 아래, 이름에 `-` 를 쓰지 않는다(ADR-0008). Gradle 경로는 폴더 경로와 같다(`app/adapter/pty` = `:adapter:pty`).
+모듈 폴더는 모두 `app/` 아래, 이름에 `-` 를 쓰지 않는다(ADR-0008). Gradle 경로는 `app/` 아래 폴더 경로와 같다(`app/adapter/pty` = `:adapter:pty`).
 - UI 는 pty4j 를 직접 쓰지 않는다. `TerminalStream` 포트를 JediTerm `TtyConnector` 로 감싼다.
 - OS 분기(`if windows`)는 `app/bootstrap` 의 플랫폼 선택(ServiceLoader) 한 곳에만 있다. 나머지 코드는 `PlatformModule` 포트만 본다(셸·경로·셸 통합·리소스 `resources()`·외관 `appearance()`).
 - UI 의 색·모서리·전환 시간은 테마 토큰(`themes/soft-*.properties`, `TerminalPalette`)으로만 쓴다. 코드에 색 리터럴 금지 — 대비는 `ThemeContrastTest` 가 검사.

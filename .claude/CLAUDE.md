@@ -15,12 +15,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 ./gradlew check                                   # 포맷 검사 + 전체 테스트 + ArchUnit + 커버리지
 ./gradlew spotlessApply                           # 포맷 자동 수정 (손으로 맞추지 말 것)
-./gradlew :domain:test                    # 모듈 하나
+./gradlew :domain:test                            # 모듈 하나
 ./gradlew :domain:test --tests 'dev.tanager.domain.layout.LayoutNodeTest'           # 클래스 하나
 ./gradlew :domain:test --tests 'dev.tanager.domain.layout.LayoutNodeTest.split*'    # 메서드 패턴
 ./gradlew check -PexcludeTags=wsl                 # WSL 통합 테스트 제외 (CI 와 동일)
-./gradlew :bootstrap:run                        # 앱 실행
-./gradlew :bootstrap:jpackageImage              # 실행 파일 폴더(app-image) 생성 — jdeps 로 모듈 축소(목록: build/jpackage/runtime-modules.txt)
+./gradlew :bootstrap:run                          # 앱 실행
+./gradlew :bootstrap:jpackageImage                # 실행 파일 폴더(app-image) 생성 — jdeps 로 모듈 축소(목록: build/jpackage/runtime-modules.txt)
 ```
 
 ### WSL ↔ Windows 실행 구분
@@ -67,7 +67,7 @@ OS 차이(셸 탐지, 경로 변환, 앱 디렉터리, 셸 통합, 기동 명령
 
 ## 함정
 
-- 모듈 폴더는 `app/` 아래, 이름에 `-` 없음(ADR-0008). Gradle 경로 = 폴더 경로(`app/adapter/pty` = `:adapter:pty`).
+- 모듈 폴더는 `app/` 아래, 이름에 `-` 없음(ADR-0008). Gradle 경로 = `app/` 아래 폴더 경로(`app/adapter/pty` = `:adapter:pty`).
 - WSL 과 Windows 의 Gradle 이 프로젝트 `.gradle/` 을 함께 쓴다. "Cannot lock file hash cache" 가 나면 `./gradlew --stop` 과 `cmd.exe /c gradlew.bat --stop` 으로 양쪽 데몬을 멈춘다.
 - jpackage 실행 파일 `Tanager.exe` 는 같은 이름의 자식 프로세스를 띄우고 창은 자식이 가진다. 창이 떴는지 확인할 때는 자식 프로세스의 창을 본다.
 - `wsl.exe --list --quiet` 출력은 UTF-16LE. `WSL_UTF8=1` 을 주거나 UTF-16LE 로 디코딩.

@@ -12,6 +12,7 @@ build/
 /app/*/out/
 /app/*/*/out/
 /app/*/*/*/out/
+/build-logic/out/
 
 # OS
 .DS_Store
