@@ -50,30 +50,27 @@ public final class Pty4jLauncher implements PtyLauncher {
     // pty4j 는 없는 작업 디렉터리를 만나면 ConPTY 대신 winpty 로 조용히 넘어가거나 모호한 오류를 낸다 — 먼저 확인한다
     private static Optional<LaunchError> precheck(LaunchCommand command) {
         String executable = command.argv().getFirst();
-        if (isAbsolute(executable) && !Files.isRegularFile(Path.of(executable))) {
+        // 상대 이름(cmd.exe 등)은 PATH 검색 결과라 여기서 판단하지 않는다
+        boolean missingExecutable = parse(executable)
+                .filter(Path::isAbsolute)
+                .filter(path -> !Files.isRegularFile(path))
+                .isPresent();
+        if (missingExecutable) {
             return Optional.of(new LaunchError.ExecutableNotFound(executable));
         }
         Optional<String> directory = command.workingDirectory();
-        if (directory.isPresent() && !isDirectory(directory.get())) {
+        if (directory.isPresent()
+                && parse(directory.get()).filter(Files::isDirectory).isEmpty()) {
             return Optional.of(new LaunchError.WorkingDirectoryNotFound(directory.get()));
         }
         return Optional.empty();
     }
 
-    // 상대 이름(cmd.exe 등)은 PATH 검색 결과라 여기서 판단하지 않는다
-    private static boolean isAbsolute(String executable) {
+    private static Optional<Path> parse(String path) {
         try {
-            return Path.of(executable).isAbsolute();
+            return Optional.of(Path.of(path));
         } catch (InvalidPathException e) {
-            return false;
-        }
-    }
-
-    private static boolean isDirectory(String directory) {
-        try {
-            return Files.isDirectory(Path.of(directory));
-        } catch (InvalidPathException e) {
-            return false;
+            return Optional.empty();
         }
     }
 
