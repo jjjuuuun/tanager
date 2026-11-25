@@ -15,7 +15,7 @@ app/bootstrap        ← 조립 루트(composition root). 유일하게 모든 �
 모듈 폴더는 모두 `app/` 아래, 이름에 `-` 를 쓰지 않는다(ADR-0008). Gradle 경로는 `app/` 아래 폴더 경로와 같다(`app/adapter/pty` = `:adapter:pty`).
 - UI 는 pty4j 를 직접 쓰지 않는다. `TerminalStream` 포트를 JediTerm `TtyConnector` 로 감싼다.
 - OS 분기(`if windows`)는 `app/bootstrap` 의 플랫폼 선택(ServiceLoader) 한 곳에만 있다. 나머지 코드는 `PlatformModule` 포트만 본다(셸·경로·셸 통합·리소스 `resources()`·외관 `appearance()`).
-- UI 의 색·모서리·전환 시간은 테마 토큰(`themes/soft-*.properties`, `TerminalPalette`)으로만 쓴다. 코드에 색 리터럴 금지 — 대비는 `ThemeContrastTest` 가 검사.
+- UI 의 색·모서리·전환 시간은 테마 토큰(`themes/soft-*.properties`, `TerminalPalette`)으로만 쓴다. 코드에 색 리터럴 금지 — 대비는 `SoftThemeTokensTest` 가 검사.
 - 새 OS 지원 = `app/platform/<os>` 모듈 추가 + `META-INF/services` 등록. 다른 모듈은 바꾸지 않는다.
 - 새 AI 도구 지원(Codex 등) = `app/adapter/toolkit/<도구>` 모듈 추가 + `ToolkitProvider` 등록. 같은 원칙.
 - toolkit 어댑터는 사용자 설정 파일을 **절대 쓰지 않는다**. 비밀값(MCP `env`, 헤더, 토큰)은 읽는 즉시 마스킹하고 도메인으로 넘기지 않는다.
