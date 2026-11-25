@@ -36,7 +36,7 @@ PowerShell 7 (`pwsh`) and custom shell profiles are intentionally out of scope.
 
 Download one of these from the [latest release](https://github.com/jjjuuuun/tanager/releases). Neither needs administrator rights.
 
-- **Installer** `Tanager-<version>.msi` — installs for the current user into `%LOCALAPPDATA%\Tanager` and adds **Tanager** to the Start menu. To uninstall, remove Tanager in **Settings → Apps**.
+- **Installer** `Tanager-<version>-windows-x64.msi` — installs for the current user into `%LOCALAPPDATA%\Tanager` and adds **Tanager** to the Start menu. To uninstall, remove Tanager in **Settings → Apps**.
 - **Zip** `Tanager-<version>-windows-x64.zip` — unzip it anywhere and run `Tanager\Tanager.exe`. To uninstall, delete the folder.
 
 The executable is not code-signed yet, so Windows SmartScreen may warn you. Choose **More info → Run anyway**.

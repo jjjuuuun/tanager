@@ -141,7 +141,8 @@ tasks.register<Exec>("jpackageInstaller") {
     group = "distribution"
     description = "jpackage 로 app-image 를 MSI 설치 파일로 만든다(Windows, WiX 필요)"
     dependsOn(jpackageImage)
-    mustRunAfter(verifyAppImage)
+    // 고지 · 글꼴 검사를 통과한 app-image 만 MSI 로 만든다
+    dependsOn(verifyAppImage)
     inputs.property("appVersion", appVersion)
     inputs.dir(imageDir)
     outputs.dir(installerDir)

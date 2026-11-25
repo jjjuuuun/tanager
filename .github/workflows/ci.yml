@@ -119,6 +119,15 @@ jobs:
       # app-image → 고지(LICENSE · THIRD-PARTY-NOTICES · D2Coding OFL)와 글꼴 검사(ADR-0010) → MSI
       - run: ./gradlew :bootstrap:jpackageImage :bootstrap:verifyAppImage :bootstrap:jpackageInstaller
         shell: pwsh
+      # release 와 같은 배포 파일 모으기 스크립트를 PR 에서 미리 돌려 본다(#22)
+      - name: 배포 파일 모으기 확인(release 와 같은 스크립트)
+        shell: pwsh
+        run: |
+          ./.github/scripts/collect-dist.ps1 -Version "0.0.0"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          foreach ($f in @("Tanager-0.0.0-windows-x64.zip", "Tanager-0.0.0-windows-x64.msi")) {
+            if (-not (Test-Path -LiteralPath $f)) { Write-Error "없음: $f"; exit 1 }
+          }
       - uses: actions/upload-artifact@v4
         with:
           name: tanager-windows-app-image

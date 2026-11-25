@@ -51,17 +51,16 @@ jobs:
         run: |
           ./gradlew :bootstrap:jpackageImage :bootstrap:verifyAppImage :bootstrap:jpackageInstaller "-Pversion=$env:TANAGER_VERSION"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          Compress-Archive -Path app/bootstrap/build/jpackage/Tanager -DestinationPath "Tanager-$env:TANAGER_VERSION-windows-x64.zip"
-          # jpackage 의 MSI 이름은 Tanager-<x.y.z>.msi(MSI 버전은 숫자만이라 '-rc.1' 같은 꼬리가 빠진다) → 태그 버전으로 맞춘다
-          $msi = @(Get-ChildItem -Path app/bootstrap/build/jpackage-installer -Filter "*.msi")
-          if ($msi.Count -ne 1) { Write-Error "MSI 가 1개가 아님: $($msi.Name -join ', ')"; exit 1 }
-          Copy-Item -LiteralPath "$($msi[0].FullName)" -Destination "Tanager-$env:TANAGER_VERSION.msi"
+          # zip · MSI 이름 맞추기는 CI package-smoke 와 같은 스크립트(PR 에서 검증된다). 프리릴리스는 MSI 를 붙이지 않는다
+          $pre = $env:TANAGER_VERSION.Contains('-')
+          ./.github/scripts/collect-dist.ps1 -Version "$env:TANAGER_VERSION" -SkipMsi:$pre
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@v4
         with:
           name: windows-dist
           path: |
             Tanager-*-windows-x64.zip
-            Tanager-*.msi
+            Tanager-*-windows-x64.msi
           if-no-files-found: error
 
   publish:
