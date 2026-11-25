@@ -1,0 +1,128 @@
+{
+  "$comment": "GitHub 마일스톤의 원본. 출처: docs/plans/02-SDD.html §13.1. 바꾸면 dev 병합 시 .github/workflows/milestones.yml 이 GitHub 에 반영한다. key 는 바꾸지 않는다(제목 매칭에 쓰임).",
+  "milestones": [
+    {
+      "key": "M0",
+      "title": "M0 스파이크",
+      "release": null,
+      "scope": "pty4j ConPTY · JediTerm 한글 IME · OSC 7/9;9 가로채기 · jpackage · Claude 이력 형식 확인",
+      "done": "ADR-0001·0003 확정, ✱ 항목 해소",
+      "requirements": []
+    },
+    {
+      "key": "M1",
+      "title": "M1 스캐폴딩",
+      "release": "v0.1.0",
+      "scope": "Gradle 멀티 모듈, build-logic, ArchUnit, Spotless, JaCoCo, CI",
+      "done": "CI 전부 green, 빈 앱 창 실행",
+      "requirements": []
+    },
+    {
+      "key": "M2",
+      "title": "M2 단일 터미널",
+      "release": "v0.2.0",
+      "scope": "프로파일 탐지, 창 1개, 종료·재시작, 소프트 테마 기본값",
+      "done": "FR-SES-01/02/04, FR-UI-02/03/06 인수 조건 통과",
+      "requirements": [
+        "FR-SES-01",
+        "FR-SES-02",
+        "FR-SES-04",
+        "FR-UI-02",
+        "FR-UI-03",
+        "FR-UI-06"
+      ]
+    },
+    {
+      "key": "M3",
+      "title": "M3 이력 · 트리",
+      "release": "v0.3.0",
+      "scope": "셸 통합, cwd 추적, 폴더·세션 트리, 고정·검색",
+      "done": "FR-HIS-01~07, FR-SES-03 인수 조건 통과",
+      "requirements": [
+        "FR-HIS-01",
+        "FR-HIS-02",
+        "FR-HIS-03",
+        "FR-HIS-04",
+        "FR-HIS-05",
+        "FR-HIS-06",
+        "FR-HIS-07",
+        "FR-SES-03"
+      ]
+    },
+    {
+      "key": "M4",
+      "title": "M4 분할",
+      "release": "v0.4.0",
+      "scope": "분할 · 크기 · 포커스 · 줌 · 교환 · 이동, 키 바인딩과 마우스 조작 전부, 전환 효과",
+      "done": "FR-LAY-01~06 · 09~13, FR-UI-04 인수 조건 통과",
+      "requirements": [
+        "FR-LAY-01",
+        "FR-LAY-02",
+        "FR-LAY-03",
+        "FR-LAY-04",
+        "FR-LAY-05",
+        "FR-LAY-06",
+        "FR-LAY-09",
+        "FR-LAY-10",
+        "FR-LAY-11",
+        "FR-LAY-12",
+        "FR-LAY-13",
+        "FR-UI-04"
+      ]
+    },
+    {
+      "key": "M5",
+      "title": "M5 복원 · 탭 · 설정",
+      "release": "v0.5.0",
+      "scope": "저장·복원, 탭, config, prefix 모드, 사라진 경로 표시·기록 제외 규칙, 시스템/다크/라이트 테마, 리소스 표시",
+      "done": "FR-RES-*, FR-LAY-07/08, FR-CFG-*, FR-HIS-08/09, FR-UI-01/05, FR-MON-* 인수 조건 통과",
+      "requirements": [
+        "FR-RES-01",
+        "FR-RES-02",
+        "FR-RES-03",
+        "FR-RES-04",
+        "FR-LAY-07",
+        "FR-LAY-08",
+        "FR-CFG-01",
+        "FR-CFG-02",
+        "FR-CFG-03",
+        "FR-HIS-08",
+        "FR-HIS-09",
+        "FR-UI-01",
+        "FR-UI-05",
+        "FR-MON-01",
+        "FR-MON-02",
+        "FR-MON-03",
+        "FR-MON-04"
+      ]
+    },
+    {
+      "key": "M6",
+      "title": "M6 도구함",
+      "release": "v1.0.0",
+      "scope": "Claude Code 공급자, 도구함 패널, 이력 가져오기, 안정화 (중간 점검은 v1.0.0-rc.N 프리릴리스)",
+      "done": "FR-TK-01~09 인수 조건 통과, NFR 전체 측정",
+      "requirements": [
+        "FR-TK-01",
+        "FR-TK-02",
+        "FR-TK-03",
+        "FR-TK-04",
+        "FR-TK-05",
+        "FR-TK-06",
+        "FR-TK-07",
+        "FR-TK-08",
+        "FR-TK-09"
+      ]
+    },
+    {
+      "key": "M7",
+      "title": "M7 macOS",
+      "release": "v1.1.0",
+      "scope": "platform-macos, zsh 통합, dmg, AI 도구 공급자 확장점",
+      "done": "NFR-04 충족, FR-TK-10",
+      "requirements": [
+        "FR-TK-10"
+      ]
+    }
+  ]
+}

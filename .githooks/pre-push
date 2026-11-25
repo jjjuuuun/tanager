@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# 푸시 전 검사: main · dev 직접 푸시 차단 + 브랜치 이름 규칙 + ./gradlew check
+# stdin: <local ref> <local sha> <remote ref> <remote sha>  (푸시되는 ref 마다 한 줄)
+set -euo pipefail
+
+pattern='^(feat|fix|perf|refactor|test|docs|build|ci|chore|spike|hotfix)/[0-9]+-[a-z0-9]+(-[a-z0-9]+)*$'
+pushes_branch=false
+
+while read -r local_ref _ remote_ref _; do
+  case "$remote_ref" in
+    refs/tags/*) continue ;;                                   # 태그 푸시 = 릴리스 (승인은 Claude 훅에서)
+    refs/heads/main|refs/heads/dev)
+      echo "✖ ${remote_ref#refs/heads/} 로 직접 푸시할 수 없습니다. PR 로 병합하세요." >&2
+      exit 1 ;;
+    refs/heads/*)
+      name="${remote_ref#refs/heads/}"
+      if [[ ! "$name" =~ $pattern ]]; then
+        echo "✖ 브랜치 이름 규칙 위반: $name" >&2
+        echo "  형식: <type>/<이슈번호>-<kebab-slug>   예) feat/12-split-pane-resize · hotfix/31-restore-crash" >&2
+        exit 1
+      fi
+      pushes_branch=true ;;
+  esac
+done
+
+if $pushes_branch && [[ -f ./gradlew ]]; then
+  # WSL/Linux 에서는 Windows 전용(ConPTY · PowerShell) 테스트를 뺀다. Windows 에서 돌릴 때는 전부.
+  case "$(uname -s)" in
+    Linux*|Darwin*) sh ./gradlew --quiet check -PexcludeTags=windows,wsl ;;
+    *)              sh ./gradlew --quiet check ;;
+  esac
+fi

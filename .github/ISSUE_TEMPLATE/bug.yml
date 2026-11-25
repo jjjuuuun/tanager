@@ -1,0 +1,39 @@
+name: 버그 신고
+description: 기대와 다르게 동작함
+title: "fix: "
+labels: ["type:fix"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: 현상
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 재현 절차
+      placeholder: |
+        1. WSL(Ubuntu) 프로파일로 새 창
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 기대 동작
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: 환경
+      placeholder: "Tanager v0.3.1 / Windows 11 24H2 / WSL Ubuntu 24.04 / PowerShell 5.1"
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 로그
+      description: "%LOCALAPPDATA%\\Tanager\\logs\\tanager.log 의 관련 부분"
+      render: text

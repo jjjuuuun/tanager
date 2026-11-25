@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>프로젝트 구성 및 설계 계획서</title>
+<style>
+:root{--fg:#111827;--muted:#4b5563;--line:#e5e7eb;--soft:#f8fafc;--accent:#2563eb;--accent-soft:#eff6ff;
+--ok:#047857;--ok-soft:#ecfdf5;--warn:#b45309;--warn-soft:#fffbeb;--bad:#b91c1c;--bad-soft:#fef2f2;--violet:#6d28d9;--violet-soft:#f5f3ff}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif;
+color:var(--fg);background:#fff;line-height:1.7;font-size:15px;word-break:keep-all;overflow-wrap:break-word}
+.layout{display:grid;grid-template-columns:270px minmax(0,1fr)}
+nav.toc{position:sticky;top:0;height:100vh;overflow-y:auto;border-right:1px solid var(--line);background:var(--soft);padding:28px 18px}
+nav.toc .brand{font-weight:800;font-size:18px;letter-spacing:.02em}
+nav.toc .doc{font-size:13px;color:var(--muted);margin:4px 0 18px}
+nav.toc ol{list-style:none;margin:0;padding:0}
+nav.toc li{margin:2px 0}
+nav.toc a{display:block;padding:5px 10px;border-radius:6px;color:var(--fg);text-decoration:none;font-size:14px;
+white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+nav.toc a:hover{background:#e2e8f0}
+nav.toc .other{margin-top:20px;padding-top:14px;border-top:1px solid var(--line);font-size:13px}
+nav.toc .other a{color:var(--accent);white-space:normal}
+main{max-width:1060px;padding:44px 56px 120px;min-width:0}
+header.doc-head{border-bottom:2px solid var(--fg);padding-bottom:18px;margin-bottom:8px}
+header.doc-head .kicker{font-size:13px;font-weight:700;color:var(--accent);letter-spacing:.06em}
+header.doc-head h1{font-size:30px;margin:6px 0 6px;line-height:1.3}
+header.doc-head p{margin:0;color:var(--muted)}
+section{padding-top:28px}
+h2{font-size:22px;margin:22px 0 12px;padding-bottom:6px;border-bottom:1px solid var(--line);scroll-margin-top:16px}
+h2 .no{color:var(--accent);margin-right:8px}
+h3{font-size:17px;margin:24px 0 8px}
+h4{font-size:15px;margin:18px 0 6px}
+p{margin:8px 0}
+a{color:var(--accent)}
+ul,ol{padding-left:22px;margin:8px 0}
+li{margin:3px 0}
+table{width:100%;border-collapse:collapse;font-size:14px;margin:12px 0;table-layout:auto}
+th,td{border:1px solid var(--line);padding:8px 10px;vertical-align:top;text-align:left}
+th{background:var(--soft);font-weight:700;white-space:nowrap}
+td code,li code,p code{white-space:nowrap}
+.tbl-wrap{overflow-x:auto}
+code{font-family:'JetBrains Mono','D2Coding','Consolas','Malgun Gothic',monospace;font-size:.88em;background:#f1f5f9;
+padding:1px 5px;border-radius:4px;word-break:break-all}
+pre{background:#0f172a;color:#e2e8f0;padding:16px 18px;border-radius:10px;overflow-x:auto;font-size:13px;line-height:1.6;
+margin:12px 0;word-break:normal;overflow-wrap:normal;white-space:pre;position:relative}
+pre code{background:none;padding:0;color:inherit;font-size:inherit;word-break:normal;white-space:pre}
+pre[data-lang]::before{content:attr(data-lang);position:absolute;top:6px;right:10px;font-size:11px;color:#94a3b8;
+font-family:'Pretendard','Noto Sans KR','Malgun Gothic',sans-serif}
+.figure{border:1px solid var(--line);border-radius:12px;padding:16px;margin:16px 0;background:#fff;overflow-x:auto}
+.figure svg{width:100%;height:auto;display:block}
+.figure figcaption{font-size:13px;color:var(--muted);margin-top:10px;text-align:center}
+.callout{border-left:4px solid var(--accent);background:var(--accent-soft);padding:12px 16px;border-radius:0 8px 8px 0;margin:14px 0}
+.callout.ok{border-color:var(--ok);background:var(--ok-soft)}
+.callout.warn{border-color:var(--warn);background:var(--warn-soft)}
+.callout.bad{border-color:var(--bad);background:var(--bad-soft)}
+.callout b.t{display:block;margin-bottom:2px}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:14px 0}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:14px 0}
+.card{border:1px solid var(--line);border-radius:10px;padding:14px 16px;background:#fff}
+.card h4{margin:0 0 6px}
+.card p,.card ul{font-size:14px;margin:4px 0}
+.steps{counter-reset:s;list-style:none;padding:0;margin:12px 0}
+.steps>li{counter-increment:s;position:relative;padding:10px 14px 10px 54px;border:1px solid var(--line);border-radius:10px;margin:8px 0;background:#fff}
+.steps>li::before{content:counter(s);position:absolute;left:14px;top:10px;width:28px;height:28px;border-radius:50%;
+background:var(--accent);color:#fff;font-weight:700;display:flex;align-items:center;justify-content:center;font-size:14px}
+.steps>li b.h{display:block}
+.steps>li .sub{color:var(--muted);font-size:14px}
+.tag{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px;font-weight:700;white-space:nowrap;vertical-align:1px}
+.tag.must{background:var(--bad-soft);color:var(--bad)}
+.tag.should{background:var(--warn-soft);color:var(--warn)}
+.tag.could{background:var(--ok-soft);color:var(--ok)}
+.tag.info{background:var(--accent-soft);color:var(--accent)}
+.tag.v{background:var(--violet-soft);color:var(--violet)}
+kbd{font-family:'JetBrains Mono','Consolas','Malgun Gothic',monospace;font-size:12px;border:1px solid #cbd5e1;border-bottom-width:2px;
+border-radius:4px;padding:0 5px;background:#fff;white-space:nowrap}
+.meta td:first-child{width:140px;background:var(--soft);font-weight:700}
+.muted{color:var(--muted)}
+.small{font-size:13px}
+@media (max-width:1200px){.layout{grid-template-columns:1fr}nav.toc{position:static;height:auto;border-right:0;border-bottom:1px solid var(--line)}
+main{padding:28px 20px 80px}.grid2,.grid3{grid-template-columns:1fr}}
+@media print{nav.toc{display:none}.layout{display:block}main{max-width:none;padding:0}.figure,pre,table{break-inside:avoid}}
+</style>
+</head>
+<body>
+<div class="layout">
+<nav class="toc" aria-label="목차">
+<div class="brand">Tanager</div>
+<div class="doc">계획서 1 · 개발 체계</div>
+<ol><li><a href="#info">1. 문서 정보</a></li><li><a href="#stack">2. 언어와 기술 스택</a></li><li><a href="#structure">3. 프로젝트 구조</a></li><li><a href="#method">4. 개발 방법론: DDD · TDD · 헥사고날</a></li><li><a href="#rules">5. 코드 작성 규칙: 객체지향 + 함수형</a></li><li><a href="#branch">6. Git 브랜치 전략</a></li><li><a href="#commit">7. 커밋 메시지 템플릿과 커밋 시점</a></li><li><a href="#pr">8. PR 절차와 템플릿</a></li><li><a href="#ci">9. CI/CD</a></li><li><a href="#claude">10. .claude 구성</a></li><li><a href="#agents">11. 에이전트 구성 (서브에이전트 · 팀)</a></li><li><a href="#start">12. 시작 순서</a></li></ol>
+<div class="other">함께 보는 문서<br><a href="02-SDD.html">계획서 2 · SDD (요구사항·소프트웨어 설계)</a></div>
+</nav>
+<main>
+<header class="doc-head">
+<div class="kicker">TANAGER · 계획서 1 / 2</div>
+<h1>프로젝트 구성 및 설계 계획서</h1>
+<p>언어·구조·방법론·코드 규칙·Git 전략·CI·Claude Code 설정·에이전트 구성 — 개발 체계를 정한다.</p>
+</header>
+<section id="info"><h2><span class="no">1.</span>문서 정보</h2>
+<table class="meta">
+<tr><td>문서</td><td>Tanager 프로젝트 구성 및 설계 계획서 (개발 체계)</td></tr>
+<tr><td>버전</td><td>0.1 (초안)</td></tr>
+<tr><td>작성일</td><td>2026-11-24</td></tr>
+<tr><td>대상</td><td>개발자, 이 저장소에서 일하는 Claude Code 에이전트</td></tr>
+<tr><td>범위</td><td><b>어떻게 만드는가</b>: 언어·기술 선택, 저장소 구조, 개발 방법론, 코드 규칙, Git 전략, CI/CD, Claude Code 설정, 에이전트 구성</td></tr>
+<tr><td>짝 문서</td><td><a href="02-SDD.html">02-SDD.html</a> — <b>무엇을 만드는가</b>: 요구사항과 소프트웨어 설계(SDD)</td></tr>
+</table>
+<div class="callout"><b class="t">이 문서의 실제 파일</b>
+이 계획서에 나오는 Git 템플릿·훅·워크플로·Claude 설정은 모두 저장소에 실제 파일로 만들어 두었다. 문서와 파일이 다르면 <b>파일이 기준</b>이고, 문서를 고친다.</div>
+</section><section id="stack"><h2><span class="no">2.</span>언어와 기술 스택</h2>
+<h3>2.1 Python 과 Java 비교</h3>
+<p>이 프로그램에서 가장 어려운 부분은 기능 자체가 아니라 <b>터미널 에뮬레이션</b>(VT 시퀀스, 색, 와이드 문자, 한글 IME)과 <b>PTY</b>(Windows ConPTY, Unix pty)다. 언어는 이 두 가지를 얼마나 믿을 만한 라이브러리로 해결할 수 있는지로 골랐다.</p>
+<div class="tbl-wrap"><table>
+<tr><th>기준</th><th>Java 25 + Swing + JediTerm + pty4j</th><th>Python + Textual + pyte + pywinpty</th></tr>
+<tr><td>터미널 에뮬레이션</td><td><span class="tag could">유리</span> JediTerm: JetBrains IDE 내장 터미널에서 쓰는 에뮬레이터</td><td><span class="tag should">보통</span> pyte: 순수 Python, 대량 출력 시 느림</td></tr>
+<tr><td>PTY (Windows / Unix)</td><td><span class="tag could">유리</span> pty4j 하나로 Windows·macOS·Linux</td><td><span class="tag should">보통</span> pywinpty 와 ptyprocess 를 따로 감싸야 함</td></tr>
+<tr><td>한글 IME · 와이드 문자</td><td><span class="tag could">유리</span> Swing 입력기 지원(M0 에서 검증)</td><td><span class="tag must">불리</span> 터미널 안의 터미널이라 IME 를 호스트 터미널에 의존</td></tr>
+<tr><td>화면 구조</td><td>데스크톱 창: 좌측 트리 + 중첩 분할 터미널</td><td>TUI: tmux 를 처음부터 다시 만드는 수준</td></tr>
+<tr><td>실행 파일</td><td>jpackage 로 JRE 포함 <code>.exe</code>·<code>.msi</code>·<code>.dmg</code></td><td>PyInstaller/Nuitka, 백신 오탐 사례 잦음</td></tr>
+<tr><td>macOS 확장</td><td>같은 라이브러리, 플랫폼 모듈만 추가</td><td>가능하지만 PTY·입력 처리 분기 증가</td></tr>
+<tr><td>함수형 + 객체지향 표현</td><td>record · sealed · 패턴 매칭 · 가상 스레드</td><td>dataclass · match · 타입 힌트(런타임 강제 없음)</td></tr>
+<tr><td>개발 속도</td><td>보통</td><td><span class="tag could">유리</span></td></tr>
+</table></div>
+<div class="callout ok"><b class="t">결정: Java</b>
+핵심 가치(경로 이력·레이아웃·복원)에 집중하고, 에뮬레이터와 PTY 는 검증된 라이브러리에 맡긴다. 상세 근거와 검증 조건은 <code>docs/adr/0001-java-swing-jediterm-pty4j.md</code>. M0 스파이크에서 검증에 실패하면 ADR 을 대체하고 다시 고른다.</div>
+<div class="callout"><b class="t">"GUI 가 아니라 그냥 터미널이어도 괜찮다"에 대해</b>
+메인 영역의 각 창(pane)은 실제 셸이 도는 터미널 화면이다. 그 바깥(좌측 트리, 분할 경계, 탭)만 데스크톱 창이 맡는다. 순수 TUI 로 만들면 터미널 안에서 다시 터미널을 에뮬레이션해야 해서 한글 입력과 성능에서 손해가 크다.</div>
+
+<h3>2.2 버전 기준</h3>
+<div class="tbl-wrap"><table>
+<tr><th>구성 요소</th><th>기준</th><th>비고</th></tr>
+<tr><td>JDK</td><td><b>25</b> (LTS, 2025-09 GA)</td><td>현재 가장 최신 LTS. Gradle toolchain 으로 고정하고 비 LTS(26·27·28)는 건너뛴다. 다음 LTS(29, 2027-09 예정)가 나오면 올린다. preview 기능은 쓰지 않는다.</td></tr>
+<tr><td>Gradle</td><td>9.9.x (Kotlin DSL)</td><td>9.1 부터 Java 25 toolchain 지원. 래퍼로 고정</td></tr>
+<tr><td>UI</td><td>Swing + FlatLaf</td><td>둥근 모서리 · 전환 효과 · 소프트 라이트/다크 테마(시스템 따라가기). 색 토큰은 SDD §8.5</td></tr>
+<tr><td>터미널</td><td>JediTerm 3.76 (core + ui, JetBrains 저장소), pty4j 0.14.x</td><td>M0 확인: 번들 ConPTY 사용. 기본 글꼴은 한글 포함 D2Coding 번들(ADR-0001)</td></tr>
+<tr><td>직렬화</td><td>Jackson 3.x</td><td>adapter-persistence 에만</td></tr>
+<tr><td>테스트</td><td>JUnit Jupiter · AssertJ · jqwik · ArchUnit · Awaitility</td><td>Mockito 미사용(수작업 Fake)</td></tr>
+<tr><td>품질</td><td>Spotless(palantir-java-format) · JaCoCo</td><td>pre-commit 훅과 CI 에서 검사</td></tr>
+<tr><td>배포</td><td>jpackage (+ jlink), WiX(MSI)</td><td>사용자 단위 설치, 관리자 권한 불필요</td></tr>
+</table></div>
+<p class="small muted">라이브러리의 정확한 버전은 M1 스캐폴딩 때 <code>gradle/libs.versions.toml</code> 에 고정하고, 이후 변경은 <code>build(deps): ...</code> 커밋으로만 한다.</p>
+</section><section id="structure"><h2><span class="no">3.</span>프로젝트 구조</h2>
+<h3>3.1 저장소 레이아웃</h3>
+<pre data-lang="tree"><code>Tanager/
+├─ .claude/                      Claude Code 설정 (§10)
+├─ .github/                      PR·이슈 템플릿, 워크플로 (§8, §9)
+├─ .githooks/                    commit-msg · pre-commit · pre-push
+├─ build-logic/                  Gradle 컨벤션 플러그인 (java · test · spotless · jacoco 공통 설정)
+├─ gradle/libs.versions.toml     의존성 버전 카탈로그
+├─ tanager-domain/               순수 Java 도메인
+│  └─ src/main/java/dev/tanager/domain/{history,layout,session,workspace,toolkit,shared}
+├─ tanager-application/          유스케이스 + 포트
+│  └─ src/main/java/dev/tanager/application/{port/in,port/out,service,integration}
+├─ tanager-adapter-pty/          PtyLauncher 구현 (pty4j)
+├─ tanager-adapter-persistence/  저장소 구현 (JSON 파일)
+├─ tanager-adapter-toolkit-claude/  ToolkitProvider 구현 (Claude Code 구성 읽기 전용)
+├─ tanager-platform-windows/     PlatformModule 구현 (WSL · PowerShell · cmd)
+│  └─ src/main/resources/shell-integration/{tanager.bash, tanager.ps1}
+├─ tanager-platform-macos/       PlatformModule 구현 (M7)
+├─ tanager-ui-swing/             사이드바 트리, 분할 뷰, JediTerm 연결
+├─ tanager-app/                  조립 루트 · main() · jpackage 태스크
+├─ tanager-architecture-test/    ArchUnit 규칙
+├─ docs/
+│  ├─ plans/                     이 계획서들
+│  └─ adr/                       Architecture Decision Records
+├─ .gitmessage  .gitattributes  .editorconfig  .gitignore  cliff.toml
+└─ settings.gradle.kts  build.gradle.kts</code></pre>
+<figure class="figure"><svg viewBox="0 0 880 440" style="min-width:880px" role="img" aria-label="모듈 의존 방향 다이어그램" xmlns="http://www.w3.org/2000/svg" font-family="'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif"><title>모듈 의존 방향 다이어그램</title><style>text{font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif}</style><defs><marker id="ah1" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#374151"/></marker></defs><text x="20" y="28" font-size="12" font-weight="400" fill="#4b5563" text-anchor="start" font-family="'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif" dominant-baseline="middle">A → B : A 가 B 에 의존 (B 는 A 를 모름)</text><rect x="310" y="16" width="260" height="56" rx="8" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/><foreignObject x="310" y="16" width="260" height="56"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:4px 10px;line-height:1.3;word-break:keep-all;overflow-wrap:break-word;overflow:hidden;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif"><div style="font-size:14px;font-weight:700;color:#111827;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">tanager-app</div><div style="font-size:12px;color:#4b5563;margin-top:2px;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">조립 루트 · main() · jpackage</div></div></foreignObject><rect x="10" y="124" width="135" height="82" rx="8" fill="#f8fafc" stroke="#64748b" stroke-width="1.5"/><foreignObject x="10" y="124" width="135" height="82"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:4px 10px;line-height:1.3;word-break:keep-all;overflow-wrap:break-word;overflow:hidden;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif"><div style="font-size:12px;font-weight:700;color:#111827;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">ui-swing</div><div style="font-size:12px;color:#4b5563;margin-top:2px;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">Swing · FlatLaf · JediTerm</div></div></foreignObject><rect x="155" y="124" width="135" height="82" rx="8" fill="#f8fafc" stroke="#64748b" stroke-width="1.5"/><foreignObject x="155" y="124" width="135" height="82"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:4px 10px;line-height:1.3;word-break:keep-all;overflow-wrap:break-word;overflow:hidden;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif"><div style="font-size:12px;font-weight:700;color:#111827;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">adapter-pty</div><div style="font-size:12px;color:#4b5563;margin-top:2px;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">pty4j · 세션별 가상 스레드</div></div></foreignObject><rect x="300" y="124" width="135" height="82" rx="8" fill="#f8fafc" stroke="#64748b" stroke-width="1.5"/><foreignObject x="300" y="124" width="135" height="82"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:4px 10px;line-height:1.3;word-break:keep-all;overflow-wrap:break-word;overflow:hidden;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif"><div style="font-size:12px;font-weight:700;color:#111827;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">adapter-persistence</div><div style="font-size:12px;color:#4b5563;margin-top:2px;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">Jackson · 원자적 쓰기</div></div></foreignObject><rect x="445" y="124" width="135" height="82" rx="8" fill="#f8fafc" stroke="#64748b" stroke-width="1.5"/><foreignObject x="445" y="124" width="135" height="82"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:4px 10px;line-height:1.3;word-break:keep-all;overflow-wrap:break-word;overflow:hidden;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif"><div style="font-size:12px;font-weight:700;color:#111827;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">adapter-toolkit-claude</div><div style="font-size:12px;color:#4b5563;margin-top:2px;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">Claude Code 구성 읽기 전용</div></div></foreignObject><rect x="590" y="124" width="135" height="82" rx="8" fill="#f8fafc" stroke="#64748b" stroke-width="1.5"/><foreignObject x="590" y="124" width="135" height="82"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:4px 10px;line-height:1.3;word-break:keep-all;overflow-wrap:break-word;overflow:hidden;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif"><div style="font-size:12px;font-weight:700;color:#111827;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">platform-windows</div><div style="font-size:12px;color:#4b5563;margin-top:2px;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">ConPTY · WSL · PS 5.1 · cmd</div></div></foreignObject><rect x="735" y="124" width="135" height="82" rx="8" fill="#f8fafc" stroke="#64748b" stroke-width="1.5" stroke-dasharray="6 4"/><foreignObject x="735" y="124" width="135" height="82"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:4px 10px;line-height:1.3;word-break:keep-all;overflow-wrap:break-word;overflow:hidden;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif"><div style="font-size:12px;font-weight:700;color:#111827;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">platform-macos</div><div style="font-size:12px;color:#4b5563;margin-top:2px;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">zsh · /etc/shells (M7)</div></div></foreignObject><rect x="250" y="270" width="380" height="56" rx="8" fill="#f5f3ff" stroke="#6d28d9" stroke-width="1.5"/><foreignObject x="250" y="270" width="380" height="56"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:4px 10px;line-height:1.3;word-break:keep-all;overflow-wrap:break-word;overflow:hidden;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif"><div style="font-size:14px;font-weight:700;color:#111827;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">tanager-application</div><div style="font-size:12px;color:#4b5563;margin-top:2px;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">유스케이스(port.in) · 출력 포트(port.out) · CwdTracker</div></div></foreignObject><rect x="290" y="374" width="300" height="60" rx="8" fill="#ecfdf5" stroke="#047857" stroke-width="1.5"/><foreignObject x="290" y="374" width="300" height="60"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:4px 10px;line-height:1.3;word-break:keep-all;overflow-wrap:break-word;overflow:hidden;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif"><div style="font-size:14px;font-weight:700;color:#111827;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">tanager-domain</div><div style="font-size:12px;color:#4b5563;margin-top:2px;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">history · layout · session · workspace · toolkit · monitor — 순수 Java</div></div></foreignObject><rect x="690" y="280" width="170" height="140" rx="8" fill="#ffffff" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="6 4"/><foreignObject x="690" y="280" width="170" height="140"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:4px 10px;line-height:1.3;word-break:keep-all;overflow-wrap:break-word;overflow:hidden;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif"><div style="font-size:12px;font-weight:700;color:#111827;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">tanager-architecture-test</div><div style="font-size:12px;color:#4b5563;margin-top:2px;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">ArchUnit 으로 모든 모듈의 의존·패키지 규칙을 검사</div></div></foreignObject><g class="arrows"><path d="M 330.8 78.0 L 77.5 118.0" fill="none" stroke="#374151" stroke-width="1.6" marker-end="url(#ah1)"/><path d="M 375.0 78.0 L 222.5 118.0" fill="none" stroke="#374151" stroke-width="1.6" marker-end="url(#ah1)"/><path d="M 419.2 78.0 L 367.5 118.0" fill="none" stroke="#374151" stroke-width="1.6" marker-end="url(#ah1)"/><path d="M 460.8 78.0 L 512.5 118.0" fill="none" stroke="#374151" stroke-width="1.6" marker-end="url(#ah1)"/><path d="M 505.0 78.0 L 657.5 118.0" fill="none" stroke="#374151" stroke-width="1.6" marker-end="url(#ah1)"/><path d="M 549.2 78.0 L 802.5 118.0" fill="none" stroke="#374151" stroke-width="1.6" marker-end="url(#ah1)"/><path d="M 77.5 212.0 L 280.4 264.0" fill="none" stroke="#374151" stroke-width="1.6" marker-end="url(#ah1)"/><path d="M 222.5 212.0 L 345.0 264.0" fill="none" stroke="#374151" stroke-width="1.6" marker-end="url(#ah1)"/><path d="M 367.5 212.0 L 409.6 264.0" fill="none" stroke="#374151" stroke-width="1.6" marker-end="url(#ah1)"/><path d="M 512.5 212.0 L 470.4 264.0" fill="none" stroke="#374151" stroke-width="1.6" marker-end="url(#ah1)"/><path d="M 657.5 212.0 L 535.0 264.0" fill="none" stroke="#374151" stroke-width="1.6" marker-end="url(#ah1)"/><path d="M 802.5 212.0 L 599.6 264.0" fill="none" stroke="#374151" stroke-width="1.6" marker-end="url(#ah1)"/><path d="M 440.0 332.0 L 440.0 368.0" fill="none" stroke="#374151" stroke-width="1.6" marker-end="url(#ah1)"/></g><g class="arrow-labels"></g></svg><figcaption>그림 1. 모듈 의존 방향. tanager-app 은 application·domain 에도 의존하지만 선은 생략했다. 어댑터끼리는 서로 모른다.</figcaption></figure>
+
+<h3>3.2 모듈 책임</h3>
+<div class="tbl-wrap"><table>
+<tr><th>모듈</th><th>책임</th><th>의존 가능</th><th>주요 테스트</th></tr>
+<tr><td><code>tanager-domain</code></td><td>경로 이력, 레이아웃 트리, 세션 상태, 작업 공간 스냅샷의 규칙</td><td>JDK 만</td><td>단위 · 속성 기반</td></tr>
+<tr><td><code>tanager-application</code></td><td>유스케이스, 포트 정의, OSC 스캐너, StateActor</td><td>domain</td><td>Fake 포트로 유스케이스</td></tr>
+<tr><td><code>tanager-adapter-pty</code></td><td>셸 프로세스 기동, 바이트 스트림, 크기 변경</td><td>application, pty4j</td><td>계약 · OS 통합</td></tr>
+<tr><td><code>tanager-adapter-persistence</code></td><td>state/config JSON 읽기·쓰기, 스키마 마이그레이션</td><td>application, Jackson</td><td>계약 · 픽스처 마이그레이션</td></tr>
+<tr><td><code>tanager-adapter-toolkit-claude</code></td><td>경로별 Claude Code 스킬 · 서브에이전트 · CLAUDE.md · rules · MCP · 훅 · 권한 읽기, 비밀값 마스킹</td><td>application, Jackson, YAML 프런트매터 파서</td><td>계약 · 픽스처 디렉터리(가짜 홈·프로젝트)</td></tr>
+<tr><td><code>tanager-platform-windows</code></td><td>셸 탐지, 기동 명령, 셸 통합 스크립트 설치, 경로 변환, 앱 디렉터리</td><td>application</td><td>계약 · <code>@Tag("windows")</code> · <code>@Tag("wsl")</code></td></tr>
+<tr><td><code>tanager-platform-macos</code></td><td>위와 같음 (macOS)</td><td>application</td><td>계약 · <code>@Tag("macos")</code></td></tr>
+<tr><td><code>tanager-ui-swing</code></td><td>화면 그리기, 키 입력 → 유스케이스 호출, TerminalStream ↔ TtyConnector 연결</td><td>application, Swing, FlatLaf, JediTerm</td><td>얇게 유지, 수동 확인</td></tr>
+<tr><td><code>tanager-app</code></td><td>객체 조립, 플랫폼 선택(ServiceLoader), 시작·종료 순서, 패키징</td><td>전부</td><td>스모크</td></tr>
+<tr><td><code>tanager-architecture-test</code></td><td>의존 방향, 패키지 규칙, 이름 규칙 검사</td><td>전부(test 범위)</td><td>ArchUnit</td></tr>
+</table></div>
+<p>패키지는 <code>dev.tanager.&lt;계층&gt;.&lt;컨텍스트&gt;</code> 로 통일한다. 예) <code>dev.tanager.domain.layout.LayoutNode</code>, <code>dev.tanager.application.port.out.PtyLauncher</code>.</p>
+</section><section id="method"><h2><span class="no">4.</span>개발 방법론: DDD · TDD · 헥사고날</h2>
+<p>DDD 와 TDD 는 고르는 대상이 아니다. <b>DDD 는 무엇을 어떻게 나눌지</b>, <b>TDD 는 나눈 것을 어떤 순서로 만들지</b>, <b>헥사고날은 어디에 둘지</b>를 정한다. 이 프로젝트는 세 가지를 다 쓰되, 규모에 맞게 가볍게 쓴다.</p>
+<div class="tbl-wrap"><table>
+<tr><th>질문</th><th>방법</th><th>이 프로젝트에서 하는 일</th><th>하지 않는 일</th></tr>
+<tr><td>무엇을 나눌까</td><td>DDD 전략 설계</td><td>바운디드 컨텍스트 6개(history · layout · session · workspace · toolkit · monitor), 유비쿼터스 언어(SDD 용어집) 를 코드 이름에 그대로 쓴다</td><td>컨텍스트별 별도 서비스·DB</td></tr>
+<tr><td>모델은 어떻게</td><td>DDD 전술 패턴</td><td>애그리거트(<code>WorkHistory</code>, <code>Tab</code>), 값 객체(<code>WorkspacePath</code>, <code>Ratio</code>), 도메인 이벤트, 애그리거트 단위 저장소</td><td>팩토리·도메인 서비스 남발, CQRS·이벤트 소싱</td></tr>
+<tr><td>어떤 순서로</td><td>TDD</td><td>행위 하나씩 RED → GREEN → REFACTOR. 계층마다 방식이 다르다(아래)</td><td>테스트 없는 프로덕션 코드</td></tr>
+<tr><td>어디에 둘까</td><td>헥사고날 (포트 & 어댑터)</td><td>도메인·유스케이스는 포트만 알고, OS·라이브러리는 어댑터에 격리</td><td>어댑터 간 직접 호출</td></tr>
+<tr><td>모르는 게 많을 때</td><td>스파이크</td><td><code>spike/</code> 브랜치에서 테스트 없이 빠르게 확인 → 결론은 ADR → 코드는 버리고 TDD 로 다시</td><td>스파이크 코드를 main 에 병합</td></tr>
+</table></div>
+<figure class="figure"><svg viewBox="0 0 880 250" style="min-width:880px" role="img" aria-label="TDD 사이클과 커밋 시점" xmlns="http://www.w3.org/2000/svg" font-family="'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif"><title>TDD 사이클과 커밋 시점</title><style>text{font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif}</style><defs><marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#374151"/></marker></defs><rect x="60" y="70" width="200" height="80" rx="8" fill="#fef2f2" stroke="#b91c1c" stroke-width="1.5"/><foreignObject x="60" y="70" width="200" height="80"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:4px 10px;line-height:1.3;word-break:keep-all;overflow-wrap:break-word;overflow:hidden;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif"><div style="font-size:18px;font-weight:700;color:#111827;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">RED</div><div style="font-size:12px;color:#4b5563;margin-top:2px;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">실패하는 테스트 1개 작성</div></div></foreignObject><rect x="340" y="70" width="200" height="80" rx="8" fill="#ecfdf5" stroke="#047857" stroke-width="1.5"/><foreignObject x="340" y="70" width="200" height="80"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:4px 10px;line-height:1.3;word-break:keep-all;overflow-wrap:break-word;overflow:hidden;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif"><div style="font-size:18px;font-weight:700;color:#111827;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">GREEN</div><div style="font-size:12px;color:#4b5563;margin-top:2px;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">통과시키는 최소 구현</div></div></foreignObject><rect x="620" y="70" width="200" height="80" rx="8" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/><foreignObject x="620" y="70" width="200" height="80"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:4px 10px;line-height:1.3;word-break:keep-all;overflow-wrap:break-word;overflow:hidden;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif"><div style="font-size:18px;font-weight:700;color:#111827;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">REFACTOR</div><div style="font-size:12px;color:#4b5563;margin-top:2px;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">동작 그대로 구조 정리</div></div></foreignObject><rect x="60" y="182" width="200" height="50" rx="8" fill="#ffffff" stroke="#e5e7eb" stroke-width="1.5"/><foreignObject x="60" y="182" width="200" height="50"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:4px 10px;line-height:1.3;word-break:keep-all;overflow-wrap:break-word;overflow:hidden;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif"><div style="font-size:13px;font-weight:600;color:#b91c1c;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">커밋하지 않음</div></div></foreignObject><rect x="340" y="182" width="200" height="50" rx="8" fill="#ffffff" stroke="#e5e7eb" stroke-width="1.5"/><foreignObject x="340" y="182" width="200" height="50"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:4px 10px;line-height:1.3;word-break:keep-all;overflow-wrap:break-word;overflow:hidden;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif"><div style="font-size:13px;font-weight:700;color:#111827;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">커밋 ① feat / fix</div><div style="font-size:12px;color:#4b5563;margin-top:2px;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">테스트 + 구현 한 커밋</div></div></foreignObject><rect x="620" y="182" width="200" height="50" rx="8" fill="#ffffff" stroke="#e5e7eb" stroke-width="1.5"/><foreignObject x="620" y="182" width="200" height="50"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:4px 10px;line-height:1.3;word-break:keep-all;overflow-wrap:break-word;overflow:hidden;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif"><div style="font-size:13px;font-weight:700;color:#111827;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">커밋 ② refactor</div><div style="font-size:12px;color:#4b5563;margin-top:2px;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">바뀐 게 없으면 생략</div></div></foreignObject><g class="arrows"><path d="M 266.0 110.0 L 334.0 110.0" fill="none" stroke="#374151" stroke-width="1.6" marker-end="url(#ah2)"/><path d="M 546.0 110.0 L 614.0 110.0" fill="none" stroke="#374151" stroke-width="1.6" marker-end="url(#ah2)"/><path d="M 720.0 64.0 C 720.0 8.0, 160.0 8.0, 160.0 64.0" fill="none" stroke="#374151" stroke-width="1.6" marker-end="url(#ah2)"/></g><g class="arrow-labels"><rect x="269.1" y="100.0" width="61.8" height="20" rx="2" fill="white"/><text x="300.0" y="110.0" font-size="12" fill="#374151" text-anchor="middle" dominant-baseline="middle" font-family="'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">최소 구현</text><rect x="539.5" y="100.0" width="81.0" height="20" rx="2" fill="white"/><text x="580.0" y="110.0" font-size="12" fill="#374151" text-anchor="middle" dominant-baseline="middle" font-family="'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">전체 GREEN</text><rect x="403.1" y="12.0" width="73.8" height="20" rx="2" fill="white"/><text x="440.0" y="22.0" font-size="12" fill="#374151" text-anchor="middle" dominant-baseline="middle" font-family="'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">다음 행위로</text></g></svg><figcaption>그림 2. TDD 사이클과 커밋 시점. 컴파일 실패도 RED 로 인정한다.</figcaption></figure>
+<h3>4.1 계층별 TDD 방식</h3>
+<div class="tbl-wrap"><table>
+<tr><th>계층</th><th>방식</th><th>예</th></tr>
+<tr><td>domain</td><td>인사이드아웃. 순수 함수 단위 테스트 + jqwik 속성 테스트로 불변식 검증</td><td>"임의의 분할·닫기 연속 후에도 PaneId 는 유일하다"</td></tr>
+<tr><td>application</td><td>유스케이스를 Fake 포트로 조립해 시나리오 테스트</td><td><code>ScriptedPtyLauncher</code> 가 OSC 7 바이트를 흘리면 이력에 경로가 생긴다</td></tr>
+<tr><td>adapter / platform</td><td>포트별 추상 계약 테스트를 Fake 와 실제 구현이 함께 상속</td><td><code>HistoryRepositoryContract</code> ← <code>InMemory…</code>, <code>Json…</code></td></tr>
+<tr><td>ui</td><td>화면 상태 계산을 application 의 순수 함수(<code>SidebarViewModel</code> 등)로 빼서 테스트하고 Swing 코드는 얇게</td><td>트리 압축·정렬은 단위 테스트, 그리기는 수동 확인</td></tr>
+</table></div>
+<p>테스트 도구·태그·커버리지 기준은 <code>.claude/rules/testing.md</code> 에 있다.</p>
+</section><section id="rules"><h2><span class="no">5.</span>코드 작성 규칙: 객체지향 + 함수형</h2>
+<p>답은 <b>둘 다, 자리를 나눠서</b>다. 규칙(계산)은 함수형으로, 경계(자원·I/O·화면)는 객체지향으로 쓴다. 이 구조를 <b>Functional Core, Imperative Shell</b> 이라고 부른다.</p>
+<figure class="figure"><svg viewBox="0 0 880 320" style="min-width:880px" role="img" aria-label="Functional Core, Imperative Shell" xmlns="http://www.w3.org/2000/svg" font-family="'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif"><title>Functional Core, Imperative Shell</title><style>text{font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif}</style><defs><marker id="ah3" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#374151"/></marker></defs><rect x="10" y="10" width="860" height="300" rx="14" fill="#f8fafc" stroke="#64748b" stroke-width="1.5"/><text x="30" y="34" font-size="14" font-weight="700" fill="#334155" text-anchor="start" font-family="'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif" dominant-baseline="middle">Imperative Shell — 객체지향 (가변 상태·I/O·생명주기)</text><rect x="190" y="60" width="500" height="230" rx="12" fill="#f5f3ff" stroke="#6d28d9" stroke-width="1.5"/><text x="210" y="84" font-size="13" font-weight="700" fill="#5b21b6" text-anchor="start" font-family="'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif" dominant-baseline="middle">application — 얇은 명령형 조율 + 순수 계산</text><rect x="300" y="120" width="280" height="110" rx="8" fill="#ecfdf5" stroke="#047857" stroke-width="1.5"/><foreignObject x="300" y="120" width="280" height="110"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:4px 10px;line-height:1.3;word-break:keep-all;overflow-wrap:break-word;overflow:hidden;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif"><div style="font-size:15px;font-weight:700;color:#111827;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">domain — Functional Core</div><div style="font-size:12px;color:#4b5563;margin-top:2px;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">불변 record · sealed · 패턴 매칭 · 순수 함수<br>I/O·시간·랜덤 없음 → 입력이 같으면 출력이 같다</div></div></foreignObject><foreignObject x="206" y="240" width="470" height="44"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:4px 10px;line-height:1.3;word-break:keep-all;overflow-wrap:break-word;overflow:hidden;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif"><div style="font-size:14px;font-weight:700;color:#111827;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif"></div><div style="font-size:12px;color:#4b5563;margin-top:2px;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">StateActor(단일 스레드)가 도메인 값을 교체 · 포트로 I/O 위임 · Result 로 오류 전달</div></div></foreignObject><foreignObject x="22" y="60" width="160" height="230"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:flex-start;text-align:left;padding:4px 10px;line-height:1.3;word-break:keep-all;overflow-wrap:break-word;overflow:hidden;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif"><div style="font-size:14px;font-weight:700;color:#111827;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif"></div><div style="font-size:12px;color:#4b5563;margin-top:2px;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif"><b>ui-swing</b><br>EDT·컴포넌트 수명<br><br><b>adapter-pty</b><br>프로세스·스트림<br><br><b>adapter-persistence</b><br>파일·직렬화</div></div></foreignObject><foreignObject x="700" y="60" width="160" height="230"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:flex-start;text-align:left;padding:4px 10px;line-height:1.3;word-break:keep-all;overflow-wrap:break-word;overflow:hidden;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif"><div style="font-size:14px;font-weight:700;color:#111827;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif"></div><div style="font-size:12px;color:#4b5563;margin-top:2px;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif"><b>platform-*</b><br>OS 명령·인코딩<br><br><b>tanager-app</b><br>객체 조립·ServiceLoader<br><br>규칙: SOLID, final 클래스, 합성 우선</div></div></foreignObject><g class="arrows"></g><g class="arrow-labels"></g></svg><figcaption>그림 3. 안쪽일수록 순수하고, 의존은 항상 바깥에서 안쪽으로 향한다.</figcaption></figure>
+<div class="tbl-wrap"><table>
+<tr><th>위치</th><th>패러다임</th><th>상태</th><th>대표 기법</th></tr>
+<tr><td>domain</td><td>함수형</td><td>불변</td><td>record, sealed interface, switch 패턴 매칭, <code>Result</code>, <code>Optional</code></td></tr>
+<tr><td>application</td><td>함수형 계산 + 얇은 명령형 조율</td><td>StateActor 안에서만 교체</td><td>유스케이스 = 포트 호출 → 순수 계산 → 포트 호출</td></tr>
+<tr><td>adapter · platform · ui · app</td><td>객체지향</td><td>가변(캡슐화)</td><td>SOLID, 인터페이스 구현, 합성, 자원 수명 관리(<code>AutoCloseable</code>)</td></tr>
+</table></div>
+
+<h3>5.1 예: 레이아웃 트리 (도메인, 함수형)</h3>
+<pre data-lang="java"><code>public sealed interface LayoutNode {
+
+    record Leaf(PaneId pane) implements LayoutNode {}
+
+    record Split(Orientation orientation, Ratio ratio, LayoutNode first, LayoutNode second)
+            implements LayoutNode {}
+
+    /** target 창을 둘로 나눈 새 트리를 돌려준다. 원래 트리는 바뀌지 않는다. */
+    default LayoutNode split(PaneId target, Orientation o, PaneId created) {
+        return switch (this) {
+            case Leaf(var p) when p.equals(target) -&gt; new Split(o, Ratio.HALF, this, new Leaf(created));
+            case Leaf _ -&gt; this;
+            case Split(var or, var r, var a, var b) -&gt;
+                    new Split(or, r, a.split(target, o, created), b.split(target, o, created));
+        };
+    }
+}</code></pre>
+<h3>5.2 예: 실패를 값으로 (도메인)</h3>
+<pre data-lang="java"><code>public sealed interface LayoutError {
+    record PaneNotFound(PaneId pane) implements LayoutError {}
+    record LastPaneInTab(PaneId pane) implements LayoutError {}
+}
+
+Result&lt;LayoutNode, LayoutError&gt; close(PaneId target);   // 예외 대신 Result</code></pre>
+<h3>5.3 예: 어댑터 (경계, 객체지향)</h3>
+<pre data-lang="java"><code>public final class Pty4jLauncher implements PtyLauncher {
+    private final ExecutorService readers = Executors.newVirtualThreadPerTaskExecutor();
+
+    @Override
+    public Result&lt;TerminalStream, LaunchError&gt; launch(LaunchSpec spec) {
+        // pty4j PtyProcess 생성 → 읽기 루프를 가상 스레드로 → TerminalStream 으로 감싸 반환
+    }
+}</code></pre>
+
+<h3>5.4 규칙 요약</h3>
+<p>전체 목록은 <code>.claude/rules/java-style.md</code>. Java 파일을 열면 Claude 에게 자동으로 로드된다.</p>
+<ol>
+<li>값·이벤트·DTO 는 <code>record</code>, 불변식은 compact constructor 에서 검증</li>
+<li>닫힌 계층은 <code>sealed</code>, <code>switch</code> 는 <code>default</code> 없이 전부 처리</li>
+<li><code>null</code> 금지 → <code>Optional</code> / <code>Result</code></li>
+<li>도메인 오류는 예외가 아니라 sealed 값</li>
+<li>상태 변경 메서드는 새 값을 반환, 세터 금지</li>
+<li>클래스는 기본 <code>final</code>, 상속보다 합성</li>
+<li>가변 상태는 어댑터와 StateActor 안에만, <code>static</code> 가변 필드 금지</li>
+<li>Swing 은 EDT 에서만, PTY 읽기는 세션당 가상 스레드</li>
+<li>OS 분기는 tanager-app 의 플랫폼 선택 한 곳에만</li>
+<li>명령어 내용·출력은 저장·로그 금지, 경로만 기록</li>
+<li>사용자 AI 도구 설정 파일은 읽기만, 비밀값은 어댑터에서 마스킹</li>
+</ol>
+</section><section id="branch"><h2><span class="no">6.</span>Git 브랜치 전략</h2>
+<h3>6.1 선택: dev(통합) + main(릴리스 전용) — Git Flow 간소화</h3>
+<p>개발은 전부 <b>dev</b> 에서 한다. 작업 브랜치는 dev 에서 갈라져 PR 로 dev 에 squash merge 된다. 마일스톤이 끝나면 dev → main <b>릴리스 PR</b> 을 merge commit 으로 병합하고 main 에 태그를 붙인다. 그래서 main 은 언제나 "마지막으로 배포한 버전"과 같다. Git Flow 의 <code>release/*</code> 브랜치는 두지 않는다 — 버전은 태그에서 빌드에 주입하므로 릴리스 준비 커밋이 없다(ADR-0004).</p>
+<figure class="figure"><svg viewBox="0 0 880 310" style="min-width:880px" role="img" aria-label="Git 브랜치 전략: dev(통합) + main(릴리스 전용)" xmlns="http://www.w3.org/2000/svg" font-family="'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif"><title>Git 브랜치 전략: dev(통합) + main(릴리스 전용)</title><style>text{font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif}</style><defs><marker id="ah4" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#374151"/></marker></defs><text x="16" y="70" font-size="12" font-weight="700" fill="#2563eb" text-anchor="start" font-family="'JetBrains Mono','D2Coding','Consolas','Malgun Gothic',monospace" dominant-baseline="middle">main</text><line x1="230" y1="70" x2="830" y2="70" stroke="#2563eb" stroke-width="3"/><text x="16" y="140" font-size="12" font-weight="700" fill="#b91c1c" text-anchor="start" font-family="'JetBrains Mono','D2Coding','Consolas','Malgun Gothic',monospace" dominant-baseline="middle">hotfix/31-restore-crash</text><text x="16" y="210" font-size="12" font-weight="700" fill="#6d28d9" text-anchor="start" font-family="'JetBrains Mono','D2Coding','Consolas','Malgun Gothic',monospace" dominant-baseline="middle">dev (통합)</text><line x1="270" y1="210" x2="760" y2="210" stroke="#6d28d9" stroke-width="3"/><text x="16" y="280" font-size="12" font-weight="700" fill="#047857" text-anchor="start" font-family="'JetBrains Mono','D2Coding','Consolas','Malgun Gothic',monospace" dominant-baseline="middle">feat/12-split-pane</text><line x1="310" y1="280" x2="380" y2="280" stroke="#047857" stroke-width="3"/><circle cx="230" cy="70" r="8" fill="#ffffff" stroke="#2563eb" stroke-width="2.5"/><circle cx="470" cy="70" r="8" fill="#2563eb" stroke="#2563eb" stroke-width="2.5"/><circle cx="640" cy="70" r="8" fill="#2563eb" stroke="#2563eb" stroke-width="2.5"/><circle cx="830" cy="70" r="8" fill="#2563eb" stroke="#2563eb" stroke-width="2.5"/><circle cx="555" cy="140" r="7" fill="#ffffff" stroke="#b91c1c" stroke-width="2.5"/><circle cx="270" cy="210" r="7" fill="#ffffff" stroke="#6d28d9" stroke-width="2.5"/><circle cx="420" cy="210" r="7" fill="#6d28d9" stroke="#6d28d9" stroke-width="2.5"/><circle cx="700" cy="210" r="7" fill="#6d28d9" stroke="#6d28d9" stroke-width="2.5"/><circle cx="760" cy="210" r="7" fill="#6d28d9" stroke="#6d28d9" stroke-width="2.5"/><circle cx="310" cy="280" r="7" fill="#ffffff" stroke="#047857" stroke-width="2.5"/><circle cx="345" cy="280" r="7" fill="#ffffff" stroke="#047857" stroke-width="2.5"/><circle cx="380" cy="280" r="7" fill="#ffffff" stroke="#047857" stroke-width="2.5"/><text x="345" y="300" font-size="12" font-weight="400" fill="#065f46" text-anchor="middle" font-family="'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif" dominant-baseline="middle">① ② ③ (TDD 커밋)</text><text x="230" y="48" font-size="12" font-weight="400" fill="#4b5563" text-anchor="middle" font-family="'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif" dominant-baseline="middle">시작</text><rect x="438" y="22" width="64" height="22" rx="4" fill="#fffbeb" stroke="#b45309" stroke-width="1.5"/><text x="470" y="33" font-size="12" font-weight="700" fill="#92400e" text-anchor="middle" font-family="'JetBrains Mono','D2Coding','Consolas','Malgun Gothic',monospace" dominant-baseline="middle">v0.1.0</text><rect x="608" y="22" width="64" height="22" rx="4" fill="#fffbeb" stroke="#b45309" stroke-width="1.5"/><text x="640" y="33" font-size="12" font-weight="700" fill="#92400e" text-anchor="middle" font-family="'JetBrains Mono','D2Coding','Consolas','Malgun Gothic',monospace" dominant-baseline="middle">v0.1.1</text><rect x="798" y="22" width="64" height="22" rx="4" fill="#fffbeb" stroke="#b45309" stroke-width="1.5"/><text x="830" y="33" font-size="12" font-weight="700" fill="#92400e" text-anchor="middle" font-family="'JetBrains Mono','D2Coding','Consolas','Malgun Gothic',monospace" dominant-baseline="middle">v0.2.0</text><text x="760" y="232" font-size="12" font-weight="400" fill="#5b21b6" text-anchor="middle" font-family="'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif" dominant-baseline="middle">squash</text><g class="arrows"><path d="M 230.0 84.0 C 230.0 150.0, 270.0 130.0, 270.0 197.0" fill="none" stroke="#374151" stroke-width="1.6" marker-end="url(#ah4)"/><path d="M 270.0 223.0 C 270.0 250.0, 280.0 280.0, 297.0 280.0" fill="none" stroke="#374151" stroke-width="1.6" marker-end="url(#ah4)"/><path d="M 393.0 280.0 C 410.0 280.0, 420.0 250.0, 420.0 223.0" fill="none" stroke="#374151" stroke-width="1.6" marker-end="url(#ah4)"/><path d="M 420.0 197.0 C 420.0 140.0, 470.0 140.0, 470.0 84.0" fill="none" stroke="#374151" stroke-width="1.6" marker-end="url(#ah4)"/><path d="M 475.5 82.9 C 490.0 140.0, 520.0 140.0, 542.0 140.0" fill="none" stroke="#374151" stroke-width="1.6" marker-end="url(#ah4)"/><path d="M 568.0 140.0 C 605.0 140.0, 640.0 120.0, 640.0 84.0" fill="none" stroke="#374151" stroke-width="1.6" marker-end="url(#ah4)"/><path d="M 649.9 79.9 C 675.0 110.0, 700.0 170.0, 700.0 197.0" fill="none" stroke="#374151" stroke-width="1.6" marker-end="url(#ah4)"/><path d="M 766.7 198.9 C 790.0 150.0, 830.0 120.0, 830.0 84.0" fill="none" stroke="#374151" stroke-width="1.6" marker-end="url(#ah4)"/></g><g class="arrow-labels"><rect x="220.6" y="130.0" width="58.7" height="20" rx="2" fill="white"/><text x="250.0" y="140.0" font-size="12" fill="#374151" text-anchor="middle" dominant-baseline="middle" font-family="'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">dev 생성</text><rect x="404.1" y="252.0" width="51.8" height="20" rx="2" fill="white"/><text x="430.0" y="262.0" font-size="12" fill="#374151" text-anchor="middle" dominant-baseline="middle" font-family="'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">squash</text><rect x="385.9" y="130.0" width="118.2" height="20" rx="2" fill="white"/><text x="445.0" y="140.0" font-size="12" fill="#374151" text-anchor="middle" dominant-baseline="middle" font-family="'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">릴리스 PR · merge</text><rect x="582.8" y="102.0" width="46.5" height="20" rx="2" fill="white"/><text x="606.0" y="112.0" font-size="12" fill="#374151" text-anchor="middle" dominant-baseline="middle" font-family="'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">merge</text><rect x="677.0" y="140.0" width="46.0" height="20" rx="2" fill="white"/><text x="700.0" y="150.0" font-size="12" fill="#374151" text-anchor="middle" dominant-baseline="middle" font-family="'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">역병합</text><rect x="766.4" y="130.0" width="67.1" height="20" rx="2" fill="white"/><text x="800.0" y="140.0" font-size="12" fill="#374151" text-anchor="middle" dominant-baseline="middle" font-family="'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">릴리스 PR</text></g></svg><figcaption>그림 4. 작업 브랜치는 dev 로 squash, 릴리스는 dev → main merge commit 후 main 에 태그. hotfix 만 main 에서 갈라져 main 으로 들어가고, 바로 dev 로 역병합한다.</figcaption></figure>
+<h3>6.2 브랜치 이름과 병합 방법</h3>
+<div class="tbl-wrap"><table>
+<tr><th>브랜치</th><th>형식</th><th>갈라지는 곳 → 들어가는 곳</th><th>병합 방법 · 수명</th></tr>
+<tr><td>main</td><td><code>main</code></td><td>— (릴리스만 받음) · <b>GitHub 기본 브랜치</b></td><td>영구. 직접 커밋·푸시 금지. 태그는 여기에만</td></tr>
+<tr><td>dev</td><td><code>dev</code></td><td>main 에서 1회 생성 · 통합 브랜치</td><td>영구. 직접 커밋·푸시 금지</td></tr>
+<tr><td>작업</td><td><code>&lt;type&gt;/&lt;이슈번호&gt;-&lt;kebab-slug&gt;</code><br><code>feat/12-split-pane-resize</code></td><td>dev → dev</td><td><b>Squash and merge</b>, 1~3일 목표, 병합 후 삭제</td></tr>
+<tr><td>릴리스 PR</td><td>head <code>dev</code>, 제목 <code>chore(release): vX.Y.Z</code></td><td>dev → main</td><td><b>Create a merge commit</b> → 태그 <code>vX.Y.Z</code></td></tr>
+<tr><td>긴급 수정</td><td><code>hotfix/&lt;이슈번호&gt;-&lt;slug&gt;</code></td><td>main → main</td><td><b>Create a merge commit</b> → 패치 태그 → <b>역병합 PR</b> main → dev(merge commit)</td></tr>
+<tr><td>실험</td><td><code>spike/&lt;이슈번호&gt;-&lt;slug&gt;</code></td><td>dev → (병합 금지)</td><td>CI 가 차단. 결론은 ADR</td></tr>
+<tr><td>팀 하위</td><td><code>&lt;부모 브랜치&gt;--&lt;역할&gt;</code></td><td>부모 → 부모</td><td>로컬 병합. PR 없음</td></tr>
+<tr><td>태그</td><td><code>vMAJOR.MINOR.PATCH[-pre]</code></td><td>main 의 커밋</td><td>release 워크플로 트리거(main 위가 아니면 실패)</td></tr>
+</table></div>
+<p>작업 type: <code>feat</code> <code>fix</code> <code>perf</code> <code>refactor</code> <code>test</code> <code>docs</code> <code>build</code> <code>ci</code> <code>chore</code> <code>spike</code> (+ <code>hotfix</code>). 검사: <code>.githooks/pre-commit</code> · <code>pre-push</code>(main·dev 직접 커밋·푸시 차단, 이름 규칙), <code>.github/workflows/pr-lint.yml</code>(head → base 조합과 제목). 릴리스 · 역병합 PR 이 merge commit 인 이유: squash 하면 dev 와 main 의 이력이 갈라져, 다음 릴리스 PR 에 같은 변경이 다시 나오거나 충돌한다.</p>
+
+<h3>6.3 GitHub 저장소 설정 (<code>.github/scripts/bootstrap-repo.sh</code>)</h3>
+<p>사용자가 저장소를 처음 만들 때 한 번 실행한다. 빈 시작 커밋 → dev 생성 → 푸시 → 아래 설정 → 라벨 · 마일스톤. Claude 는 이 스크립트를 실행할 수 없다(시작 커밋에만 훅 우회가 필요하기 때문).</p>
+<div class="grid2">
+<div class="card"><h4>저장소</h4><ul class="small">
+<li>기본 브랜치: <b>main</b> (작업 PR 은 <code>--base dev</code> 명시, dev 병합 시 <code>close-issues.yml</code> 이 이슈를 닫음)</li>
+<li>Squash merge · Merge commit 허용, Rebase merge 끔</li>
+<li>Squash/merge 커밋 메시지 = PR 제목과 본문</li>
+<li>병합 후 head 브랜치 자동 삭제</li>
+</ul></div>
+<div class="card"><h4>브랜치 규칙 (ruleset)</h4><ul class="small">
+<li><b>main</b>: PR 필수, 허용 병합 = merge commit, 삭제 · 강제 푸시 금지</li>
+<li><b>dev</b>: PR 필수, 허용 병합 = squash · merge commit, 삭제 · 강제 푸시 금지</li>
+<li>승인 인원 0명 (혼자 개발 — 자기 PR 은 승인할 수 없다)</li>
+<li>필수 CI 검사(lint · test-core · test-windows · pr-lint)는 M1 이후 <code>--with-checks</code> 로 켠다</li>
+</ul></div>
+</div>
+<div class="callout warn"><b class="t">비공개 저장소 + 무료 플랜</b>ruleset 이 동작하지 않는다. 스크립트는 경고만 내고 넘어가며, 그때는 로컬 git 훅과 Claude 훅(<code>guard-git.sh</code>)만으로 main · dev 를 지킨다.</div>
+
+<h3>6.4 버전 규칙 (SemVer)</h3>
+<div class="tbl-wrap"><table>
+<tr><th>릴리스 PR(dev → main)에 담긴 커밋</th><th>다음 버전</th></tr>
+<tr><td><code>feat(...)!:</code> 또는 footer <code>BREAKING CHANGE:</code></td><td>MAJOR (v1.0.0 전에는 MINOR)</td></tr>
+<tr><td><code>feat</code></td><td>MINOR</td></tr>
+<tr><td><code>fix</code>, <code>perf</code></td><td>PATCH</td></tr>
+<tr><td>그 외</td><td>버전 변화 없음 (다음 릴리스에 묻어 감)</td></tr>
+</table></div>
+<p>Breaking 의 기준: 저장 파일(<code>state.json</code>, <code>config.json</code>)을 이전 버전이 못 읽게 되거나, 기본 키 바인딩·셸 통합 동작이 바뀌는 경우.</p>
+</section><section id="commit"><h2><span class="no">7.</span>커밋 메시지 템플릿과 커밋 시점</h2>
+<h3>7.1 형식</h3>
+<pre data-lang="format"><code>&lt;type&gt;(&lt;scope&gt;)[!]: &lt;subject&gt;        ← 1행: 72자 이하, 한국어 명사형 종결, 마침표 없음
+                                     ← 2행: 반드시 빈 줄
+&lt;body&gt;                               ← 무엇을 · 왜 (어떻게는 코드가 말한다), 72자 줄바꿈
+                                     ← 빈 줄
+&lt;footer&gt;                             ← Closes: #12 · Refs: #12 · BREAKING CHANGE: ...</code></pre>
+<div class="grid2">
+<div class="card"><h4>type</h4>
+<table>
+<tr><th>type</th><th>뜻</th><th>버전</th></tr>
+<tr><td><code>feat</code></td><td>사용자 기능</td><td>MINOR</td></tr>
+<tr><td><code>fix</code></td><td>버그 수정</td><td>PATCH</td></tr>
+<tr><td><code>perf</code></td><td>성능</td><td>PATCH</td></tr>
+<tr><td><code>refactor</code></td><td>동작 그대로 구조 개선</td><td>—</td></tr>
+<tr><td><code>test</code></td><td>테스트만</td><td>—</td></tr>
+<tr><td><code>docs</code></td><td>문서 · ADR</td><td>—</td></tr>
+<tr><td><code>build</code></td><td>Gradle · 의존성 · 패키징</td><td>—</td></tr>
+<tr><td><code>ci</code></td><td>워크플로 · 훅</td><td>—</td></tr>
+<tr><td><code>chore</code></td><td>그 외 설정 · 정리</td><td>—</td></tr>
+<tr><td><code>revert</code></td><td>되돌리기</td><td>원본 따라</td></tr>
+</table></div>
+<div class="card"><h4>scope = 바뀐 모듈</h4>
+<table>
+<tr><th>scope</th><th>대상</th></tr>
+<tr><td><code>domain</code></td><td>tanager-domain</td></tr>
+<tr><td><code>app</code></td><td>tanager-application</td></tr>
+<tr><td><code>pty</code></td><td>tanager-adapter-pty</td></tr>
+<tr><td><code>persist</code></td><td>tanager-adapter-persistence</td></tr>
+<tr><td><code>platform-win</code></td><td>tanager-platform-windows</td></tr>
+<tr><td><code>platform-mac</code></td><td>tanager-platform-macos</td></tr>
+<tr><td><code>ui</code></td><td>tanager-ui-swing</td></tr>
+<tr><td><code>toolkit</code></td><td>tanager-adapter-toolkit-claude</td></tr>
+<tr><td><code>bootstrap</code></td><td>tanager-app</td></tr>
+<tr><td><code>build</code> <code>ci</code> <code>docs</code></td><td>빌드 · CI · 문서</td></tr>
+<tr><td><code>claude</code> <code>deps</code></td><td>.claude 설정 · 의존성</td></tr>
+<tr><td><code>release</code></td><td>릴리스 PR · 역병합 PR 제목 전용</td></tr>
+</table></div>
+</div>
+<h4>좋은 예</h4>
+<pre data-lang="commit"><code>feat(domain): 분할 레이아웃 비율 조정 추가
+
+tmux 의 resize-pane 처럼 포커스된 분할의 비율을 5% 단위로
+조정한다. 비율은 0.1~0.9 로 제한해 창이 사라지지 않게 한다.
+
+Closes: #12</code></pre>
+<h4>나쁜 예</h4>
+<ul>
+<li><code>update</code> — type·scope·내용 없음</li>
+<li><code>feat: 분할 기능 추가 및 포맷 정리 및 CI 수정.</code> — scope 없음, 관심사 3개, 마침표</li>
+<li><code>fix(ui): 버그 수정</code> — 무엇을 고쳤는지 알 수 없음</li>
+</ul>
+<p>설정: <code>git config commit.template .gitmessage</code> 로 편집기에 형식이 미리 채워지고, <code>.githooks/commit-msg</code> 가 헤더 형식·길이·빈 줄을 검사한다.</p>
+
+<h3>7.2 커밋 시점 (이 순서대로)</h3>
+<ol class="steps">
+<li><b class="h">RED — 실패 테스트 작성 → 커밋하지 않는다</b><span class="sub">빨간 상태의 커밋은 bisect 를 망가뜨린다.</span></li>
+<li><b class="h">GREEN — 테스트가 통과한 직후 커밋</b><span class="sub"><code>feat</code> 또는 <code>fix</code>. 테스트와 구현을 한 커밋에 담는다.</span></li>
+<li><b class="h">REFACTOR — 전체 테스트 GREEN 확인 후 별도 커밋</b><span class="sub"><code>refactor</code>. 동작 변경이 섞이면 안 된다. 바꿀 것이 없으면 생략.</span></li>
+<li><b class="h">빌드 · CI · 문서 · 설정 변경은 각각 따로 커밋</b><span class="sub"><code>build</code> / <code>ci</code> / <code>docs</code> / <code>chore</code>. 기능 커밋에 섞지 않는다.</span></li>
+<li><b class="h">푸시는 PR 을 열 준비가 됐을 때, 또는 하루 작업을 마칠 때</b><span class="sub">pre-push 훅이 <code>./gradlew check</code> 를 돌린다. 브랜치에 올린 뒤에는 rebase 후 <code>--force-with-lease</code> 만 허용.</span></li>
+</ol>
+<div class="callout bad"><b class="t">금지</b>RED 상태 커밋 · 포맷과 로직 혼합 · 리팩터링과 기능 혼합 · 빌드 산출물 커밋 · <code>--no-verify</code></div>
+</section><section id="pr"><h2><span class="no">8.</span>PR 절차와 템플릿</h2>
+<h3>8.1 역할 분담</h3>
+<div class="grid2">
+<div class="card"><h4>Claude 가 하는 것</h4><ul class="small">
+<li>이슈 생성(<code>/issue</code>) · 마일스톤 지정</li>
+<li>브랜치 · TDD 커밋(<code>/tdd</code>) · 푸시</li>
+<li>Draft PR · CI 대응 · 리뷰 후 <b>PR 에 리뷰 코멘트</b>(병합 권장/보류 권장) · Ready 전환(<code>/pr</code>)</li>
+<li><b>작업 PR 의 dev squash 병합</b> — CI green · 차단 0건 · "병합 권장"일 때만</li>
+<li>릴리스 PR dev → main — 포함된 PR · 리뷰 권고 · 남은 지적 · 수동 확인 항목을 모아 정리(<code>/release</code>)</li>
+<li>사용자 승인 후 태그 생성 · 푸시 · 마일스톤 닫기</li>
+</ul></div>
+<div class="card"><h4>사용자가 하는 것</h4><ul class="small">
+<li><b>마일스톤마다 한 번, 릴리스 PR 을 보고 main 병합 결정</b> — 사용자 확인 지점(ADR-0005)</li>
+<li>hotfix → main · 역병합 PR 병합, PR 닫기, Claude 가 넘긴(보류 권장) 작업 PR 결정</li>
+<li>태그 생성 · 태그 푸시 승인 (승인 창)</li>
+<li>저장소 최초 설정 <code>bootstrap-repo.sh</code></li>
+<li>Claude 가 확인할 수 없는 수동 확인(실제 화면 · 한글 입력 · 설치 파일)</li>
+</ul></div>
+</div>
+<p class="small muted">강제: <code>gh pr merge</code> 는 PR 의 base 가 dev 이고 <code>--squash</code> 일 때만 <code>guard-git.sh</code> 가 통과시킨다(base 를 조회). <code>gh pr close</code> · <code>gh pr review --approve</code> 는 <code>settings.json</code> deny + <code>guard-git.sh</code> 차단. 태그 · 태그 푸시 · <code>gh release create</code> 는 allow 규칙과 상관없이 승인 창(<code>guard-git.sh</code> 가 ask 반환).</p>
+<h3>8.2 작업 PR 절차 (이 순서대로)</h3>
+<ol class="steps">
+<li><b class="h">이슈 생성 — Claude</b><span class="sub"><code>/issue</code>. 템플릿 필드 · 인수 조건 Given/When/Then · SDD 요구사항 ID → 마일스톤(<code>.github/milestones.json</code>).</span></li>
+<li><b class="h">브랜치 생성 — Claude</b><span class="sub"><code>git switch dev &amp;&amp; git pull --ff-only</code> → <code>git switch -c feat/12-split-pane-resize</code></span></li>
+<li><b class="h">TDD 사이클 커밋 반복 — Claude</b><span class="sub">§7.2 순서. <code>/tdd 12 분할 비율 조정</code>.</span></li>
+<li><b class="h">dev 최신화 · 로컬 전체 검사 — Claude</b><span class="sub"><code>git rebase origin/dev</code> → <code>./gradlew check</code></span></li>
+<li><b class="h">푸시 → Draft PR (base dev) — Claude</b><span class="sub"><code>/pr</code>. 본문 첫 줄 "병합 방법: Squash and merge", 템플릿 1~9절, 이슈와 같은 마일스톤.</span></li>
+<li><b class="h">CI 전부 green — Claude</b><span class="sub">lint · test-core · test-windows · pr-lint. 실패하면 고쳐서 다시 푸시.</span></li>
+<li><b class="h">리뷰 → PR 에 리뷰 코멘트 — Claude</b><span class="sub">reviewer 서브에이전트 + <code>/code-review</code>. 차단 지적은 고친 뒤, 최종 결과와 권고를 <code>gh pr review --comment</code> 로 남긴다.</span></li>
+<li><b class="h">Ready for review — Claude</b><span class="sub">Draft 해제.</span></li>
+<li><b class="h">Squash merge — Claude (조건부)</b><span class="sub">CI green · 차단 0건 · 권고 "병합 권장"이면 <code>gh pr merge &lt;n&gt; --squash --delete-branch</code>. PR 제목이 dev 의 커밋 헤더가 된다. 조건이 하나라도 안 맞으면 병합하지 않고 사용자에게 넘긴다.</span></li>
+</ol>
+<h3>8.3 릴리스 절차 (마일스톤이 끝났을 때)</h3>
+<ol class="steps">
+<li><b class="h">준비 확인 — Claude</b><span class="sub"><code>/release</code>: 마일스톤의 열린 이슈 0개 · dev CI green · main 이 dev 의 조상인지(역병합 누락 확인).</span></li>
+<li><b class="h">릴리스 PR dev → main — Claude</b><span class="sub">제목 <code>chore(release): v0.3.0</code>, 본문 첫 줄 "병합 방법: Create a merge commit", git-cliff 변경 내역, 호환성, WSL 통합 테스트 결과. 릴리스 리뷰 코멘트.</span></li>
+<li><b class="h">사용자 확인 지점: merge commit 으로 병합 또는 보류 — 사용자</b><span class="sub">마일스톤의 모든 작업 PR 을 여기서 한 번에 본다. 본문의 "포함된 PR" 표와 "사용자가 직접 확인할 것" 체크박스.</span></li>
+<li><b class="h">태그 — Claude, 승인 후</b><span class="sub">main 에서 <code>git tag -a v0.3.0</code> → <code>git push origin v0.3.0</code> (각각 승인 창) → release 워크플로 → 마일스톤 닫기.</span></li>
+</ol>
+<h3>8.4 긴급 수정 (hotfix)</h3>
+<p>배포된 버전의 치명적 버그만. <code>hotfix/31-restore-crash</code> 를 <b>main</b> 에서 갈라 8.2 와 같이 진행하되 base 는 main, 병합 방법은 merge commit. 병합되면 패치 태그(<code>v0.3.1</code>)를 붙이고, Claude 가 <b>역병합 PR</b>(main → dev, <code>chore(release): v0.3.1 역병합</code>)을 연다.</p>
+<h3>8.5 PR 템플릿 구성 (<code>.github/PULL_REQUEST_TEMPLATE.md</code>)</h3>
+<div class="tbl-wrap"><table>
+<tr><th>절</th><th>내용</th></tr>
+<tr><td>1. 요약</td><td>무엇을 왜, 1~3문장</td></tr>
+<tr><td>2. 관련 이슈</td><td><code>Closes: #번호</code></td></tr>
+<tr><td>3. 변경 유형</td><td>feat · fix · perf · refactor · 기타 · BREAKING CHANGE 체크</td></tr>
+<tr><td>4. 변경 사항</td><td>모듈별 목록</td></tr>
+<tr><td>5. 설계 영향</td><td>포트 변경 · 의존 방향 · 저장 스키마(schemaVersion) · ADR</td></tr>
+<tr><td>6. 테스트</td><td>TDD 여부, <code>./gradlew check</code>, 수동 확인 환경(Windows PowerShell 5.1 / cmd / WSL / macOS)과 절차</td></tr>
+<tr><td>7. 스크린샷</td><td>UI 변경 시 전·후</td></tr>
+<tr><td>8. 셀프 체크리스트</td><td>제목 형식, 브랜치 이름, base(dev · hotfix 는 main) 최신 rebase, 도메인 순수성, null 금지, /code-review, 문서 갱신</td></tr>
+<tr><td>9. 리뷰어 참고</td><td>집중해서 볼 곳, 알려진 한계</td></tr>
+</table></div>
+</section><section id="ci"><h2><span class="no">9.</span>CI/CD</h2>
+<figure class="figure"><svg viewBox="0 0 880 370" style="min-width:880px" role="img" aria-label="CI/CD 파이프라인" xmlns="http://www.w3.org/2000/svg" font-family="'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif"><title>CI/CD 파이프라인</title><style>text{font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif}</style><defs><marker id="ah5" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#374151"/></marker></defs><text x="20" y="16" font-size="13" font-weight="700" fill="#1e40af" text-anchor="start" font-family="'JetBrains Mono','D2Coding','Consolas','Malgun Gothic',monospace" dominant-baseline="middle">ci.yml</text><rect x="20" y="66" width="140" height="56" rx="8" fill="#f8fafc" stroke="#94a3b8" stroke-width="1.5"/><foreignObject x="20" y="66" width="140" height="56"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:4px 10px;line-height:1.3;word-break:keep-all;overflow-wrap:break-word;overflow:hidden;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif"><div style="font-size:13px;font-weight:700;color:#111827;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">트리거</div><div style="font-size:12px;color:#4b5563;margin-top:2px;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">PR → dev · main<br>push dev · main</div></div></foreignObject><rect x="210" y="66" width="150" height="56" rx="8" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/><foreignObject x="210" y="66" width="150" height="56"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:4px 10px;line-height:1.3;word-break:keep-all;overflow-wrap:break-word;overflow:hidden;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif"><div style="font-size:13px;font-weight:700;color:#111827;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">1. lint</div><div style="font-size:12px;color:#4b5563;margin-top:2px;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">spotlessCheck · ubuntu</div></div></foreignObject><rect x="420" y="30" width="200" height="56" rx="8" fill="#ecfdf5" stroke="#047857" stroke-width="1.5"/><foreignObject x="420" y="30" width="200" height="56"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:4px 10px;line-height:1.3;word-break:keep-all;overflow-wrap:break-word;overflow:hidden;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif"><div style="font-size:13px;font-weight:700;color:#111827;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">2a. test-core</div><div style="font-size:12px;color:#4b5563;margin-top:2px;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">domain · app · ArchUnit · JaCoCo</div></div></foreignObject><rect x="420" y="106" width="200" height="56" rx="8" fill="#ecfdf5" stroke="#047857" stroke-width="1.5"/><foreignObject x="420" y="106" width="200" height="56"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:4px 10px;line-height:1.3;word-break:keep-all;overflow-wrap:break-word;overflow:hidden;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif"><div style="font-size:13px;font-weight:700;color:#111827;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">2b. test-windows</div><div style="font-size:12px;color:#4b5563;margin-top:2px;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">check -PexcludeTags=wsl</div></div></foreignObject><rect x="680" y="66" width="180" height="56" rx="8" fill="#f5f3ff" stroke="#6d28d9" stroke-width="1.5"/><foreignObject x="680" y="66" width="180" height="56"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:4px 10px;line-height:1.3;word-break:keep-all;overflow-wrap:break-word;overflow:hidden;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif"><div style="font-size:13px;font-weight:700;color:#111827;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">3. package-smoke</div><div style="font-size:12px;color:#4b5563;margin-top:2px;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">dev · main push<br>app-image</div></div></foreignObject><text x="20" y="190" font-size="13" font-weight="700" fill="#1e40af" text-anchor="start" font-family="'JetBrains Mono','D2Coding','Consolas','Malgun Gothic',monospace" dominant-baseline="middle">pr-lint.yml</text><rect x="20" y="204" width="140" height="50" rx="8" fill="#f8fafc" stroke="#94a3b8" stroke-width="1.5"/><foreignObject x="20" y="204" width="140" height="50"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:4px 10px;line-height:1.3;word-break:keep-all;overflow-wrap:break-word;overflow:hidden;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif"><div style="font-size:13px;font-weight:700;color:#111827;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">트리거</div><div style="font-size:12px;color:#4b5563;margin-top:2px;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">PR 열기·수정</div></div></foreignObject><rect x="210" y="204" width="410" height="50" rx="8" fill="#fffbeb" stroke="#b45309" stroke-width="1.5"/><foreignObject x="210" y="204" width="410" height="50"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:4px 10px;line-height:1.3;word-break:keep-all;overflow-wrap:break-word;overflow:hidden;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif"><div style="font-size:13px;font-weight:700;color:#111827;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">pr-lint</div><div style="font-size:12px;color:#4b5563;margin-top:2px;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">PR 제목 · 브랜치 이름 · head→base 조합 · spike/ 병합 차단</div></div></foreignObject><text x="20" y="282" font-size="13" font-weight="700" fill="#1e40af" text-anchor="start" font-family="'JetBrains Mono','D2Coding','Consolas','Malgun Gothic',monospace" dominant-baseline="middle">release.yml</text><rect x="20" y="296" width="140" height="56" rx="8" fill="#f8fafc" stroke="#94a3b8" stroke-width="1.5"/><foreignObject x="20" y="296" width="140" height="56"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:4px 10px;line-height:1.3;word-break:keep-all;overflow-wrap:break-word;overflow:hidden;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif"><div style="font-size:13px;font-weight:700;color:#111827;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">트리거</div><div style="font-size:12px;color:#4b5563;margin-top:2px;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">태그 vX.Y.Z push</div></div></foreignObject><rect x="210" y="296" width="260" height="56" rx="8" fill="#f5f3ff" stroke="#6d28d9" stroke-width="1.5"/><foreignObject x="210" y="296" width="260" height="56"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:4px 10px;line-height:1.3;word-break:keep-all;overflow-wrap:break-word;overflow:hidden;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif"><div style="font-size:13px;font-weight:700;color:#111827;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">package-windows</div><div style="font-size:12px;color:#4b5563;margin-top:2px;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">main 위 태그인지 확인 → check → zip · msi</div></div></foreignObject><rect x="530" y="296" width="240" height="56" rx="8" fill="#f5f3ff" stroke="#6d28d9" stroke-width="1.5"/><foreignObject x="530" y="296" width="240" height="56"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:4px 10px;line-height:1.3;word-break:keep-all;overflow-wrap:break-word;overflow:hidden;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif"><div style="font-size:13px;font-weight:700;color:#111827;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">publish</div><div style="font-size:12px;color:#4b5563;margin-top:2px;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">git-cliff 노트 → GitHub Release</div></div></foreignObject><g class="arrows"><path d="M 166.0 94.0 L 204.0 94.0" fill="none" stroke="#374151" stroke-width="1.6" marker-end="url(#ah5)"/><path d="M 366.0 85.6 C 390.0 85.0, 390.0 58.0, 414.0 58.0" fill="none" stroke="#374151" stroke-width="1.6" marker-end="url(#ah5)"/><path d="M 366.0 102.4 C 390.0 103.0, 390.0 134.0, 414.0 134.0" fill="none" stroke="#374151" stroke-width="1.6" marker-end="url(#ah5)"/><path d="M 626.0 58.0 C 650.0 58.0, 650.0 85.0, 674.0 85.6" fill="none" stroke="#374151" stroke-width="1.6" marker-end="url(#ah5)"/><path d="M 626.0 134.0 C 650.0 134.0, 650.0 103.0, 674.0 102.4" fill="none" stroke="#374151" stroke-width="1.6" marker-end="url(#ah5)"/><path d="M 166.0 229.0 L 204.0 229.0" fill="none" stroke="#374151" stroke-width="1.6" marker-end="url(#ah5)"/><path d="M 166.0 324.0 L 204.0 324.0" fill="none" stroke="#374151" stroke-width="1.6" marker-end="url(#ah5)"/><path d="M 476.0 324.0 L 524.0 324.0" fill="none" stroke="#374151" stroke-width="1.6" marker-end="url(#ah5)"/></g><g class="arrow-labels"></g></svg><figcaption>그림 5. 주요 워크플로 3개(+ 마일스톤 동기화). ci 의 2a·2b 는 병렬, 3 은 dev · main 에 push 될 때만 돈다.</figcaption></figure>
+<div class="tbl-wrap"><table>
+<tr><th>워크플로 · 잡</th><th>러너</th><th>명령</th><th>실패하면</th></tr>
+<tr><td>ci · 0. gate</td><td>ubuntu</td><td><code>gradlew</code> 가 없으면(M1 전) 아래 Gradle 잡을 실패 대신 건너뜀</td><td>—</td></tr>
+<tr><td>ci · 1. lint</td><td>ubuntu</td><td><code>./gradlew spotlessCheck</code></td><td>로컬에서 <code>spotlessApply</code></td></tr>
+<tr><td>ci · 2a. test-core</td><td>ubuntu</td><td>domain · application · architecture-test + JaCoCo 게이트(domain 90%, application 80%)</td><td>규칙 위반 또는 커버리지 부족</td></tr>
+<tr><td>ci · 2b. test-windows</td><td>windows</td><td><code>./gradlew check -PexcludeTags=wsl</code> (ConPTY · PowerShell 통합 포함)</td><td>Windows 전용 동작 회귀</td></tr>
+<tr><td>ci · 3. package-smoke</td><td>windows</td><td><code>:tanager-app:jpackageImage</code> (dev · main push 만)</td><td>패키징 설정 깨짐</td></tr>
+<tr><td>pr-lint</td><td>ubuntu</td><td>PR 제목 · 브랜치 이름 · head → base 조합(작업 → dev, dev · hotfix → main, main → dev 역병합), spike 차단</td><td>제목 · 브랜치 · base 수정</td></tr>
+<tr><td>release</td><td>ubuntu → windows → ubuntu</td><td>태그가 main 위인지 확인 → check → app-image zip → msi → git-cliff → <code>gh release create</code></td><td>태그 삭제 후 수정·재태그 (사용자 결정)</td></tr>
+<tr><td>milestones</td><td>ubuntu</td><td><code>.github/milestones.json</code> 이 dev 에 병합되면 GitHub 마일스톤 생성 · 갱신</td><td>JSON 형식 확인</td></tr>
+<tr><td>close-issues</td><td>ubuntu</td><td>dev push 때 커밋 메시지(= PR 제목+본문)의 <code>Closes: #N</code> 이슈를 닫음 (기본 브랜치가 main 이라 GitHub 자동 닫기가 dev 에서는 동작하지 않음. push 트리거라 워크플로를 처음 넣는 PR 에서도 동작)</td><td>이슈를 손으로 닫기</td></tr>
+</table></div>
+<h3>9.1 로컬 검사와 CI 의 대응</h3>
+<div class="tbl-wrap"><table>
+<tr><th>시점</th><th>로컬 (git 훅)</th><th>CI</th></tr>
+<tr><td>커밋</td><td><code>pre-commit</code>: main · dev 직접 커밋 차단 + <code>spotlessCheck</code><br><code>commit-msg</code>: 헤더 형식</td><td>—</td></tr>
+<tr><td>푸시</td><td><code>pre-push</code>: main · dev 직접 푸시 차단 + 브랜치 이름 + <code>./gradlew check</code></td><td>ci (lint → test)</td></tr>
+<tr><td>PR</td><td>—</td><td>pr-lint (제목 = squash 커밋 헤더, head → base)</td></tr>
+<tr><td>태그</td><td>—</td><td>release</td></tr>
+</table></div>
+<div class="callout warn"><b class="t">WSL 통합 테스트는 CI 에서 돌지 않는다</b>
+GitHub 호스티드 Windows 러너에는 WSL 배포판이 없다. <code>@Tag("wsl")</code> 테스트는 릴리스 태그 전에 개발 PC 에서 <code>cmd.exe /c gradlew.bat :tanager-platform-windows:test</code> 로 직접 돌리고, 결과를 릴리스 PR 에 적는다. 필요해지면 self-hosted 러너를 추가한다.</div>
+<p class="small muted">빌드 스크립트가 지켜야 할 약속: <code>-PexcludeTags=&lt;태그,…&gt;</code> 로 JUnit 태그 제외, <code>-Pversion=</code> 으로 버전 주입, <code>jpackageImage</code> · <code>jpackageInstaller</code> 태스크 제공 (M1 에서 구현).</p>
+</section><section id="claude"><h2><span class="no">10.</span>.claude 구성</h2>
+<p>이 프로젝트와 관련된 Claude Code 설정은 모두 <code>.claude/</code> 에 모았다. 팀이 공유하는 것은 커밋하고, 개인 설정은 <code>settings.local.json</code> (gitignore) 에 둔다.</p>
+<pre data-lang="tree"><code>.claude/
+├─ CLAUDE.md                  프로젝트 개요 · 명령 · 큰 흐름 · 함정 (항상 로드)
+├─ settings.json              권한(allow / ask / deny) + 훅 등록 (공유)
+├─ settings.local.json        개인 설정 · 에이전트 팀 켜기 (gitignore)
+├─ rules/
+│  ├─ git.md                  브랜치 · 커밋 · PR 순서 (항상 로드)
+│  ├─ architecture.md         계층 · 컨텍스트 · 스레드 모델 (항상 로드)
+│  ├─ java-style.md           paths: **/*.java        → Java 파일을 열 때 로드
+│  ├─ testing.md              paths: **/src/test/**   → 테스트 파일을 열 때 로드
+│  └─ platform.md             paths: platform-*, adapter-pty → 해당 모듈을 열 때 로드
+├─ agents/
+│  ├─ architect.md            설계 · 포트 · ADR (opus, 코드 안 씀)
+│  ├─ test-author.md          RED (src/test 만 쓰기 — 훅으로 강제)
+│  ├─ implementer.md          GREEN · REFACTOR · 커밋
+│  ├─ reviewer.md             읽기 전용 리뷰 (opus)
+│  └─ platform-expert.md      ConPTY · WSL · PowerShell · macOS
+├─ skills/
+│  ├─ issue/SKILL.md          /issue &lt;설명&gt;        — 템플릿 · 인수 조건 · 마일스톤으로 이슈 생성
+│  ├─ tdd/SKILL.md            /tdd [이슈] &lt;설명&gt;   — 에이전트 4개 순서대로 → /pr
+│  ├─ commit/SKILL.md         /commit             — 관심사별 분리 커밋
+│  ├─ pr/SKILL.md             /pr                 — rebase → check → Draft PR(→ dev) → CI → 리뷰 코멘트 → Ready
+│  ├─ release/SKILL.md        /release [vX.Y.Z]   — 릴리스 PR(dev → main) → 승인 후 태그 · 마일스톤 닫기
+│  └─ adr/SKILL.md            /adr &lt;제목&gt;          — ADR 작성
+└─ hooks/
+   ├─ guard-git.sh            차단: --no-verify · 강제 푸시 · main/dev 커밋·푸시 · PR 병합/닫기/승인
+   │                          승인 창: 태그 생성 · 태그 푸시 · gh release create
+   └─ tests-only.sh           test-author 의 src/test 밖 수정 차단</code></pre>
+<h3>10.1 무엇이 언제 로드되나</h3>
+<div class="tbl-wrap"><table>
+<tr><th>파일</th><th>로드 시점</th><th>내용 원칙</th></tr>
+<tr><td><code>CLAUDE.md</code></td><td>세션 시작</td><td>코드만 봐서는 알기 어려운 것만. 규칙 본문은 rules 로</td></tr>
+<tr><td><code>rules/*.md</code> (paths 없음)</td><td>세션 시작</td><td>항상 지켜야 하는 Git · 아키텍처 규칙</td></tr>
+<tr><td><code>rules/*.md</code> (paths 있음)</td><td>일치하는 파일을 읽거나 고칠 때</td><td>언어·영역별 세부 규칙 (컨텍스트 절약)</td></tr>
+<tr><td><code>agents/*.md</code></td><td>위임할 때</td><td>역할 하나, 도구 최소, 출력 형식 고정</td></tr>
+<tr><td><code>skills/*/SKILL.md</code></td><td><code>/이름</code> 호출 또는 Claude 가 필요할 때 호출</td><td>순서가 중요한 절차</td></tr>
+<tr><td><code>settings.json</code> 훅</td><td>해당 도구 호출 직전</td><td>규칙을 "부탁"이 아니라 "차단"으로</td></tr>
+</table></div>
+<h3>10.2 권한 요약 (<code>settings.json</code>)</h3>
+<div class="grid3">
+<div class="card"><h4><span class="tag could">allow</span></h4><p><code>./gradlew *</code>, git 조회 · 브랜치 · add · commit · fetch · <code>pull --ff-only</code> · <code>rebase origin/dev|main</code> · 작업 브랜치 push(<code>--force-with-lease</code> 포함), <code>gh issue create/comment/edit</code>, <code>gh pr create/edit/comment/review/ready</code>, <code>gh run</code>, 마일스톤 API</p></div>
+<div class="card"><h4><span class="tag should">ask</span></h4><p><code>git tag</code>, 태그 푸시(<code>origin v*</code> · <code>--tags</code>), <code>gh release create</code>, <code>git rebase</code>(그 외), <code>git reset --hard</code></p></div>
+<div class="card"><h4><span class="tag must">deny</span></h4><p><code>git push --force / -f</code>, <code>gh pr close</code>, <code>gh pr review --approve</code>, <code>gh release delete</code> (+ 훅: main · dev 직접 커밋 · 푸시, main 으로 가는 PR 병합, squash 외 병합)</p></div>
+</div>
+</section><section id="agents"><h2><span class="no">11.</span>에이전트 구성 (서브에이전트 · 팀)</h2>
+<h3>11.1 작업 크기에 따른 선택</h3>
+<div class="tbl-wrap"><table>
+<tr><th>작업</th><th>방식</th><th>이유</th></tr>
+<tr><td>오타, 설정 한 줄, 한 파일 수정</td><td>메인 세션 직접</td><td>위임 비용이 더 큼</td></tr>
+<tr><td>기능 하나 (1~2 모듈)</td><td><b>서브에이전트 순차</b> — <code>/tdd</code></td><td>역할 분리로 TDD 를 강제, 메인 컨텍스트 절약</td></tr>
+<tr><td>에픽 (3개 이상 모듈, 포트 확정 후 병렬 가능)</td><td><b>에이전트 팀</b></td><td>모듈별 병렬 구현. 비용이 크므로 필요할 때만</td></tr>
+</table></div>
+<h3>11.2 서브에이전트</h3>
+<div class="tbl-wrap"><table>
+<tr><th>이름</th><th>모델</th><th>도구</th><th>역할</th><th>산출물</th></tr>
+<tr><td><code>architect</code></td><td>opus</td><td>읽기 + docs/adr 쓰기</td><td>컨텍스트 배치, 포트 시그니처, 도메인 타입, ADR</td><td>설계 요약 + Given/When/Then 목록</td></tr>
+<tr><td><code>test-author</code></td><td>sonnet</td><td>읽기 · 쓰기(src/test 만, 훅 강제) · Bash</td><td>RED: 실패 테스트와 Fake</td><td>테스트 파일 + 실패 로그</td></tr>
+<tr><td><code>implementer</code></td><td>inherit</td><td>읽기 · 쓰기 · Bash</td><td>GREEN · REFACTOR, 테스트 기대값 수정 금지</td><td>커밋 ①(②)</td></tr>
+<tr><td><code>reviewer</code></td><td>opus</td><td>읽기 · Bash</td><td>의존 방향, 순수성, TDD, 플랫폼, 스키마, 커밋, 동시성 점검</td><td>심각도별 지적 목록</td></tr>
+<tr><td><code>platform-expert</code></td><td>inherit</td><td>읽기 · 쓰기 · Bash</td><td>ConPTY · wsl.exe · PowerShell · macOS · jpackage</td><td>플랫폼 모듈 구현, 미검증 항목 보고</td></tr>
+</table></div>
+<figure class="figure"><svg viewBox="0 0 880 280" style="min-width:880px" role="img" aria-label="서브에이전트 흐름 (/tdd)" xmlns="http://www.w3.org/2000/svg" font-family="'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif"><title>서브에이전트 흐름 (/tdd)</title><style>text{font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif}</style><defs><marker id="ah6" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#374151"/></marker></defs><rect x="10" y="120" width="120" height="64" rx="8" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/><foreignObject x="10" y="120" width="120" height="64"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:4px 10px;line-height:1.3;word-break:keep-all;overflow-wrap:break-word;overflow:hidden;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif"><div style="font-size:14px;font-weight:700;color:#111827;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">메인 세션</div><div style="font-size:12px;color:#4b5563;margin-top:2px;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">/tdd 지휘</div></div></foreignObject><rect x="146" y="10" width="150" height="66" rx="8" fill="#f5f3ff" stroke="#6d28d9" stroke-width="1.5"/><foreignObject x="146" y="10" width="150" height="66"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:4px 10px;line-height:1.3;word-break:keep-all;overflow-wrap:break-word;overflow:hidden;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif"><div style="font-size:14px;font-weight:700;color:#111827;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">architect</div><div style="font-size:12px;color:#4b5563;margin-top:2px;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">opus · 읽기 전용 + ADR</div></div></foreignObject><rect x="250" y="120" width="120" height="64" rx="8" fill="#fef2f2" stroke="#b91c1c" stroke-width="1.5"/><foreignObject x="250" y="120" width="120" height="64"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:4px 10px;line-height:1.3;word-break:keep-all;overflow-wrap:break-word;overflow:hidden;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif"><div style="font-size:14px;font-weight:700;color:#111827;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">test-author</div><div style="font-size:12px;color:#4b5563;margin-top:2px;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">RED · src/test 만</div></div></foreignObject><rect x="490" y="120" width="120" height="64" rx="8" fill="#ecfdf5" stroke="#047857" stroke-width="1.5"/><foreignObject x="490" y="120" width="120" height="64"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:4px 10px;line-height:1.3;word-break:keep-all;overflow-wrap:break-word;overflow:hidden;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif"><div style="font-size:14px;font-weight:700;color:#111827;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">implementer</div><div style="font-size:12px;color:#4b5563;margin-top:2px;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">GREEN · REFACTOR</div></div></foreignObject><rect x="730" y="120" width="120" height="64" rx="8" fill="#fffbeb" stroke="#b45309" stroke-width="1.5"/><foreignObject x="730" y="120" width="120" height="64"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:4px 10px;line-height:1.3;word-break:keep-all;overflow-wrap:break-word;overflow:hidden;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif"><div style="font-size:14px;font-weight:700;color:#111827;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">reviewer</div><div style="font-size:12px;color:#4b5563;margin-top:2px;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">opus · 읽기 전용</div></div></foreignObject><g class="arrows"><path d="M 136.0 152.0 L 244.0 152.0" fill="none" stroke="#374151" stroke-width="1.6" marker-end="url(#ah6)"/><path d="M 70.0 114.0 C 70.0 42.0, 70.0 42.0, 140.0 43.0" fill="none" stroke="#374151" stroke-width="1.6" marker-end="url(#ah6)"/><path d="M 302.0 43.0 C 310.0 42.0, 310.0 42.0, 310.0 114.0" fill="none" stroke="#374151" stroke-width="1.6" marker-end="url(#ah6)"/><path d="M 376.0 152.0 L 484.0 152.0" fill="none" stroke="#374151" stroke-width="1.6" marker-end="url(#ah6)"/><path d="M 616.0 152.0 L 724.0 152.0" fill="none" stroke="#374151" stroke-width="1.6" marker-end="url(#ah6)"/><path d="M 790.0 190.0 C 790.0 262.0, 310.0 262.0, 310.0 190.0" fill="none" stroke="#374151" stroke-width="1.6" marker-end="url(#ah6)"/></g><g class="arrow-labels"><rect x="159.1" y="142.0" width="61.8" height="20" rx="2" fill="white"/><text x="190.0" y="152.0" font-size="12" fill="#374151" text-anchor="middle" dominant-baseline="middle" font-family="'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">행위 목록</text><rect x="15.2" y="74.0" width="93.5" height="20" rx="2" fill="white"/><text x="62.0" y="84.0" font-size="12" fill="#374151" text-anchor="middle" dominant-baseline="middle" font-family="'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">새 포트 필요 시</text><rect x="316.2" y="74.0" width="111.5" height="20" rx="2" fill="white"/><text x="372.0" y="84.0" font-size="12" fill="#374151" text-anchor="middle" dominant-baseline="middle" font-family="'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">Given/When/Then</text><rect x="393.1" y="142.0" width="73.8" height="20" rx="2" fill="white"/><text x="430.0" y="152.0" font-size="12" fill="#374151" text-anchor="middle" dominant-baseline="middle" font-family="'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">실패 테스트</text><rect x="644.1" y="142.0" width="51.8" height="20" rx="2" fill="white"/><text x="670.0" y="152.0" font-size="12" fill="#374151" text-anchor="middle" dominant-baseline="middle" font-family="'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">커밋 ①②</text><rect x="444.9" y="237.0" width="210.2" height="20" rx="2" fill="white"/><text x="550.0" y="247.0" font-size="12" fill="#374151" text-anchor="middle" dominant-baseline="middle" font-family="'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">차단 지적 → RED 또는 GREEN 으로</text></g></svg><figcaption>그림 6. /tdd 한 번의 흐름. 메인 세션이 각 단계 결과를 받아 다음 에이전트에 넘긴다.</figcaption></figure>
+<h3>11.3 에이전트 팀</h3>
+<p>Claude Code 의 에이전트 팀은 <b>실험 기능이며 기본으로 꺼져 있다</b>. 메인 세션이 리드가 되어 팀원을 띄우고, 팀원은 <code>.claude/agents/</code> 의 정의를 이름으로 재사용할 수 있다.</p>
+<figure class="figure"><svg viewBox="0 0 880 260" style="min-width:880px" role="img" aria-label="에이전트 팀 구성" xmlns="http://www.w3.org/2000/svg" font-family="'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif"><title>에이전트 팀 구성</title><style>text{font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif}</style><defs><marker id="ah7" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#374151"/></marker></defs><rect x="310" y="14" width="260" height="62" rx="8" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/><foreignObject x="310" y="14" width="260" height="62"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:4px 10px;line-height:1.3;word-break:keep-all;overflow-wrap:break-word;overflow:hidden;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif"><div style="font-size:14px;font-weight:700;color:#111827;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">리드 = 메인 세션</div><div style="font-size:12px;color:#4b5563;margin-top:2px;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">포트 고정 → 작업 분할 → 통합 → ./gradlew check</div></div></foreignObject><rect x="20" y="140" width="240" height="74" rx="8" fill="#ecfdf5" stroke="#047857" stroke-width="1.5"/><foreignObject x="20" y="140" width="240" height="74"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:4px 10px;line-height:1.3;word-break:keep-all;overflow-wrap:break-word;overflow:hidden;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif"><div style="font-size:14px;font-weight:700;color:#111827;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">domain-dev</div><div style="font-size:12px;color:#4b5563;margin-top:2px;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">implementer 정의 재사용<br>tanager-domain · application</div></div></foreignObject><rect x="320" y="140" width="240" height="74" rx="8" fill="#ecfdf5" stroke="#047857" stroke-width="1.5"/><foreignObject x="320" y="140" width="240" height="74"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:4px 10px;line-height:1.3;word-break:keep-all;overflow-wrap:break-word;overflow:hidden;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif"><div style="font-size:14px;font-weight:700;color:#111827;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">platform-dev</div><div style="font-size:12px;color:#4b5563;margin-top:2px;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">platform-expert 정의 재사용<br>platform-windows · adapter-pty</div></div></foreignObject><rect x="620" y="140" width="240" height="74" rx="8" fill="#ecfdf5" stroke="#047857" stroke-width="1.5"/><foreignObject x="620" y="140" width="240" height="74"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:4px 10px;line-height:1.3;word-break:keep-all;overflow-wrap:break-word;overflow:hidden;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif"><div style="font-size:14px;font-weight:700;color:#111827;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">ui-dev</div><div style="font-size:12px;color:#4b5563;margin-top:2px;font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">implementer 정의 재사용<br>tanager-ui-swing</div></div></foreignObject><text x="140.0" y="232" font-size="12" font-weight="400" fill="#4b5563" text-anchor="middle" font-family="'JetBrains Mono','D2Coding','Consolas','Malgun Gothic',monospace" dominant-baseline="middle">feat/40-restore--domain</text><text x="440.0" y="232" font-size="12" font-weight="400" fill="#4b5563" text-anchor="middle" font-family="'JetBrains Mono','D2Coding','Consolas','Malgun Gothic',monospace" dominant-baseline="middle">feat/40-restore--platform</text><text x="740.0" y="232" font-size="12" font-weight="400" fill="#4b5563" text-anchor="middle" font-family="'JetBrains Mono','D2Coding','Consolas','Malgun Gothic',monospace" dominant-baseline="middle">feat/40-restore--ui</text><g class="arrows"><path d="M 362.0 82.0 L 140.0 134.0" fill="none" stroke="#374151" stroke-width="1.6" marker-end="url(#ah7)"/><path d="M 440.0 82.0 L 440.0 134.0" fill="none" stroke="#374151" stroke-width="1.6" marker-end="url(#ah7)"/><path d="M 518.0 82.0 L 740.0 134.0" fill="none" stroke="#374151" stroke-width="1.6" marker-end="url(#ah7)"/></g><g class="arrow-labels"><rect x="363.2" y="98.0" width="153.5" height="20" rx="2" fill="white"/><text x="440.0" y="108.0" font-size="12" fill="#374151" text-anchor="middle" dominant-baseline="middle" font-family="'Pretendard','Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">모듈 단위 소유권으로 할당</text></g></svg><figcaption>그림 7. 팀 모드. 팀원마다 worktree 하위 브랜치를 쓰고, 리드가 부모 브랜치로 합친 뒤 reviewer 를 돌린다.</figcaption></figure>
+<h4>켜는 법 (개인 설정)</h4>
+<pre data-lang="json"><code>// .claude/settings.local.json  (커밋하지 않음)
+{
+  &quot;env&quot;: { &quot;CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS&quot;: &quot;1&quot; }
+}</code></pre>
+<h4>팀 운영 순서</h4>
+<ol class="steps">
+<li><b class="h">architect 가 포트를 먼저 고정</b><span class="sub">팀원 사이의 계약. 포트 변경은 리드만 한다.</span></li>
+<li><b class="h">리드가 모듈 단위로 작업을 나눔</b><span class="sub">한 모듈은 한 팀원만 고친다 → 파일 충돌 방지.</span></li>
+<li><b class="h">팀원별 worktree · 하위 브랜치</b><span class="sub"><code>feat/40-restore--domain</code> 등. 각자 TDD 로 커밋.</span></li>
+<li><b class="h">리드가 부모 브랜치로 병합 후 <code>./gradlew check</code></b><span class="sub">충돌·계약 위반은 리드가 해결.</span></li>
+<li><b class="h">reviewer → <code>/pr</code></b><span class="sub">부모 브랜치 → dev PR. 이후는 §8.2 절차와 같다.</span></li>
+</ol>
+<div class="callout warn"><b class="t">제약</b>
+세션 하나에 팀 하나, 중첩 팀 없음, in-process 팀원은 세션 재개가 안 되고, 팀원별 권한 모드를 따로 줄 수 없다. 토큰 사용량이 크게 늘어난다. 팀 기능을 켜 두면 Claude 가 서브에이전트 대신 팀원을 띄울 수 있으므로 쓰지 않을 때는 끈다.</div>
+</section><section id="start"><h2><span class="no">12.</span>시작 순서</h2>
+<ol class="steps">
+<li><b class="h">저장소 준비 (완료)</b><span class="sub"><code>git init -b main</code>, 이 문서의 파일들, <code>core.hooksPath=.githooks</code>, <code>commit.template=.gitmessage</code>. 아직 커밋 없음.</span></li>
+<li><b class="h">GitHub 빈 저장소 생성 → <code>bootstrap-repo.sh</code> — 사용자</b><span class="sub"><code>! .github/scripts/bootstrap-repo.sh &lt;owner/repo&gt;</code>: 빈 시작 커밋(main) → dev → 푸시 → 기본 브랜치 main · 병합 방법 · ruleset · 라벨 · 마일스톤(§6.3).</span></li>
+<li><b class="h">부트스트랩 PR — Claude</b><span class="sub">이슈 → <code>chore/1-bootstrap</code> 에 지금 파일들을 관심사별로 커밋(<code>chore(claude)</code> · <code>ci(ci)</code> · <code>docs(docs)</code>) → dev 로 PR → 사용자가 squash merge.</span></li>
+<li><b class="h">M0 스파이크</b><span class="sub"><code>spike/1-conpty-jediterm</code>: pty4j ConPTY 로 wsl.exe·powershell.exe(5.1)·cmd 기동, JediTerm 한글 IME, OSC 7 / 9;9 가로채기, jpackage 실행. 결과로 ADR-0001·0003 을 확정.</span></li>
+<li><b class="h">M1 스캐폴딩</b><span class="sub">Gradle 래퍼, build-logic, 모듈 빈 껍데기, ArchUnit 규칙, Spotless, JaCoCo, <code>excludeTags</code> · <code>jpackage*</code> 태스크 → CI 전부 green → 사용자가 <code>bootstrap-repo.sh --with-checks</code> 로 필수 검사 켜기.</span></li>
+<li><b class="h">M2 이후</b><span class="sub">SDD §13 로드맵 순서대로 <code>/tdd</code> → 마일스톤마다 <code>/release</code>.</span></li>
+</ol>
+</section>
+</main>
+</div>
+</body>
+</html>

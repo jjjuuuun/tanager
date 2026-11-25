@@ -1,0 +1,29 @@
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+.vscode/
+# IntelliJ 출력 폴더는 루트 · 모듈 바로 아래만. "out/" 로 쓰면 port/out 패키지까지 무시된다
+/out/
+/*/out/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 실행 산출물
+*.log
+/dist/
+
+# Claude Code 개인 설정 (공유 설정은 .claude/settings.json)
+.claude/settings.local.json
+.claude/worktrees/
+CLAUDE.local.md
+
+# jqwik 이 테스트 실행 때 만드는 실패 재현용 상태 파일
+.jqwik-database

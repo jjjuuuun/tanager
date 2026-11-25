@@ -1,0 +1,41 @@
+# dev 에 들어온 커밋 메시지의 "Closes: #N" 이슈를 닫는다.
+# GitHub 은 기본 브랜치(main) 병합 때만 키워드로 이슈를 닫으므로, 통합 브랜치(dev)에 반영되는 시점에 대신 닫는다.
+# push 트리거인 이유: push 이벤트는 push 된 커밋 안의 워크플로 파일로 돈다. (pull_request_target 은 병합 전 base 의
+# 파일로 돌아서, 이 워크플로를 처음 넣거나 고친 PR 의 병합 때는 실행되지 않거나 옛 버전으로 돈다 — #1, #4)
+# squash · merge commit 메시지 = PR 제목 + 본문(저장소 설정) 이므로 PR 본문의 "Closes: #N" 이 커밋 메시지에 들어 있다.
+name: close-issues
+
+on:
+  push:
+    branches: [dev]
+
+permissions:
+  issues: write
+
+jobs:
+  close:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Closes/Fixes/Resolves 이슈 닫기
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          COMMITS: ${{ toJSON(github.event.commits) }}        # 식(expression)의 '\n' 은 줄바꿈이 아니므로 JSON 으로 받는다
+          HEAD_MSG: ${{ github.event.head_commit.message }}
+          SHA: ${{ github.sha }}
+        run: |
+          nums="$(jq -r '.[].message' <<<"$COMMITS" \
+            | grep -oiE '(^|[^[:alnum:]_])(close[sd]?|fix(e[sd])?|resolve[sd]?):?[[:space:]]+#[0-9]+' \
+            | grep -oE '[0-9]+$' | sort -un || true)"
+          [[ -z "$nums" ]] && { echo "닫을 이슈 없음"; exit 0; }
+          pr="$(printf '%s\n' "$HEAD_MSG" | head -n1 | grep -oE '\(#[0-9]+\)$' | tr -d '()' || true)"
+          for n in $nums; do
+            state="$(gh issue view "$n" --json state -q .state 2>/dev/null || echo MISSING)"
+            if [[ "$state" == "OPEN" ]]; then
+              gh issue close "$n" --reason completed \
+                --comment "dev 에 반영됨 (${pr:+$pr, }${SHA:0:7}). 다음 릴리스(dev → main)에 포함됩니다."
+              echo "닫음: #$n"
+            else
+              echo "건너뜀: #$n ($state)"
+            fi
+          done
