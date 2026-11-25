@@ -45,6 +45,7 @@ Tanager 는 위 jar 를 수정하지 않고 그대로 함께 배포한다.
 - **JediTerm** — Copyright 2000-2012 JetBrains s.r.o. (저장소 `JetBrains/jediterm` 소스 헤더, 예 `core/src/com/jediterm/terminal/util/Pair.java`. jar · POM 에는 저작권 줄이 없다). 전문: 저장소 `LICENSE-APACHE-2.0.txt`(태그가 없어 기본 브랜치, 마지막 변경 커밋 `081b5194`).
   - 문자 집합 지정 · 매핑 구현은 jVT220(`Apache-2.0`)을 바탕으로 한다(저장소 README) — (C) Copyright 2012 - J.W. Janssen <j.w.janssen@lxtreme.nl>. NOTICE: 저장소 `jawi/jVT220` 의 `NOTICE`.
 - **pty4j** — jar 에 라이선스 파일이 없다(POM: Eclipse Public License 1.0). 전문 · NOTICE: 저장소 `JetBrains/pty4j` 의 `LICENSE` · `NOTICE`(태그가 없어 0.14.0 버전 커밋 `7dd1378d16` 기준, 기본 브랜치와 같음).
+  - **소스 제공(EPL-1.0 §3)**: Tanager 에 들어간 pty4j 0.14.0 의 소스는 https://github.com/JetBrains/pty4j (커밋 `7dd1378d16`)에서 받을 수 있다. Tanager 는 pty4j 를 수정하지 않았다.
   - Copyright 2000-2012 JetBrains s.r.o. (소스 헤더 `src/com/pty4j/util/Pair.java`)
   - Copyright (c) 2002, 2010 QNX Software Systems and others. — Eclipse elt 에서 온 파일(소스 헤더 `src/com/pty4j/unix/Pty.java` · `native/openpty.c`. 연도는 파일마다 다르다: `native/exec_pty.c` 2004, 2010 · `WinPTYInputStream.java` 2000, 2011)
   - Copyright (c) 2012 - J.W. Janssen — JPty(`Apache-2.0`) 유래 부분(저장소 `NOTICE`)
@@ -68,4 +69,5 @@ Tanager 는 위 jar 를 수정하지 않고 그대로 함께 배포한다.
 ## 실행 환경
 
 실행 파일 폴더에는 jlink 로 줄인 Java 런타임(Eclipse Temurin/OpenJDK 25)이 들어간다. 라이선스: `GPL-2.0-only WITH Classpath-exception-2.0`.
-런타임의 라이선스 전문과 고지는 실행 파일 폴더의 `runtime/legal/`(모듈별 폴더)에 jlink 가 넣은 그대로 있다. `:bootstrap:verifyAppImage` 가 이 폴더가 있는지 검사한다.
+런타임의 라이선스 전문과 고지는 실행 파일 폴더의 `runtime/legal/`(모듈별 폴더)에 jlink 가 넣은 그대로 있다.
+**소스 제공(GPLv2 §3)**: 들어간 런타임의 정확한 버전은 실행 파일 폴더의 `runtime/release`(`JAVA_VERSION`)에 있고, 그 버전의 소스는 Eclipse Adoptium 의 https://github.com/adoptium/jdk25u (같은 버전 태그 `jdk-25.0.x+y`)에서 받을 수 있다. Tanager 는 런타임을 수정하지 않고 jlink 로 모듈만 골라 넣는다. `:bootstrap:verifyAppImage` 가 이 폴더가 있는지 검사한다.

@@ -134,12 +134,18 @@ val verifyAppImage = tasks.register("verifyAppImage") {
             if ("fonts/OFL.txt" !in entries) problems += "${jar.name} 안 fonts/OFL.txt 없음"
             logger.lifecycle("ok  ${jar.relativeTo(root)}: $fonts")
         }
-        files.singleOrNull { it.name == "THIRD-PARTY-NOTICES.md" }?.let { notices ->
+        // 고지 파일이 여러 개면 대조를 건너뛰지 않고 실패한다(조용한 통과 방지)
+        val noticeFiles = files.filter { it.name == "THIRD-PARTY-NOTICES.md" }
+        if (noticeFiles.size > 1) problems += "THIRD-PARTY-NOTICES.md 가 ${noticeFiles.size}개: $noticeFiles"
+        noticeFiles.singleOrNull()?.let { notices ->
             val contentRoot = notices.parentFile
             val text = notices.readText(Charsets.UTF_8)
             val listed = noticedLicenseFile.findAll(text).map { it.groupValues[1] }.toSortedSet()
             if (listed.isEmpty()) problems += "THIRD-PARTY-NOTICES.md 에 licenses/ 파일이 하나도 적혀 있지 않음"
-            val shipped = File(contentRoot, "licenses").listFiles().orEmpty().filter { it.isFile }.map { "licenses/${it.name}" }.toSortedSet()
+            val licenseEntries = File(contentRoot, "licenses").listFiles().orEmpty()
+            // licenses/ 는 평평하게 둔다 — 하위 폴더가 생기면 대조에서 빠지므로 실패로 알린다
+            licenseEntries.filter { it.isDirectory }.forEach { problems += "licenses/${it.name}/ 하위 폴더는 두지 않는다" }
+            val shipped = licenseEntries.filter { it.isFile }.map { "licenses/${it.name}" }.toSortedSet()
             (listed - shipped).forEach { problems += "$it 없음(THIRD-PARTY-NOTICES.md 에 적혀 있음)" }
             (shipped - listed).forEach { problems += "$it 가 THIRD-PARTY-NOTICES.md 에 없음" }
             if (listed == shipped) logger.lifecycle("ok  licenses/ ${shipped.size}개 = THIRD-PARTY-NOTICES.md")
