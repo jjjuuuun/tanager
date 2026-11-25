@@ -1,5 +1,6 @@
 package dev.tanager.architecture;
 
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static com.tngtech.archunit.library.Architectures.layeredArchitecture;
 import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.slices;
@@ -89,5 +90,57 @@ final class ArchitectureRules {
                 .dependOnClassesThat()
                 .resideInAPackage("com.pty4j..")
                 .because("pty4j 는 adapter.pty 안에 가둔다 — 나머지는 TerminalStream 포트만 본다");
+    }
+
+    /** 색은 ui.theme 의 토큰에서만 온다. 그 밖의 ui 코드는 색을 만들지 않는다(SDD §8.5, ADR-0010). */
+    static ArchRule colorsOnlyFromThemeTokens(String base) {
+        return classes()
+                .that()
+                .resideInAPackage(base + ".ui..")
+                .and()
+                .resideOutsideOfPackage(base + ".ui.theme..")
+                .should(
+                        new com.tngtech.archunit.lang.ArchCondition<com.tngtech.archunit.core.domain.JavaClass>(
+                                "not create colors") {
+                            private final java.util.Set<String> colorTypes = java.util.Set.of(
+                                    "java.awt.Color",
+                                    "javax.swing.plaf.ColorUIResource",
+                                    "com.jediterm.core.Color",
+                                    "com.jediterm.terminal.TerminalColor");
+                            private final java.util.Set<String> colorMethods =
+                                    java.util.Set.of("decode", "getHSBColor", "brighter", "darker");
+
+                            @Override
+                            public void check(
+                                    com.tngtech.archunit.core.domain.JavaClass item,
+                                    com.tngtech.archunit.lang.ConditionEvents events) {
+                                for (var call : item.getConstructorCallsFromSelf()) {
+                                    if (colorTypes.contains(
+                                            call.getTargetOwner().getName())) {
+                                        events.add(com.tngtech.archunit.lang.SimpleConditionEvent.violated(
+                                                call, call.getDescription()));
+                                    }
+                                }
+                                for (var access : item.getFieldAccessesFromSelf()) {
+                                    if (colorTypes.contains(
+                                            access.getTargetOwner().getName())) {
+                                        events.add(com.tngtech.archunit.lang.SimpleConditionEvent.violated(
+                                                access, access.getDescription()));
+                                    }
+                                }
+                                for (var call : item.getMethodCallsFromSelf()) {
+                                    String owner = call.getTargetOwner().getName();
+                                    boolean colorCall =
+                                            colorTypes.contains(owner) && colorMethods.contains(call.getName());
+                                    boolean rgbParse = owner.equals(base + ".ui.theme.Rgb")
+                                            && call.getName().equals("parse");
+                                    if (colorCall || rgbParse) {
+                                        events.add(com.tngtech.archunit.lang.SimpleConditionEvent.violated(
+                                                call, call.getDescription()));
+                                    }
+                                }
+                            }
+                        })
+                .because("색 리터럴은 테마 토큰(themes/*.properties)에만 둔다 — 대비는 ThemeContrastTest 가 검사");
     }
 }

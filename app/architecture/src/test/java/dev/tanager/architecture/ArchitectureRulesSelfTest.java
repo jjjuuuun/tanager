@@ -70,4 +70,16 @@ class ArchitectureRulesSelfTest {
                 .anyMatch(d -> d.contains("OpensPty") && d.contains("com.pty4j"))
                 .noneMatch(d -> d.contains("LegitPty"));
     }
+
+    @Test
+    void colorRuleCatchesLiteralsOutsideThemeButAllowsThemePackage() {
+        EvaluationResult result =
+                ArchitectureRules.colorsOnlyFromThemeTokens(FIXTURE).evaluate(fixtures);
+
+        assertThat(result.hasViolation()).isTrue();
+        assertThat(result.getFailureReport().getDetails())
+                .anyMatch(d -> d.contains("PaintsWithLiteral") && d.contains("java.awt.Color.<init>"))
+                .anyMatch(d -> d.contains("PaintsWithLiteral") && d.contains("RED"))
+                .noneMatch(d -> d.contains("ThemeOwnsColors"));
+    }
 }
