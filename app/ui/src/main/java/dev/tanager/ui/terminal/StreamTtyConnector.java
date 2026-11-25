@@ -63,8 +63,12 @@ public final class StreamTtyConnector implements TtyConnector, TtyConnectorResiz
         if (length == 0) {
             return 0;
         }
+        if (closed.get()) {
+            // 닫힌 뒤에는 막혀 있던 생산자가 넣은 조각이 큐에 남아 있어도 읽지 않는다 — EOF 가 마지막이다
+            return -1;
+        }
         while (decodedOffset >= decoded.length()) {
-            if (endOfStream) {
+            if (endOfStream || closed.get()) {
                 return -1;
             }
             byte[] chunk = take();
@@ -158,7 +162,8 @@ public final class StreamTtyConnector implements TtyConnector, TtyConnectorResiz
         put(EOF);
     }
 
-    // 큐가 차면 기다리되(배압), 닫히면 버린다 — close 가 큐를 비우므로 닫힌 뒤 영영 막히지 않는다
+    // 큐가 차면 기다리되(배압), 닫히면 버린다. 시간 제한을 두고 다시 확인해 close 뒤 늦어도 그만큼 안에 풀린다
+    // (생산자가 스트림의 잠금을 쥔 채 막혀 있으면 close 의 stream.close() 가 그 잠금을 기다린다)
     private void put(byte[] chunk) {
         try {
             while (!closed.get()) {

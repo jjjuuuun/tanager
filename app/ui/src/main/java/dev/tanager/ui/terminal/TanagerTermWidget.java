@@ -42,8 +42,8 @@ public final class TanagerTermWidget extends JediTermWidget {
         return new JScrollBar();
     }
 
-    /** 굵은 글자를 합성 굵게({@code deriveFont(BOLD)}) 대신 번들 Bold 로 그린다. */
-    private static final class BundledBoldPanel extends TerminalPanel {
+    /** 굵은 글자를 합성 굵게({@code deriveFont(BOLD)}) 대신 번들 Bold 로 그린다. 테스트가 글꼴 선택을 보려고 패키지 전용. */
+    static final class BundledBoldPanel extends TerminalPanel {
         private final Font bold;
         private final Font boldItalic;
 

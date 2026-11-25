@@ -17,8 +17,12 @@ import javax.swing.KeyStroke;
 
 /**
  * Tanager 터미널 설정(ADR-0011): 번들 D2Coding 14pt · 줄 간격 1.2 · 그레이스케일 AA · 테마 팔레트. type-ahead 는 ConPTY 의 다시
- * 그리기와 다투어 끄고, 종 소리도 끈다. Ctrl+C · Ctrl+V 는 셸로 보내고 복사 · 붙여넣기는 Ctrl+Shift+C/V 와 Ctrl+Insert ·
- * Shift+Insert 로 한다(Windows 터미널 관례 — macOS 단축키는 macOS 지원 때 정한다).
+ * 그리기와 다투어 끄고, 종 소리도 끈다.
+ *
+ * <p>단축키는 Windows Terminal 기본값을 따르고 셸이 쓰는 키(Ctrl+C · Ctrl+V · Ctrl+L · Ctrl+F · Ctrl+↑/↓ · Shift+PgUp/PgDn)는
+ * 가로채지 않는다: 복사 Ctrl+Shift+C · Ctrl+Insert, 붙여넣기 Ctrl+Shift+V · Shift+Insert, 찾기 Ctrl+Shift+F, 한 쪽 스크롤
+ * Ctrl+Shift+PgUp/PgDn, 한 줄 스크롤 Ctrl+Shift+↑/↓, 화면 지우기 · 모두 선택은 단축키 없음(메뉴로만). macOS 단축키는 macOS
+ * 지원 때 정한다.
  */
 public final class TerminalSettings extends DefaultSettingsProvider {
     static final float FONT_SIZE = 14f;
@@ -73,7 +77,7 @@ public final class TerminalSettings extends DefaultSettingsProvider {
         return new TerminalActionPresentation(
                 "복사",
                 List.of(
-                        KeyStroke.getKeyStroke(KeyEvent.VK_C, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK),
+                        ctrlShift(KeyEvent.VK_C),
                         KeyStroke.getKeyStroke(KeyEvent.VK_INSERT, InputEvent.CTRL_DOWN_MASK)));
     }
 
@@ -82,8 +86,43 @@ public final class TerminalSettings extends DefaultSettingsProvider {
         return new TerminalActionPresentation(
                 "붙여넣기",
                 List.of(
-                        KeyStroke.getKeyStroke(KeyEvent.VK_V, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK),
+                        ctrlShift(KeyEvent.VK_V),
                         KeyStroke.getKeyStroke(KeyEvent.VK_INSERT, InputEvent.SHIFT_DOWN_MASK)));
+    }
+
+    @Override
+    public TerminalActionPresentation getFindActionPresentation() {
+        return new TerminalActionPresentation("찾기", ctrlShift(KeyEvent.VK_F));
+    }
+
+    @Override
+    public TerminalActionPresentation getClearBufferActionPresentation() {
+        return new TerminalActionPresentation("화면 지우기", List.of());
+    }
+
+    @Override
+    public TerminalActionPresentation getPageUpActionPresentation() {
+        return new TerminalActionPresentation("한 쪽 위로", ctrlShift(KeyEvent.VK_PAGE_UP));
+    }
+
+    @Override
+    public TerminalActionPresentation getPageDownActionPresentation() {
+        return new TerminalActionPresentation("한 쪽 아래로", ctrlShift(KeyEvent.VK_PAGE_DOWN));
+    }
+
+    @Override
+    public TerminalActionPresentation getLineUpActionPresentation() {
+        return new TerminalActionPresentation("한 줄 위로", ctrlShift(KeyEvent.VK_UP));
+    }
+
+    @Override
+    public TerminalActionPresentation getLineDownActionPresentation() {
+        return new TerminalActionPresentation("한 줄 아래로", ctrlShift(KeyEvent.VK_DOWN));
+    }
+
+    @Override
+    public TerminalActionPresentation getSelectAllActionPresentation() {
+        return new TerminalActionPresentation("모두 선택", List.of());
     }
 
     @Override
@@ -113,9 +152,23 @@ public final class TerminalSettings extends DefaultSettingsProvider {
         return colors.selection();
     }
 
+    @Override
+    public TextStyle getFoundPatternColor() {
+        return colors.foundPattern();
+    }
+
+    @Override
+    public TextStyle getHyperlinkColor() {
+        return colors.hyperlink();
+    }
+
     /** 반전 대신 테마의 선택색으로 칠한다. */
     @Override
     public boolean useInverseSelectionColor() {
         return false;
+    }
+
+    private static KeyStroke ctrlShift(int keyCode) {
+        return KeyStroke.getKeyStroke(keyCode, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK);
     }
 }

@@ -121,4 +121,59 @@ class StreamTtyConnectorTest {
         assertThat(text(stream.written())).isEqualTo("한");
         assertThat(connector.getResizeStrategy()).isEqualTo(TtyConnectorResizeStrategy.POSTPONED);
     }
+
+    @Test
+    @DisplayName("이모지(대리 쌍)를 크기 2 버퍼로 읽어도 쌍을 쪼개지 않고, 크기 1 이어도 빠짐없이 읽힌다")
+    void readsSurrogatePairsWithTinyBuffers() throws IOException {
+        for (int size : new int[] {1, 2}) {
+            // given
+            ScriptedTerminalStream emojis = new ScriptedTerminalStream(9);
+            StreamTtyConnector connector = StreamTtyConnector.attach(emojis, "emoji");
+            String text = "a😀b🎉";
+            emojis.emit(text);
+            emojis.exit(0);
+            emojis.start();
+
+            // when
+            StringBuilder read = new StringBuilder();
+            char[] buf = new char[size];
+            int n;
+            while ((n = connector.read(buf, 0, buf.length)) != -1) {
+                if (size == 2) {
+                    assertThat(Character.isHighSurrogate(buf[n - 1]))
+                            .as("크기 2 버퍼의 끝에 홀로 남은 상위 대리 문자")
+                            .isFalse();
+                }
+                read.append(buf, 0, n);
+            }
+
+            // then
+            assertThat(read.toString()).as("버퍼 크기 %d", size).isEqualTo(text);
+        }
+    }
+
+    @Test
+    @DisplayName("큐(조각 1024개)가 가득 차면 생산자가 기다리고, close 는 그 대기를 풀며 그 뒤 read 는 바로 -1 이다")
+    void backpressureAndCloseReleaseProducer() throws Exception {
+        // given
+        StreamTtyConnector connector = StreamTtyConnector.attach(stream, "full");
+        stream.start();
+        Thread producer = Thread.ofPlatform().start(() -> {
+            for (int i = 0; i < 1025; i++) {
+                stream.emit("x");
+            }
+        });
+
+        // then 1025번째 조각에서 생산자가 막힌다
+        await().atMost(Duration.ofSeconds(5)).until(() -> isWaiting(producer));
+        assertThat(connector.ready()).isTrue();
+
+        // when
+        connector.close();
+
+        // then
+        producer.join(Duration.ofSeconds(2));
+        assertThat(producer.isAlive()).isFalse();
+        assertThat(connector.read(new char[8], 0, 8)).isEqualTo(-1);
+    }
 }

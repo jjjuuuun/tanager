@@ -85,4 +85,37 @@ class Utf8ChunkDecoderTest {
     Arbitrary<Double> fractions() {
         return Arbitraries.doubles().between(0.0, 1.0);
     }
+
+    @Property
+    @Label("보조 평면 문자(4바이트, 이모지)를 섞어 임의의 지점에서 쪼개도 한 번에 디코딩한 것과 같다")
+    void splitAnywhereWithSupplementaryDecodesSame(
+            @ForAll("mixedCodePoints") java.util.List<Integer> codePoints, @ForAll("fractions") double at) {
+        // given
+        StringBuilder builder = new StringBuilder();
+        for (int cp : codePoints) {
+            builder.appendCodePoint(cp);
+        }
+        String text = builder.toString();
+        byte[] bytes = text.getBytes(StandardCharsets.UTF_8);
+        int cut = (int) Math.floor(at * bytes.length);
+        Utf8ChunkDecoder decoder = new Utf8ChunkDecoder();
+
+        // when
+        String joined = decoder.decode(java.util.Arrays.copyOfRange(bytes, 0, cut))
+                + decoder.decode(java.util.Arrays.copyOfRange(bytes, cut, bytes.length))
+                + decoder.finish();
+
+        // then
+        assertThat(joined).isEqualTo(text);
+    }
+
+    @Provide
+    Arbitrary<java.util.List<Integer>> mixedCodePoints() {
+        return Arbitraries.oneOf(
+                        Arbitraries.integers().between('a', 'z'),
+                        Arbitraries.integers().between(0xAC00, 0xD7A3),
+                        Arbitraries.integers().between(0x1F300, 0x1FAFF))
+                .list()
+                .ofMaxSize(30);
+    }
 }

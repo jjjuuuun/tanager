@@ -43,4 +43,24 @@ class JediTermColorsTest {
         assertThat(rgb(colors.cursor().toColor())).isEqualTo(new Rgb(7, 8, 9));
         assertThat(rgb(colors.selection().getBackground().toColor())).isEqualTo(new Rgb(10, 11, 12));
     }
+
+    @Test
+    @DisplayName("찾기 강조는 배경색 글자에 밝은 노랑(ansi 11) 바탕, 링크는 밝은 파랑(ansi 12) 글자다")
+    void highlightStylesComeFromPalette() {
+        // given
+        List<Rgb> ansi = new ArrayList<>();
+        for (int i = 0; i < 16; i++) {
+            ansi.add(new Rgb(i, i, i));
+        }
+        TerminalPalette palette =
+                new TerminalPalette(new Rgb(1, 2, 3), new Rgb(4, 5, 6), new Rgb(7, 8, 9), new Rgb(10, 11, 12), ansi);
+
+        // when
+        JediTermColors colors = JediTermColors.from(palette);
+
+        // then
+        assertThat(rgb(colors.foundPattern().getForeground().toColor())).isEqualTo(new Rgb(4, 5, 6));
+        assertThat(rgb(colors.foundPattern().getBackground().toColor())).isEqualTo(ansi.get(11));
+        assertThat(rgb(colors.hyperlink().getForeground().toColor())).isEqualTo(ansi.get(12));
+    }
 }

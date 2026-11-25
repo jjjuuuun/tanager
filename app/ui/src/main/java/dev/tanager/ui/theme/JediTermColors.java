@@ -13,12 +13,16 @@ import javax.swing.UIManager;
  */
 public final class JediTermColors {
     private static final String KEY_PREFIX = "Tanager.term.";
+    private static final int BRIGHT_YELLOW = 11;
+    private static final int BRIGHT_BLUE = 12;
 
     private final ColorPalette palette;
     private final TerminalColor foreground;
     private final TerminalColor background;
     private final TerminalColor cursor;
     private final TextStyle selection;
+    private final TextStyle foundPattern;
+    private final TextStyle hyperlink;
 
     private JediTermColors(TerminalPalette source) {
         this.palette = new AnsiPalette(source.ansi());
@@ -26,6 +30,8 @@ public final class JediTermColors {
         this.background = terminalColor(source.background());
         this.cursor = terminalColor(source.cursor());
         this.selection = new TextStyle(foreground, terminalColor(source.selection()));
+        this.foundPattern = new TextStyle(background, terminalColor(source.ansi(BRIGHT_YELLOW)));
+        this.hyperlink = new TextStyle(terminalColor(source.ansi(BRIGHT_BLUE)), null);
     }
 
     /** 설치된 소프트 테마의 {@code Tanager.term.*} 값. 테마가 설치되지 않았으면 {@link IllegalStateException}(버그). */
@@ -63,6 +69,16 @@ public final class JediTermColors {
     /** 선택 영역: 기본 전경 위에 선택 배경. */
     public TextStyle selection() {
         return selection;
+    }
+
+    /** 찾기 결과 강조: 배경색 글자 위에 밝은 노랑(ansi 11) 바탕. */
+    public TextStyle foundPattern() {
+        return foundPattern;
+    }
+
+    /** 링크: 밝은 파랑(ansi 12) 글자, 바탕은 그대로. */
+    public TextStyle hyperlink() {
+        return hyperlink;
     }
 
     private static Rgb uiColor(String name) {
