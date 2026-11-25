@@ -201,4 +201,18 @@ class WindowsShellCatalogTest {
                 "Windows Subsystem for Linux has no installed distributions.\r\n".getBytes(StandardCharsets.UTF_16LE));
         assertThat(ids(shells(guidance))).containsExactly("powershell", "cmd");
     }
+
+    @Test
+    @DisplayName("docker-desktop 처럼 셸 용도가 아닌 배포판은 탐지에서 뺀다")
+    void excludesNonShellDistros() {
+        // given
+        CommandOutcome outcome = new CommandOutcome.Exited(
+                0,
+                "docker-desktop\r\nUbuntu\r\ndocker-desktop-data\r\nRancher-Desktop\r\nrancher-desktop-data\r\n"
+                        .getBytes(StandardCharsets.UTF_16LE));
+        // when
+        List<ShellProfile> profiles = shells(outcome);
+        // then
+        assertThat(ids(profiles)).containsExactly("wsl:Ubuntu", "powershell", "cmd");
+    }
 }
