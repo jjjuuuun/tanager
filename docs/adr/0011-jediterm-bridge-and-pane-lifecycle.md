@@ -38,7 +38,7 @@ JediTerm 3.76 소스에서 확인한 사실:
   - 셸이 끝나면 터미널 아래쪽에 띠를 띄운다: "종료 코드 N · Enter 다시 시작 · Esc 닫기". 마지막 출력은 가리지 않는다.
   - Enter 는 `restart` 다. Esc 는 창 닫기이고, 마지막 창이면 **확인 없이 앱을 끝낸다**. 셸이 이미 끝나 잃을 것이 없고, 레이아웃 복원은 M5 가 맡는다. 이슈 #46 본문의 "앱 종료 확인"을 이렇게 바꾼다.
   - 창 닫기(X)도 M2 에서는 확인하지 않는다. 여러 창이 생기는 M4 에서 "실행 중 N개" 확인을 다시 정한다.
-  - 앱 종료 순서: 모든 창 `stream.close()` → 창 `dispose()`(바로 사라진다) → 가상 스레드에서 모든 `onExit` 를 최대 2초 기다림 → `System.exit(0)`. 기다리는 동안 pty 어댑터가 남은 자손을 정리한다.
+  - 앱 종료 순서: 모든 창 `stream.close()`(기동 중이면 기동이 끝난 뒤 그 스트림) → 창 `dispose()`(바로 사라진다) → 비데몬 플랫폼 스레드에서 모든 `onExit` 를 최대 4초 기다림 → `System.exit(0)`. 기다리는 동안 pty 어댑터가 남은 자손을 정리한다.
 - 창 상태 기계(`PaneState` · `PaneEvent` · `PaneEffect`)는 Swing 없는 순수 함수로 둔다. Swing 쪽(`PaneController`)은 효과만 실행한다.
 
 ## 결과
@@ -56,4 +56,5 @@ JediTerm 3.76 소스에서 확인한 사실:
     - 기본 글자색은 사용 중단된 `getDefaultStyle()` 로 만들어진다. 재정의하지 않으면 ansi0(어두운 색)이 된다.
     - 번들 Bold 는 `TerminalPanel.getFontToDisplay` 재정의로 쓴다(`createTerminalPanel` 이 상위 생성자 안에서 불리므로 글꼴은 설정에서 꺼낸다).
   - `setTtyConnector` 가 초기 크기 동기화를 한 번 하므로, Connect 뒤 따로 resize 하지 않는다.
-  - 남은 한계: 백그라운드 `start` 가 계약을 어기고 예외를 던지면 창이 "시작하는 중"에 머문다.
+  - 백그라운드 `start` 가 계약을 어기고 예외를 던지면 ui 쪽 사건(`StartErrored`)으로 바꿔 "Enter 다시 시도" 화면을 띄운다(application 포트는 그대로).
+  - 앱 종료 대기는 4초다. pty 어댑터의 close 유예(3초 뒤 남은 자손 강제 종료)보다 길게 잡아 강제 종료 경로까지 덮는다. 루트가 유예 안에 끝나면 어댑터의 자손 정리(가상 스레드)가 `System.exit` 와 경합할 수 있다 — 포트에 "정리 끝" 신호가 없어 남은 한계로 둔다.
