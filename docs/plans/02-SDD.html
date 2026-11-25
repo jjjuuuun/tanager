@@ -456,7 +456,7 @@ public record CpuWindow(List&lt;Double&gt; recent) {                            
 <ul class="small">
 <li><code>PtyLauncher</code> → <code>TerminalStream</code>(subscribe · write · resize · close · onExit)</li>
 <li><code>HistoryRepository</code> · <code>WorkspaceRepository</code> · <code>ConfigRepository</code></li>
-<li><code>PlatformModule</code> — <code>shells()</code> · <code>integration()</code> · <code>paths()</code> · <code>dirs()</code> · <code>defaultKeymap()</code> · <code>fileOpener()</code> · <code>resources()</code> · <code>appearance()</code></li>
+<li><code>PlatformModule</code> — <code>shells()</code> · <code>launchCommand(profile, WorkingDir)</code> · <code>integration()</code>(M3) · <code>paths()</code>(M5, #53) · <code>dirs()</code> · <code>defaultKeymap()</code> · <code>fileOpener()</code> · <code>resources()</code> · <code>appearance()</code></li>
 <li><code>ToolkitProvider</code> (여러 개)</li>
 <li><code>Clock</code> · <code>IdGenerator</code> · <code>UiDispatcher</code></li>
 </ul></div>
@@ -569,7 +569,8 @@ public record CpuWindow(List&lt;Double&gt; recent) {                            
 <h3>9.3 config.json</h3>
 <pre data-lang="json"><code>{
   &quot;schemaVersion&quot;: 1,
-  &quot;defaultProfile&quot;: &quot;wsl:Ubuntu-24.04&quot;,
+  &quot;defaultProfile&quot;: &quot;wsl:Ubuntu-24.04&quot;,             // 없거나 사라졌으면 첫 WSL 배포판 → 목록 첫 항목(ADR-0009)
+  &quot;profiles&quot;: { &quot;powershell&quot;: { &quot;startDir&quot;: &quot;C:\\work&quot; }, &quot;wsl:Ubuntu-24.04&quot;: { &quot;startDir&quot;: &quot;~&quot; } },   // 프로파일별 시작 경로, &quot;~&quot; = 홈
   &quot;openPlacement&quot;: &quot;RIGHT&quot;,                       // RIGHT | DOWN | NEW_TAB
   &quot;history&quot;: { &quot;maxEntries&quot;: 2000, &quot;exclude&quot;: [&quot;/tmp/**&quot;, &quot;**/node_modules/**&quot;] },
   &quot;toolkit&quot;: { &quot;providers&quot;: [&quot;claude-code&quot;], &quot;importClaudeProjects&quot;: true },
