@@ -5,7 +5,12 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static com.tngtech.archunit.library.Architectures.layeredArchitecture;
 import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.slices;
 
+import com.tngtech.archunit.core.domain.JavaClass;
+import com.tngtech.archunit.lang.ArchCondition;
 import com.tngtech.archunit.lang.ArchRule;
+import com.tngtech.archunit.lang.ConditionEvents;
+import com.tngtech.archunit.lang.SimpleConditionEvent;
+import java.util.Set;
 
 /**
  * Tanager 의 아키텍처 규칙(ADR-0002, .claude/rules/architecture.md).
@@ -99,48 +104,46 @@ final class ArchitectureRules {
                 .resideInAPackage(base + ".ui..")
                 .and()
                 .resideOutsideOfPackage(base + ".ui.theme..")
-                .should(
-                        new com.tngtech.archunit.lang.ArchCondition<com.tngtech.archunit.core.domain.JavaClass>(
-                                "not create colors") {
-                            private final java.util.Set<String> colorTypes = java.util.Set.of(
-                                    "java.awt.Color",
-                                    "javax.swing.plaf.ColorUIResource",
-                                    "com.jediterm.core.Color",
-                                    "com.jediterm.terminal.TerminalColor");
-                            private final java.util.Set<String> colorMethods =
-                                    java.util.Set.of("decode", "getHSBColor", "brighter", "darker");
+                .should(new NotCreateColors(base + ".ui.theme.Rgb"))
+                .because("색 리터럴은 테마 토큰(themes/*.properties)에만 둔다 — 대비는 SoftThemeTokensTest 가 검사");
+    }
 
-                            @Override
-                            public void check(
-                                    com.tngtech.archunit.core.domain.JavaClass item,
-                                    com.tngtech.archunit.lang.ConditionEvents events) {
-                                for (var call : item.getConstructorCallsFromSelf()) {
-                                    if (colorTypes.contains(
-                                            call.getTargetOwner().getName())) {
-                                        events.add(com.tngtech.archunit.lang.SimpleConditionEvent.violated(
-                                                call, call.getDescription()));
-                                    }
-                                }
-                                for (var access : item.getFieldAccessesFromSelf()) {
-                                    if (colorTypes.contains(
-                                            access.getTargetOwner().getName())) {
-                                        events.add(com.tngtech.archunit.lang.SimpleConditionEvent.violated(
-                                                access, access.getDescription()));
-                                    }
-                                }
-                                for (var call : item.getMethodCallsFromSelf()) {
-                                    String owner = call.getTargetOwner().getName();
-                                    boolean colorCall =
-                                            colorTypes.contains(owner) && colorMethods.contains(call.getName());
-                                    boolean rgbParse = owner.equals(base + ".ui.theme.Rgb")
-                                            && call.getName().equals("parse");
-                                    if (colorCall || rgbParse) {
-                                        events.add(com.tngtech.archunit.lang.SimpleConditionEvent.violated(
-                                                call, call.getDescription()));
-                                    }
-                                }
-                            }
-                        })
-                .because("색 리터럴은 테마 토큰(themes/*.properties)에만 둔다 — 대비는 ThemeContrastTest 가 검사");
+    /** 색 타입 생성 · 상수 접근 · 색 만들기 메서드 · {@code Rgb.parse} 호출을 위반으로 본다. */
+    private static final class NotCreateColors extends ArchCondition<JavaClass> {
+        private static final Set<String> COLOR_TYPES = Set.of(
+                "java.awt.Color",
+                "javax.swing.plaf.ColorUIResource",
+                "com.jediterm.core.Color",
+                "com.jediterm.terminal.TerminalColor");
+        private static final Set<String> COLOR_METHODS = Set.of("decode", "getHSBColor", "brighter", "darker");
+
+        private final String rgbType;
+
+        NotCreateColors(String rgbType) {
+            super("not create colors");
+            this.rgbType = rgbType;
+        }
+
+        @Override
+        public void check(JavaClass item, ConditionEvents events) {
+            for (var call : item.getConstructorCallsFromSelf()) {
+                if (COLOR_TYPES.contains(call.getTargetOwner().getName())) {
+                    events.add(SimpleConditionEvent.violated(call, call.getDescription()));
+                }
+            }
+            for (var access : item.getFieldAccessesFromSelf()) {
+                if (COLOR_TYPES.contains(access.getTargetOwner().getName())) {
+                    events.add(SimpleConditionEvent.violated(access, access.getDescription()));
+                }
+            }
+            for (var call : item.getMethodCallsFromSelf()) {
+                String owner = call.getTargetOwner().getName();
+                boolean colorCall = COLOR_TYPES.contains(owner) && COLOR_METHODS.contains(call.getName());
+                boolean rgbParse = owner.equals(rgbType) && call.getName().equals("parse");
+                if (colorCall || rgbParse) {
+                    events.add(SimpleConditionEvent.violated(call, call.getDescription()));
+                }
+            }
+        }
     }
 }
