@@ -31,6 +31,6 @@ app/bootstrap        ← 조립 루트(composition root). 유일하게 모든 �
 
 ## 스레드 모델
 - Swing 은 EDT 에서만 만진다. 다른 스레드에서는 `UiDispatcher` 포트를 통한다.
-- PTY 읽기는 세션당 가상 스레드 1개.
+- PTY 읽기는 세션당 데몬 **플랫폼** 스레드 1개(Windows 의 JNA 블로킹 읽기가 가상 스레드를 고정시키므로 — ADR-0007).
 - 애플리케이션 상태 변경은 단일 스레드 `StateActor` 에 직렬화 → 락 없이 도메인 객체를 다룬다.
 - 저장은 디바운스(1초) + 원자적 쓰기(tmp → ATOMIC_MOVE).

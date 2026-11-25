@@ -204,7 +204,7 @@ PS C:\work\infra&gt; ▌</div></foreignObject><rect x="620" y="46" width="250" h
 <tr><th>스레드</th><th>하는 일</th><th>규칙</th></tr>
 <tr><td>EDT (Swing)</td><td>그리기, 키·마우스 이벤트 → 유스케이스 호출</td><td>블로킹 금지. 결과는 <code>UiDispatcher</code> 로 돌아온다</td></tr>
 <tr><td>StateActor (1개)</td><td>WorkHistory · Workspace 상태 교체, 이벤트 발행</td><td>도메인 값 교체는 여기서만 → 락 없음</td></tr>
-<tr><td>PTY 읽기 (세션당 가상 스레드)</td><td>바이트 읽기 → 구독자(JediTerm, CwdTracker)</td><td>CwdTracker 는 결과만 StateActor 에 보냄</td></tr>
+<tr><td>PTY 읽기 (세션당 데몬 플랫폼 스레드 — JNA 블로킹 읽기가 가상 스레드를 고정시키므로, ADR-0007)</td><td>바이트 읽기 → 구독자(JediTerm, CwdTracker)</td><td>CwdTracker 는 결과만 StateActor 에 보냄</td></tr>
 <tr><td>I/O (가상 스레드)</td><td>저장(디바운스), 도구함 스캔, 경로 존재 확인, 셸 탐지</td><td>결과는 StateActor 또는 UiDispatcher 로</td></tr>
 </table></div>
 </section><section id="domain"><h2><span class="no">5.</span>도메인 설계</h2>

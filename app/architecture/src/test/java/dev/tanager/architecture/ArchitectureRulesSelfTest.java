@@ -59,4 +59,15 @@ class ArchitectureRulesSelfTest {
         assertThat(result.hasViolation()).isTrue();
         assertThat(result.getFailureReport().getDetails()).anyMatch(d -> d.contains("BorrowsWindowsCode"));
     }
+
+    @Test
+    void pty4jRuleCatchesUiUsingPty4jButAllowsPtyAdapter() {
+        EvaluationResult result =
+                ArchitectureRules.onlyPtyAdapterUsesPty4j(FIXTURE).evaluate(fixtures);
+
+        assertThat(result.hasViolation()).isTrue();
+        assertThat(result.getFailureReport().getDetails())
+                .anyMatch(d -> d.contains("OpensPty") && d.contains("com.pty4j"))
+                .noneMatch(d -> d.contains("LegitPty"));
+    }
 }

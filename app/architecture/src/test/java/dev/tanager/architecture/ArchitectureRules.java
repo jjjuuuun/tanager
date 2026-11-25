@@ -79,4 +79,15 @@ final class ArchitectureRules {
     static ArchRule platformsAreIndependent(String base) {
         return slices().matching(base + ".platform.(*)..").should().notDependOnEachOther();
     }
+
+    /** pty4j 는 pty 어댑터만 쓴다. UI · application 은 TerminalStream 포트로만 터미널을 만진다(ADR-0007). */
+    static ArchRule onlyPtyAdapterUsesPty4j(String base) {
+        return noClasses()
+                .that()
+                .resideOutsideOfPackage(base + ".adapter.pty..")
+                .should()
+                .dependOnClassesThat()
+                .resideInAPackage("com.pty4j..")
+                .because("pty4j 는 adapter.pty 안에 가둔다 — 나머지는 TerminalStream 포트만 본다");
+    }
 }

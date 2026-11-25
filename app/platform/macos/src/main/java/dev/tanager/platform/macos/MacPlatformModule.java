@@ -1,7 +1,9 @@
 package dev.tanager.platform.macos;
 
 import dev.tanager.application.platform.OperatingSystem;
+import dev.tanager.application.port.out.LaunchCommand;
 import dev.tanager.application.port.out.PlatformModule;
+import dev.tanager.domain.history.WorkspacePath;
 import dev.tanager.domain.session.ShellProfile;
 import java.util.List;
 
@@ -22,5 +24,11 @@ public final class MacPlatformModule implements PlatformModule {
     @Override
     public List<ShellProfile> shells() {
         return List.of();
+    }
+
+    /** M7 에서 채운다. 그때까지는 지원하지 않는다. */
+    @Override
+    public LaunchCommand launchCommand(ShellProfile profile, WorkspacePath cwd) {
+        throw new UnsupportedOperationException("macOS 셸 기동은 M7 에서 지원한다");
     }
 }
