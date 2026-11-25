@@ -64,7 +64,7 @@ jobs:
           distribution: ${{ env.JAVA_DISTRIBUTION }}
           java-version: ${{ env.JAVA_VERSION }}
       - uses: gradle/actions/setup-gradle@v4
-      - run: ./gradlew :tanager-domain:check :tanager-application:check :tanager-architecture-test:test jacocoCoverageVerification
+      - run: ./gradlew :domain:check :application:check :architecture:test jacocoCoverageVerification
       - if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -115,10 +115,10 @@ jobs:
           distribution: ${{ env.JAVA_DISTRIBUTION }}
           java-version: ${{ env.JAVA_VERSION }}
       - uses: gradle/actions/setup-gradle@v4
-      - run: ./gradlew :tanager-app:jpackageImage
+      - run: ./gradlew :bootstrap:jpackageImage
         shell: pwsh
       - uses: actions/upload-artifact@v4
         with:
           name: tanager-windows-app-image
-          path: tanager-app/build/jpackage/
+          path: app/bootstrap/build/jpackage/
           retention-days: 7
