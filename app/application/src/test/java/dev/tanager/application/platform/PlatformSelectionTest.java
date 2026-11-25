@@ -2,7 +2,9 @@ package dev.tanager.application.platform;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import dev.tanager.application.port.out.LaunchCommand;
 import dev.tanager.application.port.out.PlatformModule;
+import dev.tanager.domain.history.WorkspacePath;
 import dev.tanager.domain.session.ShellProfile;
 import dev.tanager.domain.shared.Result;
 import java.util.List;
@@ -23,6 +25,11 @@ class PlatformSelectionTest {
         @Override
         public List<ShellProfile> shells() {
             return List.of();
+        }
+
+        @Override
+        public LaunchCommand launchCommand(ShellProfile profile, WorkspacePath cwd) {
+            throw new UnsupportedOperationException("선택 테스트에서는 쓰지 않는다");
         }
     }
 

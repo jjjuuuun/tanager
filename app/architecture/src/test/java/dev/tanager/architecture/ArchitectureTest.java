@@ -16,6 +16,8 @@ class ArchitectureTest {
         production = new ClassFileImporter()
                 .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)
                 .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_JARS)
+                // WSL 빌드 산출물 경로(build/wsl/...)에서는 DO_NOT_INCLUDE_TESTS 가 테스트 클래스를 못 알아본다 — 위반 픽스처를 직접 뺀다
+                .withImportOption(location -> !location.contains("/archfixture/"))
                 .importPackages(BASE);
     }
 
@@ -37,5 +39,10 @@ class ArchitectureTest {
     @Test
     void platformsAreIndependent() {
         ArchitectureRules.platformsAreIndependent(BASE).allowEmptyShould(true).check(production);
+    }
+
+    @Test
+    void onlyPtyAdapterUsesPty4j() {
+        ArchitectureRules.onlyPtyAdapterUsesPty4j(BASE).allowEmptyShould(true).check(production);
     }
 }

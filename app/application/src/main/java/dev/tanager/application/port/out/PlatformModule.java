@@ -1,6 +1,7 @@
 package dev.tanager.application.port.out;
 
 import dev.tanager.application.platform.OperatingSystem;
+import dev.tanager.domain.history.WorkspacePath;
 import dev.tanager.domain.session.ShellProfile;
 import java.util.List;
 
@@ -24,4 +25,12 @@ public interface PlatformModule {
      * 프로파일 결정은 ListProfiles · 설정(FR-SES-02)이 한다. 돌려주는 목록은 수정할 수 없다.
      */
     List<ShellProfile> shells();
+
+    /**
+     * {@code profile} 셸을 {@code cwd} 에서 띄우는 PTY 명령을 만든다(ADR-0007). 외부 상태를 보지 않는 순수 계산이다 — 경로가
+     * 실제로 있는지는 확인하지 않는다.
+     *
+     * @throws IllegalArgumentException {@code cwd} 의 환경이 {@code profile} 의 환경과 다를 때
+     */
+    LaunchCommand launchCommand(ShellProfile profile, WorkspacePath cwd);
 }

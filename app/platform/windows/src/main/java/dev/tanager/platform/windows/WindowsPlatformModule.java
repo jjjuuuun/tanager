@@ -1,7 +1,9 @@
 package dev.tanager.platform.windows;
 
 import dev.tanager.application.platform.OperatingSystem;
+import dev.tanager.application.port.out.LaunchCommand;
 import dev.tanager.application.port.out.PlatformModule;
+import dev.tanager.domain.history.WorkspacePath;
 import dev.tanager.domain.session.ShellProfile;
 import java.time.Duration;
 import java.util.List;
@@ -37,5 +39,10 @@ public final class WindowsPlatformModule implements PlatformModule {
     @Override
     public List<ShellProfile> shells() {
         return shellCatalog.shells();
+    }
+
+    @Override
+    public LaunchCommand launchCommand(ShellProfile profile, WorkspacePath cwd) {
+        return WindowsLaunchCommands.of(profile, cwd);
     }
 }
