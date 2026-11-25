@@ -42,7 +42,15 @@ class ArchitectureTest {
     @DisplayName("규칙이 공허하게 통과하지 않도록 실제 제품 클래스를 import 하고 테스트 클래스는 뺀다")
     void importsRealProductionClassesOnly() {
         assertThat(production.stream().map(JavaClass::getName))
-                .contains("dev.tanager.adapter.pty.Pty4jLauncher", "dev.tanager.domain.shared.Result")
+                // 클래스가 있는 제품 모듈마다 대표 하나(persistence · toolkit:claude 는 아직 클래스가 없다 — 생기면 더한다)
+                .contains(
+                        "dev.tanager.domain.shared.Result",
+                        "dev.tanager.application.port.out.PlatformModule",
+                        "dev.tanager.adapter.pty.Pty4jLauncher",
+                        "dev.tanager.platform.windows.WindowsPlatformModule",
+                        "dev.tanager.platform.macos.MacPlatformModule",
+                        "dev.tanager.ui.SwingUi",
+                        "dev.tanager.bootstrap.TanagerApp")
                 .noneMatch(name -> name.startsWith(BASE + ".archfixture."))
                 .noneMatch(name -> name.startsWith(BASE + ".architecture."))
                 .noneMatch(name -> name.endsWith("Test") || name.endsWith("Contract"));

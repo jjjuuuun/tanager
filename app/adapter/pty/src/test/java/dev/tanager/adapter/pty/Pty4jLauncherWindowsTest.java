@@ -160,15 +160,17 @@ class Pty4jLauncherWindowsTest {
         Path dir = Files.createDirectory(temp.resolve("한글 폴더 #1"));
         LaunchCommand command = new LaunchCommand(
                 List.of(WindowsShells.cmdExe()), Optional.of(dir.toString()), Map.of("TANAGER_T", "1"));
-        TerminalStream stream = start(command, TerminalSize.DEFAULT);
+        // 긴 임시 경로가 80열에서 줄바꿈되지 않게 넓게 띄운다
+        TerminalStream stream = start(command, new TerminalSize(300, 30));
 
         // when
         stream.write(WindowsShells.line("cd"));
         stream.write(WindowsShells.line("echo %TERM% %TANAGER_T%"));
 
         // then
-        String expectedDir = dir.toRealPath().toString().toLowerCase();
-        await().atMost(WAIT).until(() -> out.text().toLowerCase().contains(expectedDir));
+        // 임시 폴더 앞부분은 러너마다 8.3 짧은 이름(RUNNER~1)일 수 있어 우리가 만든 폴더 이름으로 확인한다
+        String expectedDir = "\\" + dir.getFileName();
+        await().atMost(WAIT).until(() -> out.text().contains(expectedDir));
         await().atMost(WAIT).until(() -> out.text().contains("xterm-256color 1"));
     }
 }
