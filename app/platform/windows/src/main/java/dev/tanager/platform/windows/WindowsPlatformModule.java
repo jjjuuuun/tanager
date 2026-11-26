@@ -27,6 +27,7 @@ public final class WindowsPlatformModule implements PlatformModule {
     private final WindowsShellCatalog shellCatalog;
     private final String userProfile;
     private final Optional<String> wslenv;
+    private final Optional<String> prompt;
     private final Path appData;
 
     /** ServiceLoader 용. 실제 프로세스 실행과 시스템 환경변수를 쓴다. */
@@ -38,7 +39,10 @@ public final class WindowsPlatformModule implements PlatformModule {
         this(new WindowsShellCatalog(new ProcessCommandRunner(), env, WSL_LIST_TIMEOUT), env);
     }
 
-    /** 환경 변수({@code USERPROFILE} · {@code APPDATA} · {@code WSLENV})는 여기서 한 번 읽는다 — 기동 명령 계산을 순수하게 두려고. */
+    /**
+     * 환경 변수({@code USERPROFILE} · {@code APPDATA} · {@code WSLENV} · {@code PROMPT})는 여기서 한 번 읽는다 — 기동 명령 계산을 순수하게
+     * 두려고.
+     */
     WindowsPlatformModule(WindowsShellCatalog shellCatalog, Function<String, Optional<String>> env) {
         this(shellCatalog, env, System.getProperty("user.home"));
     }
@@ -60,6 +64,8 @@ public final class WindowsPlatformModule implements PlatformModule {
                 .orElse(fallbackHome);
         // WSL 셸에 rcfile 경로를 넘길 때 사용자의 WSLENV 를 보존하려고 읽는다(ADR-0014). 병합은 기동 명령 계산이 한다
         this.wslenv = env.apply("WSLENV");
+        // cmd 에 OSC 9;9 를 줄 때 사용자의 PROMPT 를 지우지 않고 앞에 붙이려고 읽는다(ADR-0014). 병합은 기동 명령 계산이 한다
+        this.prompt = env.apply("PROMPT");
         this.appData = nonBlank(env, "APPDATA")
                 .map(dir -> Path.of(dir, APP_FOLDER))
                 .orElseGet(() -> Path.of(fallbackHome, "AppData", "Roaming", APP_FOLDER));
@@ -87,7 +93,7 @@ public final class WindowsPlatformModule implements PlatformModule {
     @Override
     public LaunchCommand launchCommand(ShellProfile profile, WorkingDir dir, Integration integration) {
         Objects.requireNonNull(integration, "integration");
-        return WindowsLaunchCommands.of(profile, dir, userProfile, wslenv, integration);
+        return WindowsLaunchCommands.of(profile, dir, userProfile, wslenv, prompt, integration);
     }
 
     @Override

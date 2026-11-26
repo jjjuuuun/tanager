@@ -179,17 +179,17 @@ class WindowsWslInjectionTest {
     }
 
     @Test
-    @DisplayName("PowerShell · cmd 는 셸 통합이 설치돼 있어도 이번 범위가 아니라 지금과 같은 명령이다")
-    void windowsShellsAreUnchangedByInstalledIntegration() {
+    @DisplayName("PowerShell · cmd 에는 셸 통합이 설치돼 있어도 WSL 용 TANAGER_RC · WSLENV 를 주지 않는다(두 셸의 주입은 #81)")
+    void windowsShellsGetNoWslVariables() {
         // given / when
         LaunchCommand powershell = of(POWERSHELL, new WorkingDir.Home(), Optional.of("FOO/u"), INSTALLED);
         LaunchCommand cmd = of(CMD, new WorkingDir.Home(), Optional.of("FOO/u"), INSTALLED);
 
         // then
-        assertThat(powershell.argv()).containsExactly(PS_EXE, "-NoLogo");
-        assertThat(powershell.environment()).isEmpty();
+        assertThat(powershell.argv()).startsWith(PS_EXE, "-NoLogo").doesNotContain("--cd", "--");
+        assertThat(powershell.environment()).doesNotContainKeys("TANAGER_RC", "WSLENV");
         assertThat(cmd.argv()).containsExactly(CMD_EXE);
-        assertThat(cmd.environment()).isEmpty();
+        assertThat(cmd.environment()).doesNotContainKeys("TANAGER_RC", "WSLENV");
     }
 
     @Test
