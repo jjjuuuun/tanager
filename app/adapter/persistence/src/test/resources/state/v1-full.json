@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "history": {
+    "entries": [
+      { "env": { "kind": "wsl", "distro": "Ubuntu-24.04" }, "path": "/mnt/c/Users/user/Desktop/Tanager",
+        "firstVisited": "2026-11-20T09:12:03Z", "lastVisited": "2026-11-24T11:05:41Z",
+        "visitCount": 37, "pinned": true, "alias": "Tanager", "hidden": false,
+        "sources": ["shell", "claude-code"] },
+      { "env": { "kind": "windows" }, "path": "C:\\work\\infra",
+        "firstVisited": "2026-11-21T01:00:00Z", "lastVisited": "2026-11-23T08:30:00Z",
+        "visitCount": 5, "pinned": false, "alias": null, "hidden": false, "sources": ["shell"] }
+    ]
+  },
+  "workspace": {
+    "activeTab": 0,
+    "tabs": [
+      { "id": "t1", "title": "dev", "focused": "p2", "zoomed": null,
+        "layout": { "split": "ROW", "ratio": 0.5,
+                    "first":  { "pane": "p1" },
+                    "second": { "split": "COLUMN", "ratio": 0.6,
+                                "first": { "pane": "p2" }, "second": { "pane": "p3" } } } }
+    ],
+    "panes": {
+      "p1": { "profile": "wsl:Ubuntu-24.04", "lastCwd": "/home/me/proj/api" },
+      "p2": { "profile": "wsl:Ubuntu-24.04", "lastCwd": "/mnt/c/Users/user/Desktop/Tanager" },
+      "p3": { "profile": "powershell",       "lastCwd": "C:\\work\\infra" }
+    }
+  },
+  "window": { "x": 120, "y": 80, "width": 1600, "height": 960, "maximized": false,
+              "sidebar": { "visible": true, "width": 280 }, "toolkit": { "visible": true, "width": 300, "tab": "SKILL" } },
+  "futureFeature": { "answer": 42, "list": ["가", "b"] }
+}

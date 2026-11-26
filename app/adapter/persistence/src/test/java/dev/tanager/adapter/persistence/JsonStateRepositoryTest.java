@@ -1,0 +1,597 @@
+package dev.tanager.adapter.persistence;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import dev.tanager.application.port.out.HistoryLoadNotice;
+import dev.tanager.application.port.out.HistoryStoreError;
+import dev.tanager.application.port.out.LoadedHistory;
+import dev.tanager.application.port.out.StoreAccess;
+import dev.tanager.domain.history.Alias;
+import dev.tanager.domain.history.HistoryPolicy;
+import dev.tanager.domain.history.ShellEnvironment;
+import dev.tanager.domain.history.VisitedDirectory;
+import dev.tanager.domain.history.WorkHistory;
+import dev.tanager.domain.history.WorkspacePath;
+import dev.tanager.domain.shared.Result;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.UncheckedIOException;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+import java.time.Instant;
+import java.time.InstantSource;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Optional;
+import java.util.stream.Stream;
+import net.jqwik.api.Arbitraries;
+import net.jqwik.api.Arbitrary;
+import net.jqwik.api.Combinators;
+import net.jqwik.api.ForAll;
+import net.jqwik.api.Label;
+import net.jqwik.api.Property;
+import net.jqwik.api.Provide;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+
+/** state.json 의 history 부분(ADR-0013, SDD §9.2)을 읽고 쓰는 {@link JsonStateRepository} 의 파일 시스템 동작. */
+class JsonStateRepositoryTest {
+    private static final JsonMapper JSON = JsonMapper.builder().build();
+    private static final Instant NOW = Instant.parse("2026-11-26T01:02:03Z");
+    private static final ShellEnvironment WINDOWS = new ShellEnvironment.Windows();
+    private static final ShellEnvironment UBUNTU = new ShellEnvironment.Wsl("Ubuntu-24.04");
+
+    @TempDir
+    Path dir;
+
+    private final List<JsonStateRepository> opened = new ArrayList<>();
+
+    @AfterEach
+    void closeAll() {
+        opened.forEach(JsonStateRepository::close);
+    }
+
+    private Path file() {
+        return dir.resolve("state.json");
+    }
+
+    private JsonStateRepository repository() {
+        return repositoryAt(file());
+    }
+
+    private JsonStateRepository repositoryAt(Path file) {
+        JsonStateRepository repository = new JsonStateRepository(file, HistoryPolicy.DEFAULT, InstantSource.fixed(NOW));
+        opened.add(repository);
+        return repository;
+    }
+
+    private static String fixture(String name) {
+        try (InputStream in = JsonStateRepositoryTest.class.getResourceAsStream("/state/" + name)) {
+            return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    private void write(Path target, String text) throws IOException {
+        Files.writeString(target, text, StandardCharsets.UTF_8);
+    }
+
+    private static WorkspacePath path(ShellEnvironment env, String raw) {
+        return WorkspacePath.of(env, raw).value().orElseThrow();
+    }
+
+    private static LoadedHistory loaded(Result<LoadedHistory, HistoryStoreError> result) {
+        return result.value().orElseThrow(() -> new AssertionError("load 가 실패했다: " + result.error()));
+    }
+
+    private static WorkHistory historyOf(String raw) {
+        return WorkHistory.restore(
+                List.of(new VisitedDirectory(path(WINDOWS, raw), NOW, NOW, 2, false, Optional.empty(), false)),
+                HistoryPolicy.DEFAULT);
+    }
+
+    private static String entryJson(String env, String path, int count) {
+        return "{ \"env\": " + env + ", \"path\": " + JSON.writeValueAsString(path)
+                + ", \"firstVisited\": \"2026-11-21T01:00:00Z\", \"lastVisited\": \"2026-11-23T08:30:00Z\","
+                + " \"visitCount\": " + count + ", \"pinned\": false, \"alias\": null, \"hidden\": false,"
+                + " \"sources\": [\"shell\"] }";
+    }
+
+    private static String stateWith(String... entries) {
+        return "{ \"schemaVersion\": 1, \"history\": { \"entries\": [" + String.join(",", entries) + "] } }";
+    }
+
+    // ---- 읽기 ----
+
+    @Test
+    @DisplayName("파일이 없으면 빈 이력이고 쓰기 가능하며 알림이 없고 파일을 만들지 않는다")
+    void missingFileLoadsEmptyWritableWithoutCreatingIt() {
+        // when
+        LoadedHistory result = loaded(repository().load());
+
+        // then
+        assertThat(result.history()).isEqualTo(WorkHistory.empty(HistoryPolicy.DEFAULT));
+        assertThat(result.access()).isEqualTo(StoreAccess.WRITABLE);
+        assertThat(result.notices()).isEmpty();
+        assertThat(file()).doesNotExist();
+    }
+
+    @Test
+    @DisplayName("SDD 9.2 예시를 읽으면 항목 두 개의 값이 그대로 나온다")
+    void loadsSddExample() throws IOException {
+        // given
+        write(file(), fixture("v1-history.json"));
+
+        // when
+        LoadedHistory result = loaded(repository().load());
+
+        // then
+        assertThat(result.notices()).isEmpty();
+        assertThat(result.access()).isEqualTo(StoreAccess.WRITABLE);
+        assertThat(result.history().entries()).hasSize(2);
+        assertThat(result.history().find(path(UBUNTU, "/mnt/c/Users/user/Desktop/Tanager")))
+                .contains(new VisitedDirectory(
+                        path(UBUNTU, "/mnt/c/Users/user/Desktop/Tanager"),
+                        Instant.parse("2026-11-20T09:12:03Z"),
+                        Instant.parse("2026-11-24T11:05:41Z"),
+                        37,
+                        true,
+                        Optional.of(new Alias("Tanager")),
+                        false));
+        assertThat(result.history().find(path(WINDOWS, "C:\\work\\infra")))
+                .contains(new VisitedDirectory(
+                        path(WINDOWS, "C:\\work\\infra"),
+                        Instant.parse("2026-11-21T01:00:00Z"),
+                        Instant.parse("2026-11-23T08:30:00Z"),
+                        5,
+                        false,
+                        Optional.empty(),
+                        false));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(
+            strings = {
+                "{ \"kind\": \"windows\" }|relative\\\\dir|3",
+                "{ \"kind\": \"solaris\" }|C:\\\\work\\\\bad|3",
+                "{ \"kind\": \"windows\" }|C:\\\\work\\\\bad|0"
+            })
+    @DisplayName("상대 경로 · 모르는 환경 · 방문 횟수 0 인 항목은 그것만 빼고 EntriesSkipped(1) 로 알린다")
+    void invalidEntryIsSkippedAndReported(String spec) throws IOException {
+        // given
+        String[] parts = spec.split("\\|");
+        write(
+                file(),
+                stateWith(
+                        entryJson("{ \"kind\": \"windows\" }", "C:\\work\\good", 4),
+                        entryJson(parts[0], parts[1].replace("\\\\", "\\"), Integer.parseInt(parts[2]))));
+
+        // when
+        LoadedHistory result = loaded(repository().load());
+
+        // then
+        assertThat(result.history().entries()).containsOnlyKeys(path(WINDOWS, "C:\\work\\good"));
+        assertThat(result.notices()).containsExactly(new HistoryLoadNotice.EntriesSkipped(1));
+        assertThat(result.access()).isEqualTo(StoreAccess.WRITABLE);
+    }
+
+    @Test
+    @DisplayName("Windows 에서 대소문자만 다른 두 항목은 하나로 합친다")
+    void caseOnlyDuplicatesMergeOnWindows() throws IOException {
+        // given
+        write(
+                file(),
+                stateWith(
+                        entryJson("{ \"kind\": \"windows\" }", "C:\\Work", 3),
+                        entryJson("{ \"kind\": \"windows\" }", "c:\\work", 4)));
+
+        // when
+        LoadedHistory result = loaded(repository().load());
+
+        // then
+        assertThat(result.history().entries()).hasSize(1);
+        assertThat(result.history()
+                        .find(path(WINDOWS, "C:\\work"))
+                        .orElseThrow()
+                        .visitCount())
+                .isEqualTo(7);
+        assertThat(result.notices()).isEmpty();
+    }
+
+    // ---- 손상 ----
+
+    @Test
+    @DisplayName("state.json 이 손상되고 .bak 이 정상이면 .bak 내용과 RecoveredFromBackup 을 돌려준다")
+    void corruptFileRecoversFromBackup() throws IOException {
+        // given
+        write(file(), fixture("v1-corrupt.json"));
+        write(dir.resolve("state.json.bak"), fixture("v1-history.json"));
+
+        // when
+        LoadedHistory result = loaded(repository().load());
+
+        // then
+        assertThat(result.history().entries()).hasSize(2);
+        assertThat(result.notices()).containsExactly(new HistoryLoadNotice.RecoveredFromBackup());
+        assertThat(result.access()).isEqualTo(StoreAccess.WRITABLE);
+    }
+
+    @Test
+    @DisplayName(".bak 으로 복구한 뒤 첫 저장은 손상된 파일로 .bak 을 덮어쓰지 않는다")
+    void recoveredSaveKeepsGoodBackup() throws IOException {
+        // given
+        write(file(), fixture("v1-corrupt.json"));
+        write(dir.resolve("state.json.bak"), fixture("v1-history.json"));
+        JsonStateRepository repository = repository();
+        repository.load();
+
+        // when
+        repository.save(historyOf("C:\\new"));
+
+        // then
+        assertThat(Files.readString(dir.resolve("state.json.bak"), StandardCharsets.UTF_8))
+                .isEqualTo(fixture("v1-history.json"));
+    }
+
+    @Test
+    @DisplayName("state.json 과 .bak 이 둘 다 손상되면 빈 이력이고 원본은 state.json.corrupt-UTC 로 옮겨진다")
+    void bothCorruptMovesOriginalAside() throws IOException {
+        // given
+        write(file(), fixture("v1-corrupt.json"));
+        write(dir.resolve("state.json.bak"), "not json at all");
+
+        // when
+        LoadedHistory result = loaded(repository().load());
+
+        // then
+        String moved = "state.json.corrupt-20261126T010203Z";
+        assertThat(result.history()).isEqualTo(WorkHistory.empty(HistoryPolicy.DEFAULT));
+        assertThat(result.notices()).containsExactly(new HistoryLoadNotice.CorruptMovedAside(moved));
+        assertThat(result.access()).isEqualTo(StoreAccess.WRITABLE);
+        assertThat(file()).doesNotExist();
+        assertThat(Files.readString(dir.resolve(moved), StandardCharsets.UTF_8)).isEqualTo(fixture("v1-corrupt.json"));
+    }
+
+    @Test
+    @DisplayName("손상되고 .bak 이 없을 때도 원본을 옆으로 옮기고 빈 이력으로 시작한다")
+    void corruptWithoutBackupMovesOriginalAside() throws IOException {
+        // given
+        write(file(), fixture("v1-corrupt.json"));
+
+        // when
+        LoadedHistory result = loaded(repository().load());
+
+        // then
+        assertThat(result.history().entries()).isEmpty();
+        assertThat(result.notices())
+                .containsExactly(new HistoryLoadNotice.CorruptMovedAside("state.json.corrupt-20261126T010203Z"));
+        assertThat(dir.resolve("state.json.corrupt-20261126T010203Z")).exists();
+    }
+
+    // ---- 상위 버전 · 잠금 ----
+
+    @Test
+    @DisplayName("schemaVersion 2 는 읽을 수 있는 만큼 읽고 읽기 전용이며 저장은 ReadOnly 이고 파일은 그대로다")
+    void newerSchemaOpensReadOnly() throws IOException {
+        // given
+        write(file(), fixture("v2-newer.json"));
+        byte[] before = Files.readAllBytes(file());
+        JsonStateRepository repository = repository();
+
+        // when
+        LoadedHistory result = loaded(repository.load());
+        Result<WorkHistory, HistoryStoreError> saved = repository.save(historyOf("C:\\other"));
+
+        // then
+        assertThat(result.history().find(path(WINDOWS, "C:\\work\\infra"))).isPresent();
+        assertThat(result.access()).isEqualTo(StoreAccess.READ_ONLY);
+        assertThat(result.notices()).containsExactly(new HistoryLoadNotice.NewerSchema(2));
+        assertThat(saved.error()).containsInstanceOf(HistoryStoreError.ReadOnly.class);
+        assertThat(Files.readAllBytes(file())).isEqualTo(before);
+        assertThat(dir.resolve("state.json.bak")).doesNotExist();
+    }
+
+    @Test
+    @DisplayName("다른 인스턴스가 state.lock 을 잡고 있으면 읽기 전용이고 저장은 ReadOnly 다")
+    void lockedByOtherInstanceOpensReadOnly() throws IOException {
+        // given
+        write(file(), fixture("v1-history.json"));
+        byte[] before = Files.readAllBytes(file());
+        try (FileChannel other = FileChannel.open(
+                        dir.resolve("state.lock"), StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+                FileLock _ = other.lock()) {
+            JsonStateRepository repository = repository();
+
+            // when
+            LoadedHistory result = loaded(repository.load());
+            Result<WorkHistory, HistoryStoreError> saved = repository.save(historyOf("C:\\other"));
+
+            // then
+            assertThat(result.history().entries()).hasSize(2);
+            assertThat(result.access()).isEqualTo(StoreAccess.READ_ONLY);
+            assertThat(result.notices()).containsExactly(new HistoryLoadNotice.LockedByOtherInstance());
+            assertThat(saved.error()).containsInstanceOf(HistoryStoreError.ReadOnly.class);
+            assertThat(Files.readAllBytes(file())).isEqualTo(before);
+        }
+    }
+
+    @Test
+    @DisplayName("같은 파일을 연 두 번째 저장소는 읽기 전용이고, 첫 저장소를 닫으면 잠금이 풀린다")
+    void secondRepositoryOnSameFileIsReadOnlyUntilFirstCloses() {
+        // given
+        JsonStateRepository first = repository();
+        assertThat(loaded(first.load()).access()).isEqualTo(StoreAccess.WRITABLE);
+
+        // when
+        LoadedHistory second = loaded(repository().load());
+        first.close();
+        LoadedHistory third = loaded(repository().load());
+
+        // then
+        assertThat(second.access()).isEqualTo(StoreAccess.READ_ONLY);
+        assertThat(second.notices()).containsExactly(new HistoryLoadNotice.LockedByOtherInstance());
+        assertThat(third.access()).isEqualTo(StoreAccess.WRITABLE);
+    }
+
+    // ---- 쓰기 ----
+
+    @Test
+    @DisplayName("저장하면 SDD 9.2 형식(schemaVersion 1, history.entries)으로 쓴다")
+    void saveWritesSddFormat() throws IOException {
+        // given
+        JsonStateRepository repository = repository();
+        repository.load();
+        WorkHistory history = WorkHistory.restore(
+                List.of(
+                        new VisitedDirectory(
+                                path(UBUNTU, "/home/me/proj"),
+                                Instant.parse("2026-11-20T09:12:03Z"),
+                                Instant.parse("2026-11-24T11:05:41Z"),
+                                37,
+                                true,
+                                Optional.of(new Alias("프로젝트")),
+                                false),
+                        new VisitedDirectory(
+                                path(WINDOWS, "C:\\work\\infra"),
+                                Instant.parse("2026-11-21T01:00:00Z"),
+                                Instant.parse("2026-11-23T08:30:00Z"),
+                                5,
+                                false,
+                                Optional.empty(),
+                                true)),
+                HistoryPolicy.DEFAULT);
+
+        // when
+        repository.save(history);
+
+        // then
+        JsonNode root = JSON.readTree(Files.readAllBytes(file()));
+        assertThat(root.get("schemaVersion").intValue()).isEqualTo(1);
+        JsonNode wsl = entryAt(root, "/home/me/proj");
+        assertThat(wsl.get("env")).isEqualTo(JSON.readTree("{\"kind\":\"wsl\",\"distro\":\"Ubuntu-24.04\"}"));
+        assertThat(wsl.get("firstVisited").stringValue()).isEqualTo("2026-11-20T09:12:03Z");
+        assertThat(wsl.get("lastVisited").stringValue()).isEqualTo("2026-11-24T11:05:41Z");
+        assertThat(wsl.get("visitCount").intValue()).isEqualTo(37);
+        assertThat(wsl.get("pinned").booleanValue()).isTrue();
+        assertThat(wsl.get("alias").stringValue()).isEqualTo("프로젝트");
+        assertThat(wsl.get("hidden").booleanValue()).isFalse();
+        assertThat(wsl.get("sources")).isEqualTo(JSON.readTree("[\"shell\"]"));
+        JsonNode win = entryAt(root, "C:\\work\\infra");
+        assertThat(win.get("env")).isEqualTo(JSON.readTree("{\"kind\":\"windows\"}"));
+        assertThat(win.get("alias").isNull()).isTrue();
+        assertThat(win.get("hidden").booleanValue()).isTrue();
+    }
+
+    private static JsonNode entryAt(JsonNode root, String path) {
+        for (JsonNode entry : root.get("history").get("entries")) {
+            if (entry.get("path").stringValue().equals(path)) {
+                return entry;
+            }
+        }
+        throw new AssertionError("항목이 없다: " + path);
+    }
+
+    @Test
+    @DisplayName("workspace · window · 모르는 최상위 키는 읽고 저장해도 그대로 남는다")
+    void unknownTopLevelKeysSurviveLoadThenSave() throws IOException {
+        // given
+        write(file(), fixture("v1-full.json"));
+        JsonNode original = JSON.readTree(fixture("v1-full.json"));
+        JsonStateRepository repository = repository();
+        LoadedHistory result = loaded(repository.load());
+
+        // when
+        repository.save(result.history().recordVisit(path(WINDOWS, "C:\\work\\new"), NOW));
+
+        // then
+        JsonNode after = JSON.readTree(Files.readAllBytes(file()));
+        assertThat(after.get("workspace")).isEqualTo(original.get("workspace"));
+        assertThat(after.get("window")).isEqualTo(original.get("window"));
+        assertThat(after.get("futureFeature")).isEqualTo(original.get("futureFeature"));
+        assertThat(after.get("schemaVersion").intValue()).isEqualTo(1);
+        assertThat(after.get("history").get("entries")).hasSize(3);
+    }
+
+    @Test
+    @DisplayName("저장 도중 임시 파일을 쓰지 못하면 Io 오류이고 기존 state.json 은 그대로다")
+    void tmpWriteFailureLeavesExistingFileIntact() throws IOException {
+        // given
+        write(file(), fixture("v1-history.json"));
+        byte[] before = Files.readAllBytes(file());
+        JsonStateRepository repository = repository();
+        repository.load();
+        // 임시 파일 자리를 비어 있지 않은 폴더로 막아 쓰기를 실패시킨다
+        Path blocker = Files.createDirectories(dir.resolve("state.json.tmp"));
+        Files.writeString(blocker.resolve("keep"), "x");
+
+        // when
+        Result<WorkHistory, HistoryStoreError> saved = repository.save(historyOf("C:\\other"));
+
+        // then
+        assertThat(saved.error()).containsInstanceOf(HistoryStoreError.Io.class);
+        assertThat(Files.readAllBytes(file())).isEqualTo(before);
+    }
+
+    @Test
+    @DisplayName("이번 실행의 첫 저장 직전에 state.json 이 .bak 이 되고 두 번째 저장은 .bak 을 바꾸지 않는다")
+    void backupIsTakenOnlyBeforeFirstSavePerRun() throws IOException {
+        // given
+        write(file(), fixture("v1-history.json"));
+        JsonStateRepository repository = repository();
+        repository.load();
+        Path backup = dir.resolve("state.json.bak");
+        assertThat(backup).doesNotExist();
+
+        // when
+        repository.save(historyOf("C:\\first"));
+        byte[] firstSaveOutput = Files.readAllBytes(file());
+        repository.save(historyOf("C:\\second"));
+
+        // then
+        assertThat(Files.readString(backup, StandardCharsets.UTF_8)).isEqualTo(fixture("v1-history.json"));
+        assertThat(Files.readAllBytes(file())).isNotEqualTo(firstSaveOutput);
+    }
+
+    @Test
+    @DisplayName("다음 실행(새 저장소)의 첫 저장은 .bak 을 그때의 state.json 으로 갱신한다")
+    void nextRunRefreshesBackup() throws IOException {
+        // given
+        write(file(), fixture("v1-history.json"));
+        JsonStateRepository run1 = repository();
+        run1.load();
+        run1.save(historyOf("C:\\first"));
+        byte[] afterRun1 = Files.readAllBytes(file());
+        run1.close();
+
+        // when
+        JsonStateRepository run2 = repository();
+        run2.load();
+        run2.save(historyOf("C:\\second"));
+
+        // then
+        assertThat(Files.readAllBytes(dir.resolve("state.json.bak"))).isEqualTo(afterRun1);
+    }
+
+    @Test
+    @DisplayName("기존 state.json 이 없던 첫 저장은 .bak 을 만들지 않는다")
+    void firstSaveWithoutExistingFileMakesNoBackup() {
+        // given
+        JsonStateRepository repository = repository();
+        repository.load();
+
+        // when
+        repository.save(historyOf("C:\\first"));
+
+        // then
+        assertThat(file()).exists();
+        assertThat(dir.resolve("state.json.bak")).doesNotExist();
+    }
+
+    @Test
+    @DisplayName("한글 · 공백 · # 경로는 왕복해도 그대로이고 파일은 BOM 없는 UTF-8 이다")
+    void koreanSpacesAndHashRoundTripAsUtf8WithoutBom() throws IOException {
+        // given
+        String raw = "/home/me/한글 폴더/프로젝트 #1";
+        JsonStateRepository repository = repository();
+        repository.load();
+        WorkHistory history = WorkHistory.restore(
+                List.of(new VisitedDirectory(
+                        path(UBUNTU, raw), NOW, NOW, 1, false, Optional.of(new Alias("가나 다")), false)),
+                HistoryPolicy.DEFAULT);
+
+        // when
+        repository.save(history);
+        repository.close();
+        LoadedHistory reread = loaded(repositoryAt(file()).load());
+
+        // then
+        byte[] bytes = Files.readAllBytes(file());
+        assertThat(Arrays.copyOf(bytes, 3)).isNotEqualTo(new byte[] {(byte) 0xEF, (byte) 0xBB, (byte) 0xBF});
+        assertThat(new String(bytes, StandardCharsets.UTF_8)).contains(raw).contains("가나 다");
+        assertThat(reread.history()).isEqualTo(history);
+    }
+
+    // ---- 속성 ----
+
+    @Property(tries = 60)
+    @Label("어떤 이력이든 저장했다가 새 저장소로 읽으면 같은 이력이다")
+    void anyHistoryRoundTrips(@ForAll("histories") WorkHistory history) throws IOException {
+        Path tmp = Files.createTempDirectory("tanager-state-prop");
+        try {
+            // given
+            Path state = tmp.resolve("state.json");
+            try (JsonStateRepository writer =
+                    new JsonStateRepository(state, HistoryPolicy.DEFAULT, InstantSource.fixed(NOW))) {
+                writer.load();
+
+                // when
+                writer.save(history);
+            }
+
+            // then
+            try (JsonStateRepository reader =
+                    new JsonStateRepository(state, HistoryPolicy.DEFAULT, InstantSource.fixed(NOW))) {
+                LoadedHistory result = loaded(reader.load());
+                assertThat(result.history()).isEqualTo(history);
+                assertThat(result.notices()).isEmpty();
+            }
+        } finally {
+            try (Stream<Path> walk = Files.walk(tmp)) {
+                walk.sorted(Comparator.reverseOrder()).forEach(p -> p.toFile().delete());
+            }
+        }
+    }
+
+    @Provide
+    Arbitrary<WorkHistory> histories() {
+        return entries().list().ofMaxSize(8).map(list -> WorkHistory.restore(list, HistoryPolicy.DEFAULT));
+    }
+
+    private static Arbitrary<String> segment() {
+        // 앞뒤는 글자 — 공백 · '.' 정규화와 부딪히지 않게. 가운데에 공백 · # · 한글을 섞는다
+        Arbitrary<String> middle = Arbitraries.strings()
+                .withChars("abc XYZ#_-019")
+                .withCharRange('가', '힣')
+                .ofMaxLength(8);
+        return middle.map(m -> "a" + m + "z");
+    }
+
+    private static Arbitrary<VisitedDirectory> entries() {
+        Arbitrary<WorkspacePath> paths = Arbitraries.oneOf(
+                segments().map(s -> path(WINDOWS, "C:\\" + String.join("\\", s))),
+                segments().map(s -> path(WINDOWS, "\\\\srv\\share\\" + String.join("\\", s))),
+                segments().map(s -> path(UBUNTU, "/" + String.join("/", s))),
+                segments().map(s -> path(new ShellEnvironment.Wsl("Debian"), "/" + String.join("/", s))));
+        Arbitrary<Instant> first =
+                Arbitraries.longs().between(1_500_000_000L, 1_900_000_000L).map(Instant::ofEpochSecond);
+        Arbitrary<Long> span = Arbitraries.longs().between(0, 100_000_000L);
+        Arbitrary<Optional<Alias>> aliases = Arbitraries.strings()
+                .withCharRange('a', 'z')
+                .withCharRange('가', '힣')
+                .ofMinLength(1)
+                .ofMaxLength(20)
+                .map(s -> Optional.of(new Alias(s)))
+                .flatMap(a -> Arbitraries.of(a, Optional.<Alias>empty()));
+        Arbitrary<Integer> flags = Arbitraries.integers().between(0, 2); // 0 일반 · 1 고정 · 2 숨김
+        return Combinators.combine(paths, first, span, Arbitraries.integers().between(1, 100_000), aliases, flags)
+                .as((p, f, s, count, alias, flag) ->
+                        new VisitedDirectory(p, f, f.plusSeconds(s), count, flag == 1, alias, flag == 2));
+    }
+
+    private static Arbitrary<List<String>> segments() {
+        return segment().list().ofMinSize(0).ofMaxSize(4);
+    }
+}
