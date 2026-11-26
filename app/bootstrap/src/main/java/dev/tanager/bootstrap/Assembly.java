@@ -1,36 +1,77 @@
 package dev.tanager.bootstrap;
 
 import dev.tanager.adapter.persistence.JsonConfigRepository;
+import dev.tanager.adapter.persistence.JsonStateRepository;
 import dev.tanager.application.port.in.ListProfilesUseCase;
 import dev.tanager.application.port.in.StartSessionUseCase;
+import dev.tanager.application.port.out.HistoryStoreError;
 import dev.tanager.application.port.out.Integration;
+import dev.tanager.application.port.out.LoadedHistory;
 import dev.tanager.application.port.out.PlatformModule;
 import dev.tanager.application.port.out.PtyLauncher;
 import dev.tanager.application.service.DefaultProfileMemory;
+import dev.tanager.application.service.HistorySaver;
 import dev.tanager.application.service.IntegrationStatus;
 import dev.tanager.application.service.ProfileCatalog;
 import dev.tanager.application.service.SessionStarter;
 import dev.tanager.application.service.VisitRecorder;
 import dev.tanager.application.state.AppState;
+import dev.tanager.application.state.Command;
+import dev.tanager.application.state.HistoryLoadFailed;
+import dev.tanager.application.state.HistoryLoaded;
 import dev.tanager.application.state.StateActor;
 import dev.tanager.domain.history.HistoryPolicy;
 import dev.tanager.domain.history.WorkHistory;
+import dev.tanager.domain.shared.Result;
+import java.nio.file.Path;
+import java.time.Duration;
 import java.time.InstantSource;
-import java.util.Objects;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.TimeUnit;
 
-/** 조립한 유스케이스들. 포트 구현을 골라 서비스에 넣는 일은 여기서만 한다(ADR-0002). */
-record Assembly(ListProfilesUseCase profiles, StartSessionUseCase sessions) {
+/**
+ * 조립한 유스케이스들과 앱 생명주기. 포트 구현을 골라 서비스에 넣는 일은 여기서만 한다(ADR-0002). 이력 저장소(state.json)는 프로세스에
+ * 하나만 연다 — 잠금이 인스턴스 단위다(ADR-0013).
+ */
+final class Assembly {
     private static final System.Logger LOG = System.getLogger(Assembly.class.getName());
     private static final String CONFIG_FILE = "config.json";
+    private static final String STATE_FILE = "state.json";
+    // 종료 때 남은 명령을 처리할 시간과 미저장 이력을 쓸 시간(ADR-0011 · 0012)
+    private static final Duration DRAIN_TIMEOUT = Duration.ofSeconds(1);
+    private static final Duration FLUSH_TIMEOUT = Duration.ofSeconds(2);
 
-    Assembly {
-        Objects.requireNonNull(profiles, "profiles");
-        Objects.requireNonNull(sessions, "sessions");
+    private final ListProfilesUseCase profiles;
+    private final StartSessionUseCase sessions;
+    private final StateActor state;
+    private final ExecutorService stateExecutor;
+    private final HistorySaver saver;
+    private final ExecutorScheduler scheduler;
+    private final JsonStateRepository history;
+
+    private Assembly(
+            ListProfilesUseCase profiles,
+            StartSessionUseCase sessions,
+            StateActor state,
+            ExecutorService stateExecutor,
+            HistorySaver saver,
+            ExecutorScheduler scheduler,
+            JsonStateRepository history) {
+        this.profiles = profiles;
+        this.sessions = sessions;
+        this.state = state;
+        this.stateExecutor = stateExecutor;
+        this.saver = saver;
+        this.scheduler = scheduler;
+        this.history = history;
     }
 
     /**
      * 셸 탐지는 수 초 걸릴 수 있어 창을 띄우는 동안 가상 스레드에서 미리 돌린다 — 첫 {@code start} 는 그 결과를 기다린다(탐지는
-     * 한 번뿐이다). 셸 통합 설치도 같은 방식이다(ADR-0014).
+     * 한 번뿐이다). 셸 통합 설치 · 이력 불러오기도 같은 방식이다(ADR-0013 · 0014). 불러오기 전 방문은 불러온 이력 위에 합쳐진다.
      */
     static Assembly assemble(PlatformModule platform, PtyLauncher launcher) {
         ProfileCatalog catalog = new ProfileCatalog(platform);
@@ -43,23 +84,80 @@ record Assembly(ListProfilesUseCase profiles, StartSessionUseCase sessions) {
         });
         IntegrationStatus integration = new IntegrationStatus(platform);
         warmShellIntegration(integration);
-        JsonConfigRepository config =
-                new JsonConfigRepository(platform.dirs().appData().resolve(CONFIG_FILE));
-        // 이력은 아직 메모리에만 있다 — state.json 저장 · 불러오기는 #79 에서 잇는다
-        StateActor state =
-                new StateActor(AppState.initial(WorkHistory.empty(HistoryPolicy.DEFAULT)), StateActor.serialExecutor());
+        Path appData = platform.dirs().appData();
+        JsonConfigRepository config = new JsonConfigRepository(appData.resolve(CONFIG_FILE));
+        JsonStateRepository history =
+                new JsonStateRepository(appData.resolve(STATE_FILE), HistoryPolicy.DEFAULT, InstantSource.system());
+        ExecutorService stateExecutor = StateActor.serialExecutor();
+        StateActor state = new StateActor(AppState.initial(WorkHistory.empty(HistoryPolicy.DEFAULT)), stateExecutor);
+        ExecutorScheduler scheduler = new ExecutorScheduler("tanager-history-timer");
+        Executor io = task -> Thread.ofVirtual().name("tanager-history-save").start(task);
+        // 불러오기 명령보다 먼저 구독해야 불러온 이력을 "저장할 것 없음"으로 안다
+        HistorySaver saver = new HistorySaver(state, history, scheduler, io);
+        loadHistory(history, state);
         VisitRecorder visits = new VisitRecorder(state, InstantSource.system());
-        return new Assembly(
-                catalog,
-                new SessionStarter(
-                        catalog,
-                        config,
-                        platform,
-                        integration,
-                        launcher,
-                        new DefaultProfileMemory(config),
-                        state,
-                        visits));
+        SessionStarter starter = new SessionStarter(
+                catalog, config, platform, integration, launcher, new DefaultProfileMemory(config), state, visits);
+        return new Assembly(catalog, starter, state, stateExecutor, saver, scheduler, history);
+    }
+
+    ListProfilesUseCase profiles() {
+        return profiles;
+    }
+
+    StartSessionUseCase sessions() {
+        return sessions;
+    }
+
+    StateActor state() {
+        return state;
+    }
+
+    /**
+     * 앱을 끝낼 때 한 번 부른다(ADR-0011 · 0012): 상태 실행기를 닫고 남은 명령을 처리한 뒤 → 미저장 이력을 바로 저장(최대 2초) → 저장소를
+     * 닫는다(잠금을 푼다). 이 뒤의 명령은 실패한 응답을 받는다.
+     */
+    void shutdown() {
+        stateExecutor.shutdown();
+        try {
+            if (!stateExecutor.awaitTermination(DRAIN_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS)) {
+                LOG.log(System.Logger.Level.WARNING, "상태 명령이 {0} 안에 끝나지 않았다", DRAIN_TIMEOUT);
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        if (!saver.flush(FLUSH_TIMEOUT)) {
+            LOG.log(System.Logger.Level.WARNING, "종료 때 이력을 저장하지 못했다");
+        }
+        scheduler.close();
+        history.close();
+    }
+
+    // 블로킹 I/O 라 가상 스레드에서. 종료가 먼저 와 결과를 넘기지 못하면 다시 잡은 잠금을 푼다
+    private static void loadHistory(JsonStateRepository history, StateActor state) {
+        Thread.ofVirtual().name("tanager-history-load").start(() -> {
+            Command<Boolean> loaded;
+            try {
+                loaded = switch (history.load()) {
+                    case Result.Ok<LoadedHistory, HistoryStoreError>(LoadedHistory result) -> new HistoryLoaded(result);
+                    case Result.Err<LoadedHistory, HistoryStoreError>(HistoryStoreError error) ->
+                        new HistoryLoadFailed(error);
+                };
+            } catch (RuntimeException e) {
+                LOG.log(System.Logger.Level.ERROR, "이력 불러오기 실패", e);
+                loaded = new HistoryLoadFailed(new HistoryStoreError.Io(e.toString()));
+            }
+            state.submit(loaded).whenComplete((reply, failure) -> {
+                if (rejected(failure)) {
+                    history.close();
+                }
+            });
+        });
+    }
+
+    private static boolean rejected(Throwable failure) {
+        Throwable cause = failure instanceof CompletionException wrapped ? wrapped.getCause() : failure;
+        return cause instanceof RejectedExecutionException;
     }
 
     /** 파일 I/O 라 백그라운드에서 한 번 데운다. 셸에 주입하는 일은 #55 · #81. */

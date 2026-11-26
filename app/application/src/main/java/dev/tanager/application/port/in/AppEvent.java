@@ -30,4 +30,11 @@ public sealed interface AppEvent {
             Objects.requireNonNull(sessions, "sessions");
         }
     }
+
+    /** 이력 저장소에 사용자에게 알릴 일이 생겼다(불러오기 복구 · 읽기 전용 · 저장 실패 등). 상태줄 알림 한 줄. */
+    record StoreNotice(String message) implements AppEvent {
+        public StoreNotice {
+            Objects.requireNonNull(message, "message");
+        }
+    }
 }

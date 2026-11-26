@@ -1,6 +1,7 @@
 package dev.tanager.ui;
 
 import com.formdev.flatlaf.FlatLaf;
+import dev.tanager.application.port.in.AppEvents;
 import dev.tanager.application.port.in.ListProfilesUseCase;
 import dev.tanager.application.port.in.StartSessionUseCase;
 import dev.tanager.ui.font.TerminalFontSet;
@@ -22,8 +23,16 @@ public final class SwingUi {
 
     private SwingUi() {}
 
-    /** EDT 에서 메인 창을 띄우고 기억한 셸 하나를 연다(없으면 셸 선택 화면). */
-    public static void showMainWindow(StartSessionUseCase sessions, ListProfilesUseCase profiles) {
+    /**
+     * EDT 에서 메인 창을 띄우고 기억한 셸 하나를 연다(없으면 셸 선택 화면). {@code events} 의 저장소 알림은 상태줄에 보인다.
+     *
+     * @param onShutdown 앱을 끝낼 때 셸을 닫은 뒤 EDT 밖에서 한 번 부른다(미저장 이력 저장 등, ADR-0011). 끝나면 프로세스를 끝낸다
+     */
+    public static void showMainWindow(
+            StartSessionUseCase sessions, ListProfilesUseCase profiles, AppEvents events, Runnable onShutdown) {
+        // 창을 만들기 전에 구독한다 — 이력 불러오기 알림이 창보다 먼저 올 수 있다. 창은 앱과 수명이 같아 해제하지 않는다
+        NoticeInbox inbox = new NoticeInbox();
+        events.subscribeOnUi(event -> Notices.messageOf(event).ifPresent(inbox::accept));
         SwingUtilities.invokeLater(() -> {
             List<String> warnings = new ArrayList<>();
             // 글꼴이 없어도 창은 띄운다 — 논리 글꼴 Monospaced 로 대신하고 상태줄에 알린다
@@ -38,7 +47,9 @@ public final class SwingUi {
             TerminalSettings settings = new TerminalSettings(fonts, JediTermColors.current());
             Executor background =
                     task -> Thread.ofVirtual().name("tanager-session-start").start(task);
-            new MainWindow(sessions, profiles, settings, background).show(warnings);
+            MainWindow window = new MainWindow(sessions, profiles, onShutdown, settings, background);
+            window.show(warnings);
+            inbox.attach(window::notify);
         });
     }
 

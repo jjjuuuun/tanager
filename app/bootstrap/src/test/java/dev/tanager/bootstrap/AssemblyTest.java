@@ -3,6 +3,7 @@ package dev.tanager.bootstrap;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
+import dev.tanager.application.port.in.AppEvent;
 import dev.tanager.application.port.in.StartFailure;
 import dev.tanager.application.port.in.StartNotice;
 import dev.tanager.application.port.in.StartRequest;
@@ -11,7 +12,11 @@ import dev.tanager.application.port.out.FakePlatformModule;
 import dev.tanager.application.port.out.FakeShellIntegration;
 import dev.tanager.application.port.out.ScriptedPtyLauncher;
 import dev.tanager.application.port.out.TerminalSize;
+import dev.tanager.application.state.HistoryStore;
+import dev.tanager.application.state.PendingVisit;
+import dev.tanager.application.state.Transition;
 import dev.tanager.domain.history.ShellEnvironment;
+import dev.tanager.domain.history.WorkspacePath;
 import dev.tanager.domain.session.IntegrationMode;
 import dev.tanager.domain.session.LaunchTemplate;
 import dev.tanager.domain.session.ProfileId;
@@ -23,8 +28,10 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -184,5 +191,138 @@ class AssemblyTest {
         assertThat(started.session().profile()).isEqualTo(CMD);
         assertThat(launcher.commands()).hasSize(1);
         started.stream().close();
+    }
+
+    private static final WorkspacePath INFRA = WorkspacePath.of(new ShellEnvironment.Windows(), "C:\\work\\infra")
+            .value()
+            .orElseThrow();
+    private static final WorkspacePath NEW_DIR = WorkspacePath.of(new ShellEnvironment.Windows(), "C:\\work\\new")
+            .value()
+            .orElseThrow();
+
+    private static String stateJson(int schemaVersion) {
+        return """
+                {"schemaVersion":%d,"history":{"entries":[
+                  {"env":{"kind":"windows"},"path":"C:\\\\work\\\\infra",
+                   "firstVisited":"2026-11-21T01:00:00Z","lastVisited":"2026-11-23T08:30:00Z",
+                   "visitCount":5,"pinned":false,"alias":null,"hidden":false,"sources":["shell"]}]}}
+                """.formatted(schemaVersion);
+    }
+
+    private Assembly assembleWithState(String json) throws Exception {
+        if (json != null) {
+            Files.writeString(appData.resolve("state.json"), json, StandardCharsets.UTF_8);
+        }
+        FakePlatformModule platform = new FakePlatformModule(List.of(CMD)).withAppData(appData);
+        return Assembly.assemble(platform, new ScriptedPtyLauncher());
+    }
+
+    private static void visit(Assembly assembly, WorkspacePath path) {
+        // VisitRecorder 와 같은 규칙: 불러오는 중이면 방문을 쌓아 두어 불러온 이력 위에 다시 적용되게 한다
+        assembly.state().submit(current -> {
+            Instant at = Instant.parse("2026-11-27T00:00:00Z");
+            var next = current.history().recordVisit(path, at);
+            HistoryStore store = current.store() instanceof HistoryStore.Loading loading
+                    ? loading.queued(new PendingVisit(path, at))
+                    : current.store();
+            return new Transition<>(
+                    current.withHistory(next).withStore(store), List.of(new AppEvent.HistoryChanged(next)), true);
+        });
+    }
+
+    @Test
+    @DisplayName("조립하면 appData 의 state.json 이력을 백그라운드에서 불러와 쓸 수 있는 상태가 된다")
+    void assembleLoadsHistoryFromStateJson() throws Exception {
+        // given / when
+        Assembly assembly = assembleWithState(stateJson(1));
+
+        // then
+        await().atMost(Duration.ofSeconds(5))
+                .until(() -> assembly.state().snapshot().store() instanceof HistoryStore.Writable);
+        assertThat(assembly.state()
+                        .snapshot()
+                        .history()
+                        .find(INFRA)
+                        .orElseThrow()
+                        .visitCount())
+                .isEqualTo(5);
+    }
+
+    @Test
+    @DisplayName("불러오기 전에 기록된 방문은 불러온 이력 위에 합쳐진다")
+    void visitBeforeLoadIsMergedIntoLoadedHistory() throws Exception {
+        // given / when 조립 직후 곧바로 방문한다(불러오기와 경합해도 어느 쪽이든 합쳐져야 한다)
+        Assembly assembly = assembleWithState(stateJson(1));
+        visit(assembly, INFRA);
+
+        // then
+        await().atMost(Duration.ofSeconds(5))
+                .until(() -> assembly.state().snapshot().store() instanceof HistoryStore.Writable
+                        && assembly.state()
+                                        .snapshot()
+                                        .history()
+                                        .find(INFRA)
+                                        .map(e -> e.visitCount())
+                                        .orElse(0)
+                                == 6);
+    }
+
+    @Test
+    @DisplayName("종료(shutdown)는 1초 안에 생긴 미저장 변경을 바로 state.json 에 저장하고 이후 명령은 거부된다")
+    void shutdownFlushesUnsavedChangesAndRejectsLaterCommands() throws Exception {
+        // given
+        Assembly assembly = assembleWithState(null);
+        await().atMost(Duration.ofSeconds(5))
+                .until(() -> assembly.state().snapshot().store() instanceof HistoryStore.Writable);
+        visit(assembly, NEW_DIR);
+        await().atMost(Duration.ofSeconds(5))
+                .until(() -> assembly.state().snapshot().history().find(NEW_DIR).isPresent());
+
+        // when
+        assembly.shutdown();
+
+        // then
+        assertThat(Files.readString(appData.resolve("state.json"), StandardCharsets.UTF_8))
+                .contains("C:\\\\work\\\\new");
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        assembly.state()
+                .submit(current -> new Transition<>(current, List.of(), true))
+                .whenComplete((r, e) -> failure.set(e));
+        assertThat(failure.get()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("방문이 없으면 shutdown 이 state.json 을 만들지도 바꾸지도 않는다")
+    void shutdownWithoutChangesLeavesStateFileUntouched() throws Exception {
+        // given
+        Assembly assembly = assembleWithState(stateJson(1));
+        await().atMost(Duration.ofSeconds(5))
+                .until(() -> assembly.state().snapshot().store() instanceof HistoryStore.Writable);
+        byte[] before = Files.readAllBytes(appData.resolve("state.json"));
+
+        // when
+        assembly.shutdown();
+
+        // then
+        assertThat(Files.readAllBytes(appData.resolve("state.json"))).isEqualTo(before);
+    }
+
+    @Test
+    @DisplayName("새 버전이 쓴 state.json 은 읽기 전용으로 열고 방문해도 종료 때 파일을 바꾸지 않는다")
+    void newerSchemaIsReadOnlyAndNeverOverwritten() throws Exception {
+        // given
+        Assembly assembly = assembleWithState(stateJson(99));
+        byte[] before = Files.readAllBytes(appData.resolve("state.json"));
+        await().atMost(Duration.ofSeconds(5))
+                .until(() -> assembly.state().snapshot().store() instanceof HistoryStore.ReadOnly);
+
+        // when
+        visit(assembly, NEW_DIR);
+        await().atMost(Duration.ofSeconds(5))
+                .until(() -> assembly.state().snapshot().history().find(NEW_DIR).isPresent());
+        assembly.shutdown();
+
+        // then
+        assertThat(Files.readAllBytes(appData.resolve("state.json"))).isEqualTo(before);
     }
 }

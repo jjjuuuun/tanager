@@ -3,6 +3,8 @@ package dev.tanager.application.service;
 import dev.tanager.application.port.in.AppEvent;
 import dev.tanager.application.port.in.RecordVisitUseCase;
 import dev.tanager.application.state.AppState;
+import dev.tanager.application.state.HistoryStore;
+import dev.tanager.application.state.PendingVisit;
 import dev.tanager.application.state.StateActor;
 import dev.tanager.application.state.Transition;
 import dev.tanager.domain.history.WorkHistory;
@@ -37,6 +39,15 @@ public final class VisitRecorder implements RecordVisitUseCase {
         state.submit(current -> visit(current, pane, cwd, at));
     }
 
+    // 불러오기 전 방문은 불러온 이력 위에 다시 적용하려고 쌓아 둔다(ADR-0013)
+    private static HistoryStore queued(HistoryStore store, WorkspacePath cwd, Instant at) {
+        return switch (store) {
+            case HistoryStore.Loading loading -> loading.queued(new PendingVisit(cwd, at));
+            case HistoryStore.Writable writable -> writable;
+            case HistoryStore.ReadOnly readOnly -> readOnly;
+        };
+    }
+
     private static Transition<Boolean> visit(AppState current, PaneId pane, WorkspacePath cwd, Instant at) {
         Optional<LiveSessions> moved = current.sessions().cwdReported(pane, cwd);
         if (moved.isEmpty()) {
@@ -44,7 +55,7 @@ public final class VisitRecorder implements RecordVisitUseCase {
         }
         WorkHistory history = current.history().recordVisit(cwd, at);
         return new Transition<>(
-                current.withHistory(history).withSessions(moved.get()),
+                current.withHistory(history).withSessions(moved.get()).withStore(queued(current.store(), cwd, at)),
                 List.of(new AppEvent.HistoryChanged(history), new AppEvent.SessionCwdChanged(pane, cwd)),
                 true);
     }

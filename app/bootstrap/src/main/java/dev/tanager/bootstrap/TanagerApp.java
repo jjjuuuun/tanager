@@ -4,9 +4,12 @@ import dev.tanager.adapter.pty.Pty4jLauncher;
 import dev.tanager.application.platform.OperatingSystem;
 import dev.tanager.application.platform.PlatformSelection;
 import dev.tanager.application.platform.PlatformSelectionError;
+import dev.tanager.application.port.in.AppEvents;
 import dev.tanager.application.port.out.PlatformModule;
+import dev.tanager.application.state.UiAppEvents;
 import dev.tanager.domain.shared.Result;
 import dev.tanager.ui.SwingUi;
+import dev.tanager.ui.SwingUiDispatcher;
 import java.awt.GraphicsEnvironment;
 import java.util.List;
 import java.util.ServiceLoader;
@@ -37,7 +40,8 @@ public final class TanagerApp {
             case Result.Ok<PlatformModule, PlatformSelectionError>(PlatformModule platform) -> {
                 LOG.log(System.Logger.Level.INFO, "플랫폼: {0} ({1})", platform.id(), os.describe());
                 Assembly assembly = Assembly.assemble(platform, new Pty4jLauncher());
-                SwingUi.showMainWindow(assembly.sessions(), assembly.profiles());
+                AppEvents events = new UiAppEvents(assembly.state(), new SwingUiDispatcher());
+                SwingUi.showMainWindow(assembly.sessions(), assembly.profiles(), events, assembly::shutdown);
             }
             case Result.Err<PlatformModule, PlatformSelectionError>(PlatformSelectionError error) -> {
                 LOG.log(System.Logger.Level.ERROR, error.describe());
