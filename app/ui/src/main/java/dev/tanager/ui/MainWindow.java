@@ -28,8 +28,8 @@ import javax.swing.border.EmptyBorder;
 /**
  * 메인 창(시안 D 의 M2 부분): 제목 표시줄 안 탭 · 터미널 창 하나 · 상태줄. EDT 에서만 만진다.
  *
- * <p>앱 종료 순서(ADR-0011): 셸 닫기(기동 중이면 기동이 끝난 뒤) → 창 dispose(바로 사라진다) → 비데몬 스레드에서 앱 종료 훅
- * (남은 명령 처리 · 미저장 이력 저장 최대 2초) → 셸 종료 대기 → {@code System.exit(0)}. 훅과 셸 대기는 닫은 때부터 4초 안에 끝내고, 훅이
+ * <p>앱 종료 순서(ADR-0011): 셸 닫기(기동 중이면 기동이 끝난 뒤) → 창 dispose(바로 사라진다) → 비데몬 스레드가 앱 종료 훅(남은 명령 처리 ·
+ * 미저장 이력 저장 최대 2초)을 데몬 스레드에서 돌리고 기한까지만 기다림 → 셸 종료 대기 → {@code System.exit(0)}. 훅과 셸 대기는 닫은 때부터 4초 안에 끝내고, 훅이
  * 멈추거나 Error 가 나도 끝낸다({@link ExitSequence}).
  */
 final class MainWindow implements PaneController.Host {

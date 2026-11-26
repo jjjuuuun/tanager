@@ -53,7 +53,7 @@ public final class HistorySaver {
     private boolean visitedWhileLoading;
 
     /**
-     * 만들면서 {@code state} 의 이벤트를 구독한다. 불러오기 명령을 내기 전에 만든다. 만들 때 이미 쌓여 있던 방문(불러오는 중의 방문)도 불러온 뒤
+     * 만들면서 {@code state} 의 이벤트를 구독한다. 다른 스레드가 {@code state} 에 명령(방문 · 불러오기)을 내기 전에 만든다 — 스냅샷을 읽은 뒤 구독하기 전에 확정된 전이는 보지 못한다. 만들 때 이미 쌓여 있던 방문(불러오는 중의 방문)도 불러온 뒤
      * 저장할 것으로 센다.
      */
     public HistorySaver(StateActor state, HistoryRepository repository, Scheduler scheduler, Executor io) {

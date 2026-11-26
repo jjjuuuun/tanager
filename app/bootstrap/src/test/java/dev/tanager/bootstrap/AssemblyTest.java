@@ -287,7 +287,8 @@ class AssemblyTest {
     @Test
     @DisplayName("불러오기 전에 기록된 방문은 종료 때 불러온 이력과 합쳐 state.json 에 저장된다")
     void visitBeforeLoadIsSavedOnShutdown() throws Exception {
-        // given 조립 직후 곧바로 방문한다
+        // given 조립 직후 곧바로 방문한다. 불러오기와 경합해 어느 쪽이 먼저든 count 6 이 저장돼야 한다
+        //       (불러오는 동안의 방문 경로를 결정적으로 보는 것은 HistorySaverTest)
         Assembly assembly = assembleWithState(stateJson(1));
         visit(assembly, INFRA);
         await().atMost(Duration.ofSeconds(5))

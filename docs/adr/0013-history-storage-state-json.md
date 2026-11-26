@@ -68,6 +68,6 @@ SDD 는 이력 · 작업 공간 · 창을 한 파일(`state.json`)에 둔다. �
 
 ## 개정 (#79, 2026-11-27) — 저장기의 가변 상태
 - java-style 규칙 8("가변 상태는 adapter 와 StateActor 안에만")에 예외를 하나 더한다: **출력 포트 일정 조율용 가변 상태는 단일 monitor 로 지켜 application.service 에 둘 수 있다**(`HistorySaver`).
-- `HistorySaver` 의 예약 · 저장 중 여부 · 미저장 표시 · 파일에 있다고 아는 이력 · 쓰는 중인 이력 · 직전 실패는 도메인 상태가 아니라 `HistoryRepository` · `Scheduler` 를 부르는 시점을 정하는 상태다. 이벤트 콜백(actor) · 예약(스케줄러) · 저장(I/O) · `flush`(종료) 네 스레드가 만지므로 모두 `monitor` 하나로 지키고, 블로킹 I/O(`save`)는 monitor 밖에서 한다.
+- `HistorySaver` 의 예약 · 저장 중 여부 · 저장 중 기한 도래 · 미저장 표시 · 파일에 있다고 아는 이력 · 쓰는 중인 이력 · 직전 실패 · 불러오는 중 여부 · 불러오는 동안 방문 여부는 도메인 상태가 아니라 `HistoryRepository` · `Scheduler` 를 부르는 시점을 정하는 상태다. 이벤트 콜백(actor) · 예약(스케줄러) · 저장(I/O) · `flush`(종료) 네 스레드가 만지므로 모두 `monitor` 하나로 지키고, 블로킹 I/O(`save`)는 monitor 밖에서 한다.
 - StateActor 에 넣지 않은 까닭: 저장 결과를 기다리는 동안 actor 를 막을 수 없고, 저장 시점은 도메인 · 트리에 보이는 상태가 아니다. adapter 에 두면 throttle 규칙(FR-RES-01 "1초 안")이 저장소 구현마다 갈라진다.
 - 이 예외는 위 조건(출력 포트 호출 시점 조율 · monitor 하나 · I/O 는 monitor 밖)을 모두 만족할 때만 쓴다. 도메인 규칙을 담는 상태는 여전히 StateActor 의 명령으로 바꾼다.
