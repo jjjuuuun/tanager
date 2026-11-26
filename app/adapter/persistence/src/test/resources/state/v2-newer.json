@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 2,
+  "history": {
+    "entries": [
+      { "env": { "kind": "windows" }, "path": "C:\\work\\infra",
+        "firstVisited": "2026-11-21T01:00:00Z", "lastVisited": "2026-11-23T08:30:00Z",
+        "visitCount": 5, "pinned": false, "alias": null, "hidden": false, "sources": ["shell"], "color": "red" }
+    ]
+  },
+  "workspace": { "tabs": [] }
+}
