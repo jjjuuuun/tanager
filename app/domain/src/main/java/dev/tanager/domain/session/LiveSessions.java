@@ -73,29 +73,22 @@ public record LiveSessions(Map<PaneId, LiveSession> byPane, int nextNumber) {
     public Optional<LiveSessions> cwdReported(PaneId pane, WorkspacePath path) {
         Objects.requireNonNull(pane, "pane");
         Objects.requireNonNull(path, "path");
-        LiveSession live = byPane.get(pane);
-        if (live == null || live.lastReported().equals(Optional.of(path))) {
-            return Optional.empty();
-        }
-        return live.session()
-                .cwdChanged(path)
-                .value()
-                .map(moved -> new LiveSessions(
-                        put(new LiveSession(pane, live.number(), moved, Optional.of(path))), nextNumber));
+        return Optional.ofNullable(byPane.get(pane))
+                .filter(live -> !live.lastReported().equals(Optional.of(path)))
+                .flatMap(live -> live.session()
+                        .cwdChanged(path)
+                        .value()
+                        .map(moved -> replaced(new LiveSession(pane, live.number(), moved, Optional.of(path)))));
     }
 
     /** {@code pane} 의 셸이 {@code exitCode} 로 끝났다. 모르는 창 · 이미 끝난 창이면 그대로다. 마지막 경로는 유지한다. */
     public LiveSessions exited(PaneId pane, int exitCode) {
         Objects.requireNonNull(pane, "pane");
-        LiveSession live = byPane.get(pane);
-        if (live == null) {
-            return this;
-        }
-        return live.session()
-                .exited(exitCode)
-                .value()
-                .map(ended -> new LiveSessions(
-                        put(new LiveSession(pane, live.number(), ended, live.lastReported())), nextNumber))
+        return Optional.ofNullable(byPane.get(pane))
+                .flatMap(live -> live.session()
+                        .exited(exitCode)
+                        .value()
+                        .map(ended -> replaced(new LiveSession(pane, live.number(), ended, live.lastReported()))))
                 .orElse(this);
     }
 
@@ -116,6 +109,11 @@ public record LiveSessions(Map<PaneId, LiveSession> byPane, int nextNumber) {
                 .sorted(Comparator.comparingInt(LiveSession::number))
                 .map(LiveSession::leaf)
                 .toList();
+    }
+
+    // 번호를 새로 주지 않고 그 창의 세션만 바꾼다
+    private LiveSessions replaced(LiveSession session) {
+        return new LiveSessions(put(session), nextNumber);
     }
 
     private Map<PaneId, LiveSession> put(LiveSession session) {
