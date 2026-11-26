@@ -1,6 +1,7 @@
 package dev.tanager.platform.windows;
 
 import dev.tanager.application.port.out.LaunchCommand;
+import dev.tanager.application.port.out.LaunchCommand.EnvNames;
 import dev.tanager.domain.history.ShellEnvironment;
 import dev.tanager.domain.session.LaunchTemplate;
 import dev.tanager.domain.session.ShellProfile;
@@ -14,6 +15,8 @@ import java.util.Optional;
 final class WindowsLaunchCommands {
     // wsl.exe 의 --cd ~ 는 리눅스 사용자의 홈으로 들어간다 — 홈을 미리 조회하지 않는다(ADR-0009)
     private static final String WSL_HOME = "~";
+    // wsl.exe 도 Windows 프로세스라 앱 환경을 Windows 규칙(대소문자 무시)으로 물려받는다
+    private static final EnvNames WINDOWS_NAMES = EnvNames.CASE_INSENSITIVE;
 
     private WindowsLaunchCommands() {}
 
@@ -27,9 +30,10 @@ final class WindowsLaunchCommands {
         return switch (profile.env()) {
             // 리눅스 경로는 Windows 작업 디렉터리로 줄 수 없다 — wsl.exe 의 --cd 로 넘긴다(ADR-0007)
             case ShellEnvironment.Wsl _ ->
-                new LaunchCommand(wslArgv(template, pathOr(dir, WSL_HOME)), Optional.empty(), Map.of());
+                new LaunchCommand(wslArgv(template, pathOr(dir, WSL_HOME)), Optional.empty(), Map.of(), WINDOWS_NAMES);
             case ShellEnvironment.Windows _ ->
-                new LaunchCommand(templateArgv(template), Optional.of(pathOr(dir, userProfile)), Map.of());
+                new LaunchCommand(
+                        templateArgv(template), Optional.of(pathOr(dir, userProfile)), Map.of(), WINDOWS_NAMES);
         };
     }
 

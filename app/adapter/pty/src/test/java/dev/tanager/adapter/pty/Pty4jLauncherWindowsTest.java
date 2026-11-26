@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 import dev.tanager.application.port.out.LaunchCommand;
+import dev.tanager.application.port.out.LaunchCommand.EnvNames;
 import dev.tanager.application.port.out.LaunchError;
 import dev.tanager.application.port.out.OutputCollector;
 import dev.tanager.application.port.out.TerminalSize;
@@ -107,7 +108,8 @@ class Pty4jLauncherWindowsTest {
     @DisplayName("W5 없는 작업 디렉터리는 WorkingDirectoryNotFound 로 실패한다")
     void missingWorkingDirectory(@TempDir Path temp) {
         String missing = temp.resolve("없는 폴더").toString();
-        LaunchCommand command = new LaunchCommand(List.of(WindowsShells.cmdExe()), Optional.of(missing), Map.of());
+        LaunchCommand command = new LaunchCommand(
+                List.of(WindowsShells.cmdExe()), Optional.of(missing), Map.of(), EnvNames.CASE_INSENSITIVE);
 
         Result<TerminalStream, LaunchError> result = launcher.launch(command, TerminalSize.DEFAULT);
 
@@ -118,7 +120,8 @@ class Pty4jLauncherWindowsTest {
     @DisplayName("W6 없는 실행 파일은 ExecutableNotFound 로 실패한다")
     void missingExecutable() {
         String missing = "C:\\없는폴더\\nope.exe";
-        LaunchCommand command = new LaunchCommand(List.of(missing), Optional.empty(), Map.of());
+        LaunchCommand command =
+                new LaunchCommand(List.of(missing), Optional.empty(), Map.of(), EnvNames.CASE_INSENSITIVE);
 
         Result<TerminalStream, LaunchError> result = launcher.launch(command, TerminalSize.DEFAULT);
 
@@ -159,7 +162,10 @@ class Pty4jLauncherWindowsTest {
         // given
         Path dir = Files.createDirectory(temp.resolve("한글 폴더 #1"));
         LaunchCommand command = new LaunchCommand(
-                List.of(WindowsShells.cmdExe()), Optional.of(dir.toString()), Map.of("TANAGER_T", "1"));
+                List.of(WindowsShells.cmdExe()),
+                Optional.of(dir.toString()),
+                Map.of("TANAGER_T", "1"),
+                EnvNames.CASE_INSENSITIVE);
         // 긴 임시 경로가 80열에서 줄바꿈되지 않게 넓게 띄운다
         TerminalStream stream = start(command, new TerminalSize(300, 30));
 

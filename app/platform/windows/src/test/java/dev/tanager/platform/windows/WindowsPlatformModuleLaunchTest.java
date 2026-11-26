@@ -45,6 +45,25 @@ class WindowsPlatformModuleLaunchTest {
     }
 
     @Test
+    @DisplayName("USERPROFILE 이 슬래시 경로면 역슬래시로 정규화하고, 절대 경로가 아니면 대체 홈을 쓴다 — 기동이 예외로 끝나지 않는다")
+    void userProfileIsNormalizedOrFallsBack() {
+        // given / when
+        var slashed = module(Optional.of("C:/Users/me")).launchCommand(POWERSHELL, new WorkingDir.Home());
+        WindowsShellCatalog catalog = new WindowsShellCatalog(
+                new FakeCommandRunner(new CommandOutcome.NotStarted("x")),
+                key -> Optional.empty(),
+                Duration.ofSeconds(1));
+        var relative = new WindowsPlatformModule(
+                        catalog,
+                        key -> key.equals("USERPROFILE") ? Optional.of("relative") : Optional.empty(),
+                        "E:\\대체\\홈")
+                .launchCommand(POWERSHELL, new WorkingDir.Home());
+        // then
+        assertThat(slashed.workingDirectory()).contains("C:\\Users\\me");
+        assertThat(relative.workingDirectory()).contains("E:\\대체\\홈");
+    }
+
+    @Test
     @DisplayName("USERPROFILE 이 없거나 공백이면 주입한 대체 홈이 작업 디렉터리가 된다")
     void homeFallsBackToInjectedHomeWithoutUserProfile() {
         for (Optional<String> userProfile : List.of(Optional.<String>empty(), Optional.of("   "))) {

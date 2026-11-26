@@ -4,6 +4,8 @@ import dev.tanager.application.platform.OperatingSystem;
 import dev.tanager.application.port.out.LaunchCommand;
 import dev.tanager.application.port.out.PlatformDirs;
 import dev.tanager.application.port.out.PlatformModule;
+import dev.tanager.domain.history.ShellEnvironment;
+import dev.tanager.domain.history.WorkspacePath;
 import dev.tanager.domain.session.ShellProfile;
 import dev.tanager.domain.session.WorkingDir;
 import java.nio.file.Path;
@@ -47,7 +49,12 @@ public final class WindowsPlatformModule implements PlatformModule {
         this.shellCatalog = Objects.requireNonNull(shellCatalog, "shellCatalog");
         Objects.requireNonNull(env, "env");
         Objects.requireNonNull(fallbackHome, "fallbackHome");
-        this.userProfile = nonBlank(env, "USERPROFILE").orElse(fallbackHome);
+        // 슬래시 경로는 역슬래시로 정규화하고, 절대 경로가 아니면 대체 홈을 쓴다 — LaunchCommand 가 상대 경로를 거부하므로
+        this.userProfile = nonBlank(env, "USERPROFILE")
+                .flatMap(value ->
+                        WorkspacePath.of(new ShellEnvironment.Windows(), value).value())
+                .map(WorkspacePath::path)
+                .orElse(fallbackHome);
         this.appData = nonBlank(env, "APPDATA")
                 .map(dir -> Path.of(dir, APP_FOLDER))
                 .orElseGet(() -> Path.of(fallbackHome, "AppData", "Roaming", APP_FOLDER));

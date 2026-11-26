@@ -98,7 +98,7 @@ public final class FakePlatformModule implements PlatformModule {
             case WorkingDir.Home _ -> argv.add("--home");
             case WorkingDir.At at -> workingDirectory = Optional.of(at.path().path());
         }
-        return new LaunchCommand(argv, workingDirectory, Map.of());
+        return new LaunchCommand(argv, workingDirectory, Map.of(), LaunchCommand.EnvNames.CASE_SENSITIVE);
     }
 
     @Override
