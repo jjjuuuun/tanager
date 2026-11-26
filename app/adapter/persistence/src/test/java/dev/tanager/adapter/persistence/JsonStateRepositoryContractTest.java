@@ -3,6 +3,9 @@ package dev.tanager.adapter.persistence;
 import dev.tanager.application.port.out.HistoryRepository;
 import dev.tanager.application.port.out.HistoryRepositoryContract;
 import dev.tanager.domain.history.HistoryPolicy;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.time.InstantSource;
@@ -25,6 +28,20 @@ class JsonStateRepositoryContractTest extends HistoryRepositoryContract {
                     InstantSource.fixed(Instant.parse("2026-11-26T01:02:03Z")));
         }
         return repository;
+    }
+
+    // 상위 버전(schemaVersion 2) 파일은 읽기 전용으로 열린다
+    @Override
+    protected void arrangeReadOnly() throws IOException {
+        try (InputStream in = JsonStateRepositoryContractTest.class.getResourceAsStream("/state/v2-newer.json")) {
+            Files.write(dir.resolve("state.json"), in.readAllBytes());
+        }
+    }
+
+    // state.json 자리를 폴더로 막아 읽기를 실패시킨다
+    @Override
+    protected void arrangeLoadFailure() throws IOException {
+        Files.createDirectories(dir.resolve("state.json"));
     }
 
     @AfterEach

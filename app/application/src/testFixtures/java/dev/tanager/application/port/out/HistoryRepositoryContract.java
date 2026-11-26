@@ -26,6 +26,12 @@ public abstract class HistoryRepositoryContract {
     /** 비어 있는(아직 저장한 적 없는) 저장소. 같은 테스트 안에서 여러 번 불러도 같은 저장소(같은 저장 위치)를 돌려준다. */
     protected abstract HistoryRepository repository();
 
+    /** 다음 {@code load} 가 성공하되 {@link StoreAccess#READ_ONLY} 로 열리게 만든다(상위 버전 파일 등). {@link #repository()} 전후 어느 때나 부를 수 있다. */
+    protected abstract void arrangeReadOnly() throws Exception;
+
+    /** 다음 {@code load} 가 오류로 끝나게 만든다(저장 위치를 읽을 수 없음 등). {@link #repository()} 전후 어느 때나 부를 수 있다. */
+    protected abstract void arrangeLoadFailure() throws Exception;
+
     private static WorkspacePath path(ShellEnvironment env, String raw) {
         return WorkspacePath.of(env, raw).value().orElseThrow();
     }
@@ -109,5 +115,35 @@ public abstract class HistoryRepositoryContract {
         assertThat(saved.error()).containsInstanceOf(HistoryStoreError.ReadOnly.class);
         assertThat(repository.load().value().orElseThrow().history())
                 .isEqualTo(WorkHistory.empty(HistoryPolicy.DEFAULT));
+    }
+
+    @Test
+    @DisplayName("READ_ONLY 로 연 뒤의 저장은 ReadOnly 다")
+    public void saveAfterReadOnlyLoadIsReadOnly() throws Exception {
+        // given
+        arrangeReadOnly();
+        HistoryRepository repository = repository();
+        assertThat(repository.load().value().map(LoadedHistory::access)).contains(StoreAccess.READ_ONLY);
+
+        // when
+        Result<WorkHistory, HistoryStoreError> saved = repository.save(sample());
+
+        // then
+        assertThat(saved.error()).containsInstanceOf(HistoryStoreError.ReadOnly.class);
+    }
+
+    @Test
+    @DisplayName("불러오기가 실패한 뒤의 저장은 ReadOnly 다")
+    public void saveAfterFailedLoadIsReadOnly() throws Exception {
+        // given
+        arrangeLoadFailure();
+        HistoryRepository repository = repository();
+        assertThat(repository.load().error()).isPresent();
+
+        // when
+        Result<WorkHistory, HistoryStoreError> saved = repository.save(sample());
+
+        // then
+        assertThat(saved.error()).containsInstanceOf(HistoryStoreError.ReadOnly.class);
     }
 }
