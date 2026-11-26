@@ -265,6 +265,44 @@ class StateActorTest {
     }
 
     @Test
+    @DisplayName("발행 도중 구독자가 다른 구독을 해제하고 새로 구독해도 예외 없이 다음 이벤트부터 반영된다")
+    void subscribeAndCancelDuringPublish() {
+        // given
+        var first = new ArrayList<AppEvent>();
+        var removed = new ArrayList<AppEvent>();
+        var added = new ArrayList<AppEvent>();
+        var removedSubscription = new ArrayList<Subscription>();
+        actor.subscribe(e -> {
+            first.add(e);
+            if (first.size() == 1) {
+                removedSubscription.getFirst().cancel();
+                actor.subscribe(added::add);
+            }
+        });
+        removedSubscription.add(actor.subscribe(removed::add));
+        actor.submit(visit(HOME));
+        actor.submit(visit(HOME));
+
+        // when
+        executor.runNext();
+
+        // then
+        assertThat(first).hasSize(1);
+        assertThat(added).as("새 구독은 발행 중인 이벤트를 받지 않는다").isEmpty();
+        assertThat(removed).as("이미 전달 중인 이벤트 하나는 받을 수 있다").hasSizeLessThanOrEqualTo(1);
+        int removedAfterFirst = removed.size();
+
+        // when
+        executor.runNext();
+
+        // then
+        assertThat(first).hasSize(2);
+        assertThat(added).hasSize(1);
+        assertThat(removed).as("해제 뒤의 이벤트는 받지 않는다").hasSize(removedAfterFirst);
+        assertThat(count(actor.snapshot())).isEqualTo(2);
+    }
+
+    @Test
     @DisplayName("subscribeOnUi 의 콜백은 UiDispatcher 를 거쳐서 온다")
     void uiSubscriptionGoesThroughDispatcher() {
         // given

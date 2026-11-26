@@ -1,5 +1,6 @@
 package dev.tanager.application.state;
 
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
@@ -13,11 +14,13 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.IntStream;
 import net.jqwik.api.ForAll;
 import net.jqwik.api.Label;
 import net.jqwik.api.Property;
@@ -63,7 +66,7 @@ class StateActorConcurrencyTest {
                         },
                         producers);
             }
-            CompletableFuture.allOf(replies).get();
+            CompletableFuture.allOf(replies).get(10, SECONDS);
 
             // then
             await().atMost(Duration.ofSeconds(10))
@@ -90,9 +93,11 @@ class StateActorConcurrencyTest {
             var stop = new AtomicBoolean();
             var regressions = new AtomicInteger();
             var reads = new AtomicInteger();
+            // 첫 읽기를 마친 뒤에야 제출을 시작한다 — reader 가 늦게 떠서 아무것도 안 읽고 끝나는 일이 없게
+            var firstRead = new CountDownLatch(1);
             reader.execute(() -> {
                 int last = 0;
-                while (!stop.get()) {
+                do {
                     var found = actor.snapshot().history().entries().get(HOME);
                     int now = found == null ? 0 : found.visitCount();
                     if (now < last) {
@@ -100,19 +105,23 @@ class StateActorConcurrencyTest {
                     }
                     last = now;
                     reads.incrementAndGet();
-                }
+                    firstRead.countDown();
+                } while (!stop.get());
             });
+            assertThat(firstRead.await(10, SECONDS)).isTrue();
 
             // when
             CompletableFuture<?> last = null;
             for (int i = 0; i < 2000; i++) {
                 last = actor.submit(visit()).toCompletableFuture();
             }
-            last.get();
+            last.get(10, SECONDS);
             stop.set(true);
+            reader.shutdown();
+            assertThat(reader.awaitTermination(10, SECONDS)).isTrue();
 
             // then
-            await().atMost(Duration.ofSeconds(10)).until(() -> reads.get() > 0);
+            assertThat(reads.get()).isPositive();
             assertThat(regressions).hasValue(0);
             assertThat(actor.snapshot().history().entries().get(HOME).visitCount())
                     .isEqualTo(2000);
@@ -139,7 +148,7 @@ class StateActorConcurrencyTest {
                         return visit().apply(current);
                     })
                     .toCompletableFuture()
-                    .get();
+                    .get(10, SECONDS);
 
             // then
             assertThat(commandThread).hasValue("tanager-state-test");
@@ -167,7 +176,6 @@ class StateActorConcurrencyTest {
 
         // then
         assertThat(counts)
-                .containsExactlyElementsOf(
-                        java.util.stream.IntStream.rangeClosed(1, n).boxed().toList());
+                .containsExactlyElementsOf(IntStream.rangeClosed(1, n).boxed().toList());
     }
 }
