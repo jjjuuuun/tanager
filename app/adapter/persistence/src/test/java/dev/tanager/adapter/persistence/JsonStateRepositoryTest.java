@@ -370,8 +370,8 @@ class JsonStateRepositoryTest {
     }
 
     @Test
-    @DisplayName(".bak 으로 복구하면 손상 원본을 state.json.corrupt-UTC 로 옮기고 그 이름을 알리며, 첫 저장 뒤에도 남는다")
-    void recoveryFromBackupMovesCorruptOriginalAside() throws IOException {
+    @DisplayName(".bak 으로 복구하면 손상 원본을 state.json.corrupt-UTC 로 복사해 두고 그 이름을 알리며, 첫 저장 뒤에도 남는다")
+    void recoveryFromBackupKeepsCorruptOriginalCopy() throws IOException {
         // given
         write(file(), fixture("v1-corrupt.json"));
         write(dir.resolve("state.json.bak"), fixture("v1-history.json"));
@@ -388,8 +388,8 @@ class JsonStateRepositoryTest {
     }
 
     @Test
-    @DisplayName(".bak 으로 복구하면서 손상 원본을 옮기지 못하면 Io 오류이고 원본은 그대로다")
-    void recoveryFromBackupFailsWhenOriginalCannotBeMoved() throws IOException {
+    @DisplayName(".bak 으로 복구하면서 손상 원본을 복사해 두지 못하면 Io 오류이고 원본은 그대로다")
+    void recoveryFromBackupFailsWhenOriginalCannotBeCopied() throws IOException {
         // given
         write(file(), fixture("v1-corrupt.json"));
         write(dir.resolve("state.json.bak"), fixture("v1-history.json"));
@@ -603,6 +603,30 @@ class JsonStateRepositoryTest {
     void corruptLoadWithoutMoveDoesNotSuppressLaterBackup() throws IOException {
         // given
         write(file(), fixture("v1-corrupt.json"));
+        JsonStateRepository repository = repository();
+        try (FileChannel other = FileChannel.open(
+                        dir.resolve("state.lock"), StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+                FileLock _ = other.lock()) {
+            assertThat(loaded(repository.load()).access()).isEqualTo(StoreAccess.READ_ONLY);
+        }
+        // 다른 인스턴스가 정상 파일을 남기고 끝났다
+        write(file(), fixture("v1-history.json"));
+        assertThat(loaded(repository.load()).access()).isEqualTo(StoreAccess.WRITABLE);
+
+        // when
+        repository.save(historyOf("C:\\new"));
+
+        // then
+        assertThat(Files.readString(dir.resolve("state.json.bak"), StandardCharsets.UTF_8))
+                .isEqualTo(fixture("v1-history.json"));
+    }
+
+    @Test
+    @DisplayName("다른 인스턴스 때문에 .bak 으로 복구만 하고 아무것도 바꾸지 못한 load 뒤, 쓰기 가능으로 다시 읽은 첫 저장은 .bak 을 그때의 state.json 으로 바꾼다")
+    void recoveryWithoutLockDoesNotSuppressLaterBackup() throws IOException {
+        // given: 손상된 state.json · 정상 .bak · 다른 인스턴스의 잠금
+        write(file(), fixture("v1-corrupt.json"));
+        write(dir.resolve("state.json.bak"), fixture("v1-full.json"));
         JsonStateRepository repository = repository();
         try (FileChannel other = FileChannel.open(
                         dir.resolve("state.lock"), StandardOpenOption.CREATE, StandardOpenOption.WRITE);

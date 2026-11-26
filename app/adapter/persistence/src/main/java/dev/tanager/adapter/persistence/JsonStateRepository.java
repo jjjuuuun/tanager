@@ -367,8 +367,8 @@ public final class JsonStateRepository implements HistoryRepository, AutoCloseab
                 }
                 keptAs =
                         Optional.of(restored.value().orElseThrow().getFileName().toString());
+                backupTaken = true;
             }
-            backupTaken = true;
             notices.add(new HistoryLoadNotice.RecoveredFromBackup(keptAs));
             return Result.ok(Optional.of(parsed.root()));
         }
