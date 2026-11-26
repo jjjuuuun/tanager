@@ -23,6 +23,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -114,6 +115,21 @@ class WindowsWslShellIntegrationTest {
         // then
         assertThat(run.cwds()).first().isEqualTo("/tmp");
         assertThat(run.text()).doesNotContain("tanager.bash");
+    }
+
+    @Test
+    @DisplayName("rcfile 이 지워졌거나 읽을 수 없으면 통합 없는 bash -i 로 물러서 ~/.bashrc 는 그대로 읽힌다")
+    void missingRcfileFallsBackToPlainInteractiveBash() throws Exception {
+        // given
+        writeHomeFile(".bashrc", "alias tanager_it_alias='echo \"ALIAS<defined>\"'\n");
+        String missing = appData.resolve("없는 폴더").resolve("tanager.bash").toString();
+
+        // when
+        Run run = interactive(appData, "/tmp", "tanager_it_alias\nexit\n", Map.of("TANAGER_RC", missing));
+
+        // then
+        assertThat(marked(run.text(), "ALIAS")).isEqualTo("defined");
+        assertThat(run.cwds()).as("통합이 없으니 OSC 7 도 없다").isEmpty();
     }
 
     @Test
@@ -251,11 +267,16 @@ class WindowsWslShellIntegrationTest {
     private record Run(String text, List<String> cwds) {}
 
     private Run interactive(String startDir, String stdin) throws Exception {
-        return interactive(appData, startDir, stdin);
+        return interactive(appData, startDir, stdin, Map.of());
+    }
+
+    private Run interactive(Path appDataDir, String startDir, String stdin) throws Exception {
+        return interactive(appDataDir, startDir, stdin, Map.of());
     }
 
     /** 앱 데이터를 {@code appDataDir} 로 둔 모듈에서 셸 통합을 설치하고, 만들어진 기동 명령으로 WSL bash 를 띄워 {@code stdin} 을 먹인다. */
-    private Run interactive(Path appDataDir, String startDir, String stdin) throws Exception {
+    private Run interactive(Path appDataDir, String startDir, String stdin, Map<String, String> envOverride)
+            throws Exception {
         WindowsShellCatalog catalog = new WindowsShellCatalog(
                 new FakeCommandRunner(new CommandOutcome.NotStarted("x")),
                 key -> Optional.empty(),
@@ -281,13 +302,19 @@ class WindowsWslShellIntegrationTest {
 
         LaunchCommand command = module.launchCommand(profile, dir, integration);
 
-        List<String> argv = new ArrayList<>(command.argv());
-        int bash = argv.indexOf("bash");
-        assertThat(bash).as("argv 의 bash 위치: %s", argv).isPositive();
-        argv.addAll(bash, List.of("env", "HOME=" + home));
+        // rcfile 이 있든 없든(물러선 bash -i) 같은 임시 홈을 쓰도록 bash 마다 앞에 끼운다
+        List<String> argv = new ArrayList<>();
+        for (String arg : command.argv()) {
+            if (arg.equals("bash")) {
+                argv.addAll(List.of("env", "HOME=" + home));
+            }
+            argv.add(arg);
+        }
+        assertThat(argv).as("argv 에 bash 가 있어야 한다: %s", command.argv()).contains("HOME=" + home);
         ProcessBuilder builder = new ProcessBuilder(argv).redirectErrorStream(true);
         builder.environment().clear();
         builder.environment().putAll(command.environmentOver(System.getenv()));
+        builder.environment().putAll(envOverride);
         builder.environment().put("WSL_UTF8", "1");
         Process process = builder.start();
         CompletableFuture<byte[]> output = CompletableFuture.supplyAsync(() -> readAll(process));

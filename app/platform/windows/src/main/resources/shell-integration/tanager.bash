@@ -5,19 +5,27 @@
 # --rcfile 은 -l 과 함께 쓸 수 없어 로그인 셸 설정이 읽히지 않는다(#55).
 # 그래서 bash 로그인 셸 순서를 흉내 낸다: /etc/profile → ~/.bash_profile | ~/.bash_login | ~/.profile
 # 중 처음 있는 것. 셋 다 없으면 ~/.bashrc (보통 ~/.profile 이 ~/.bashrc 를 읽으므로 두 번 읽지 않게).
-# Debian 계열 bash 는 --rcfile 을 줘도 /etc/bash.bashrc 를 먼저 읽고, /etc/profile 은 PS1 이 있으면 그것을
-# 또 읽는다(sudo 안내가 두 번 나온다). /etc/profile 을 읽는 동안만 PS1 을 비우고 원래대로(unset 이면 unset) 돌린다.
+# /etc/bash.bashrc 가 있는 배포판(Debian · Ubuntu · Arch)의 bash 는 --rcfile 을 줘도 그것을 먼저 읽고,
+# /etc/profile 은 PS1 이 있으면 그것을 또 읽는다(sudo 안내가 두 번 나온다). 그런 배포판에서만 /etc/profile 을
+# 읽는 동안 PS1 을 비운다. Fedora 계열의 /etc/bashrc 는 PS1 을 보고 대화형 설정을 정하므로 건드리지 않는다.
 if [ -z "${__tanager_profile_loaded-}" ]; then
   __tanager_profile_loaded=1
   if [ -r /etc/profile ]; then
-    if [ "${PS1+set}" ]; then __tanager_ps1=$PS1; else unset __tanager_ps1; fi
-    PS1=
-    . /etc/profile
-    if [ "${__tanager_ps1+set}" ]; then PS1=$__tanager_ps1; else unset PS1; fi
-    unset __tanager_ps1
-    # 비운 PS1 때문에 /etc/profile.d/bash_completion.sh 도 건너뛰었다 — 로그인 셸처럼 completion 을 불러온다
-    if [ -z "${BASH_COMPLETION_VERSINFO-}" ] && [ -r /etc/profile.d/bash_completion.sh ]; then
-      . /etc/profile.d/bash_completion.sh
+    if [ -f /etc/bash.bashrc ]; then
+      if [ "${PS1+set}" ]; then __tanager_ps1=$PS1; else unset __tanager_ps1; fi
+      PS1=
+      . /etc/profile
+      # /etc/profile 이 PS1 을 새로 정했으면 그 값을 둔다. 비어 있을 때만 원래대로(unset 이면 unset) 돌린다
+      if [ -z "${PS1-}" ]; then
+        if [ "${__tanager_ps1+set}" ]; then PS1=$__tanager_ps1; else unset PS1; fi
+      fi
+      unset __tanager_ps1
+      # 비운 PS1 때문에 /etc/profile.d/bash_completion.sh 도 건너뛰었다 — 로그인 셸처럼 completion 을 불러온다
+      if [ -z "${BASH_COMPLETION_VERSINFO-}" ] && [ -r /etc/profile.d/bash_completion.sh ]; then
+        . /etc/profile.d/bash_completion.sh
+      fi
+    else
+      . /etc/profile
     fi
   fi
   if [ -r ~/.bash_profile ]; then

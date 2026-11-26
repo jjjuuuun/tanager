@@ -23,6 +23,23 @@ final class WindowsLaunchCommands {
     // wsl.exe 는 -- 뒤 명령을 리눅스 기본 셸로 실행하므로 변수가 거기서 펼쳐진다. 큰따옴표가 없으면 앱 데이터 경로의
     // 공백(사용자 이름 등)에서 단어가 갈린다(ADR-0014). 공백이 없는 원소라 Windows 명령줄로 옮길 때 다시 감싸지 않는다
     private static final String RC_ARGUMENT = "\"$" + RC_VARIABLE + "\"";
+    // rcfile 을 못 읽으면(지워짐 · 권한) 맨 bash 가 아니라 통합 없는 M2 의 bash -i 로 물러선다(~/.bashrc 는 읽는다).
+    // 원소마다 공백이 없어야 Windows 명령줄로 옮길 때 감싸이지 않고 기본 셸이 연산자로 읽는다
+    private static final List<String> RC_OR_PLAIN_BASH = List.of(
+            "[",
+            "-r",
+            RC_ARGUMENT,
+            "]",
+            "&&",
+            "exec",
+            "bash",
+            "--rcfile",
+            RC_ARGUMENT,
+            "-i",
+            "||",
+            "exec",
+            "bash",
+            "-i");
     // /p: WSL 이 Windows 경로를 자기 마운트 경로로 바꿔 넘긴다 — automount 루트를 몰라도 된다(ADR-0014)
     private static final String RC_WSLENV_ENTRY = RC_VARIABLE + "/p";
     private static final String WSLENV = "WSLENV";
@@ -57,16 +74,16 @@ final class WindowsLaunchCommands {
     private static LaunchCommand wsl(
             LaunchTemplate template, String cd, Optional<String> wslenv, Integration integration) {
         List<String> argv = templateArgv(template);
-        argv.addAll(List.of("--cd", cd, "--", "bash"));
+        argv.addAll(List.of("--cd", cd, "--"));
         return switch (integration) {
             case Integration.Installed(var directory) -> {
-                argv.addAll(List.of("--rcfile", RC_ARGUMENT, "-i"));
+                argv.addAll(RC_OR_PLAIN_BASH);
                 Map<String, String> environment =
                         Map.of(RC_VARIABLE, directory.resolve(BASH_SCRIPT).toString(), WSLENV, mergedWslenv(wslenv));
                 yield new LaunchCommand(argv, Optional.empty(), environment, WINDOWS_NAMES);
             }
             case Integration.Unavailable _ -> {
-                argv.add("-i");
+                argv.addAll(List.of("bash", "-i"));
                 yield new LaunchCommand(argv, Optional.empty(), Map.of(), WINDOWS_NAMES);
             }
         };

@@ -15,6 +15,7 @@ import dev.tanager.domain.session.ShellProfile;
 import dev.tanager.domain.session.WorkingDir;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -33,6 +34,9 @@ class WindowsWslInjectionTest {
 
     // wsl.exe 는 -- 뒤를 기본 셸의 -c 로 넘긴다 — 따옴표가 없으면 공백이 든 경로(사용자 이름)가 잘린다(실측)
     private static final String RC_ARG = "\"$TANAGER_RC\"";
+    // rcfile 을 못 읽으면(지워짐 · 권한) 통합 없는 M2 의 bash -i 로 물러선다 — 맨 bash 가 아니라 ~/.bashrc 를 읽는 셸
+    private static final List<String> RC_OR_PLAIN_BASH =
+            List.of("[", "-r", RC_ARG, "]", "&&", "exec", "bash", "--rcfile", RC_ARG, "-i", "||", "exec", "bash", "-i");
     private static final String WSL_EXE = "C:\\Windows\\System32\\wsl.exe";
     private static final String PS_EXE = "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe";
     private static final String CMD_EXE = "C:\\Windows\\System32\\cmd.exe";
@@ -75,19 +79,36 @@ class WindowsWslInjectionTest {
         return WindowsLaunchCommands.of(profile, dir, USER_PROFILE, wslenv, integration);
     }
 
+    private static List<String> wslArgv(String cd) {
+        List<String> argv = new ArrayList<>(List.of(WSL_EXE, "-d", "Ubuntu", "--cd", cd, "--"));
+        argv.addAll(RC_OR_PLAIN_BASH);
+        return argv;
+    }
+
+    @Test
+    @DisplayName("기본 셸에 넘기는 인자에는 공백이 없다 — Windows 명령줄로 옮길 때 다시 감싸지 않아 기본 셸이 그대로 읽는다")
+    void shellArgumentsHaveNoWhitespace() {
+        // given / when
+        List<String> argv =
+                of(WSL, wslDir("/mnt/c/x"), Optional.empty(), INSTALLED).argv();
+
+        // then
+        assertThat(argv.subList(argv.indexOf("--") + 1, argv.size())).noneMatch(arg -> arg.matches(".*\\s.*"));
+    }
+
     private static String rcfileOf(Path directory) {
         return directory.resolve(SCRIPT_NAME).toString();
     }
 
     @Test
-    @DisplayName("셸 통합이 설치돼 있으면 WSL 은 bash 를 --rcfile \"$TANAGER_RC\" -i 로 띄우고 --cd 는 유지한다")
+    @DisplayName(
+            "셸 통합이 설치돼 있으면 WSL 은 rcfile 을 읽을 수 있을 때 bash --rcfile \"$TANAGER_RC\" -i, 아니면 bash -i 로 띄우고 --cd 는 유지한다")
     void installedWslUsesRcfileAndKeepsCd() {
         // given / when
         LaunchCommand command = of(WSL, wslDir("/mnt/c/x"), Optional.empty(), INSTALLED);
 
         // then
-        assertThat(command.argv())
-                .containsExactly(WSL_EXE, "-d", "Ubuntu", "--cd", "/mnt/c/x", "--", "bash", "--rcfile", RC_ARG, "-i");
+        assertThat(command.argv()).containsExactlyElementsOf(wslArgv("/mnt/c/x"));
         assertThat(command.workingDirectory()).isEmpty();
     }
 
@@ -98,8 +119,7 @@ class WindowsWslInjectionTest {
         LaunchCommand command = of(WSL, new WorkingDir.Home(), Optional.empty(), INSTALLED);
 
         // then
-        assertThat(command.argv())
-                .containsExactly(WSL_EXE, "-d", "Ubuntu", "--cd", "~", "--", "bash", "--rcfile", RC_ARG, "-i");
+        assertThat(command.argv()).containsExactlyElementsOf(wslArgv("~"));
     }
 
     @Test
@@ -190,7 +210,7 @@ class WindowsWslInjectionTest {
         assertThat(command.environment())
                 .containsOnly(
                         Map.entry("TANAGER_RC", rcfileOf(INSTALLED_DIR)), Map.entry("WSLENV", "FOO/u:TANAGER_RC/p"));
-        assertThat(command.argv()).endsWith("--cd", "/mnt/c/x", "--", "bash", "--rcfile", RC_ARG, "-i");
+        assertThat(command.argv()).containsExactlyElementsOf(wslArgv("/mnt/c/x"));
     }
 
     @Test
@@ -261,6 +281,6 @@ class WindowsWslInjectionTest {
         // then
         assertThat(command.environment()).containsEntry("TANAGER_RC", rcfileOf(directory));
         assertThat(command.environment().get("TANAGER_RC")).contains(name).endsWith(SCRIPT_NAME);
-        assertThat(command.argv()).contains(RC_ARG).hasSize(10);
+        assertThat(command.argv()).containsExactlyElementsOf(wslArgv("/mnt/c/x"));
     }
 }
