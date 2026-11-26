@@ -44,7 +44,6 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.junit.jupiter.params.provider.ValueSource;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -179,22 +178,30 @@ class JsonStateRepositoryTest {
                         false));
     }
 
+    static Stream<Arguments> unreadableEntries() {
+        String win = "{ \"kind\": \"windows\" }";
+        String complete = "\"env\": " + win + ", \"path\": \"C:\\\\work\\\\bad\", \"visitCount\": 3,"
+                + " \"pinned\": false, \"hidden\": false, \"alias\": null";
+        return Stream.of(
+                Arguments.of("상대 경로", entryJson(win, "relative\\dir", 3)),
+                Arguments.of("모르는 환경", entryJson("{ \"kind\": \"solaris\" }", "C:\\work\\bad", 3)),
+                Arguments.of("방문 횟수 0", entryJson(win, "C:\\work\\bad", 0)),
+                Arguments.of(
+                        "필수 필드(lastVisited) 누락", "{" + complete + ", \"firstVisited\": \"2026-11-21T01:00:00Z\" }"),
+                Arguments.of("distro 없는 wsl", entryJson("{ \"kind\": \"wsl\" }", "/home/me/proj", 3)),
+                Arguments.of("객체가 아닌 항목(숫자)", "42"),
+                Arguments.of("객체가 아닌 항목(문자열)", "\"C:\\\\work\\\\bad\""),
+                Arguments.of(
+                        "시각 형식 오류",
+                        "{" + complete + ", \"firstVisited\": \"어제\", \"lastVisited\": \"2026-11-23T08:30:00Z\" }"));
+    }
+
     @ParameterizedTest(name = "{0}")
-    @ValueSource(
-            strings = {
-                "{ \"kind\": \"windows\" }|relative\\\\dir|3",
-                "{ \"kind\": \"solaris\" }|C:\\\\work\\\\bad|3",
-                "{ \"kind\": \"windows\" }|C:\\\\work\\\\bad|0"
-            })
-    @DisplayName("상대 경로 · 모르는 환경 · 방문 횟수 0 인 항목은 그것만 빼고 EntriesSkipped(1) 로 알린다")
-    void invalidEntryIsSkippedAndReported(String spec) throws IOException {
+    @MethodSource("unreadableEntries")
+    @DisplayName("해석할 수 없는 항목은 그것만 빼고 EntriesSkipped(1) 로 알린다")
+    void invalidEntryIsSkippedAndReported(String caseName, String entry) throws IOException {
         // given
-        String[] parts = spec.split("\\|");
-        write(
-                file(),
-                stateWith(
-                        entryJson("{ \"kind\": \"windows\" }", "C:\\work\\good", 4),
-                        entryJson(parts[0], parts[1].replace("\\\\", "\\"), Integer.parseInt(parts[2]))));
+        write(file(), stateWith(entryJson("{ \"kind\": \"windows\" }", "C:\\work\\good", 4), entry));
 
         // when
         LoadedHistory result = loaded(repository().load());
@@ -298,6 +305,53 @@ class JsonStateRepositoryTest {
         assertThat(result.notices())
                 .containsExactly(new HistoryLoadNotice.CorruptMovedAside("state.json.corrupt-20261126T010203Z"));
         assertThat(dir.resolve("state.json.corrupt-20261126T010203Z")).exists();
+    }
+
+    static Stream<Arguments> brokenSkeletons() {
+        return Stream.of(
+                Arguments.of("최상위가 객체가 아님", "[ { \"schemaVersion\": 1 } ]"),
+                Arguments.of("schemaVersion 이 문자열", "{ \"schemaVersion\": \"1\", \"history\": { \"entries\": [] } }"),
+                Arguments.of("schemaVersion 이 소수", "{ \"schemaVersion\": 1.5, \"history\": { \"entries\": [] } }"),
+                Arguments.of("schemaVersion 이 0", "{ \"schemaVersion\": 0, \"history\": { \"entries\": [] } }"),
+                Arguments.of("history 가 객체가 아님", "{ \"schemaVersion\": 1, \"history\": [] }"),
+                Arguments.of("entries 가 배열이 아님", "{ \"schemaVersion\": 1, \"history\": { \"entries\": {} } }"));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("brokenSkeletons")
+    @DisplayName("뼈대가 틀린 v1 파일은 손상이다 — .bak 이 없으면 옆으로 옮기고 빈 이력으로 시작한다")
+    void brokenSkeletonIsCorrupt(String caseName, String content) throws IOException {
+        // given
+        write(file(), content);
+
+        // when
+        LoadedHistory result = loaded(repository().load());
+
+        // then
+        String moved = "state.json.corrupt-20261126T010203Z";
+        assertThat(result.history()).isEqualTo(WorkHistory.empty(HistoryPolicy.DEFAULT));
+        assertThat(result.notices()).containsExactly(new HistoryLoadNotice.CorruptMovedAside(moved));
+        assertThat(result.access()).isEqualTo(StoreAccess.WRITABLE);
+        assertThat(file()).doesNotExist();
+        assertThat(Files.readString(dir.resolve(moved), StandardCharsets.UTF_8)).isEqualTo(content);
+    }
+
+    @Test
+    @DisplayName("state.json 과 .bak 이 둘 다 손상이고 원본을 옮기지 못하면 Io 오류이고 원본은 그대로다")
+    void bothCorruptAndMoveFailsIsIo() throws IOException {
+        // given
+        write(file(), fixture("v1-corrupt.json"));
+        JsonStateRepository repository = repositoryMovingWith((from, to) -> {
+            throw new IOException("옮기기 거부");
+        });
+
+        // when
+        Result<LoadedHistory, HistoryStoreError> result = repository.load();
+
+        // then
+        assertThat(result.error()).containsInstanceOf(HistoryStoreError.Io.class);
+        assertThat(Files.readString(file(), StandardCharsets.UTF_8)).isEqualTo(fixture("v1-corrupt.json"));
+        assertThat(corruptFiles()).isEmpty();
     }
 
     @Test
@@ -465,8 +519,79 @@ class JsonStateRepositoryTest {
     }
 
     @Test
+    @DisplayName("다른 프로세스(자식 JVM)가 state.lock 을 쥐고 있으면 읽기 전용이고 LockedByOtherInstance 다")
+    void lockHeldByAnotherProcessOpensReadOnly() throws Exception {
+        // given
+        write(file(), fixture("v1-history.json"));
+        byte[] before = Files.readAllBytes(file());
+        Process holder = LockHolder.start(dir.resolve("state.lock"));
+        try {
+            JsonStateRepository repository = repository();
+
+            // when
+            LoadedHistory result = loaded(repository.load());
+            Result<WorkHistory, HistoryStoreError> saved = repository.save(historyOf("C:\\other"));
+
+            // then
+            assertThat(result.history().entries()).hasSize(2);
+            assertThat(result.access()).isEqualTo(StoreAccess.READ_ONLY);
+            assertThat(result.notices()).containsExactly(new HistoryLoadNotice.LockedByOtherInstance());
+            assertThat(saved.error()).containsInstanceOf(HistoryStoreError.ReadOnly.class);
+            assertThat(Files.readAllBytes(file())).isEqualTo(before);
+        } finally {
+            LockHolder.stop(holder);
+        }
+    }
+
+    @Test
+    @DisplayName("다른 인스턴스가 잠금을 쥐고 파일이 손상이면 옮기지 않고 그대로 둔다")
+    void corruptFileLockedElsewhereIsNotMoved() throws IOException {
+        // given
+        write(file(), fixture("v1-corrupt.json"));
+        try (FileChannel other = FileChannel.open(
+                        dir.resolve("state.lock"), StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+                FileLock _ = other.lock()) {
+
+            // when
+            LoadedHistory result = loaded(repository().load());
+
+            // then
+            assertThat(result.history()).isEqualTo(WorkHistory.empty(HistoryPolicy.DEFAULT));
+            assertThat(result.access()).isEqualTo(StoreAccess.READ_ONLY);
+            assertThat(result.notices()).containsExactly(new HistoryLoadNotice.LockedByOtherInstance());
+            assertThat(Files.readString(file(), StandardCharsets.UTF_8)).isEqualTo(fixture("v1-corrupt.json"));
+            assertThat(corruptFiles()).isEmpty();
+        }
+    }
+
+    @Test
+    @DisplayName("잠금 파일을 열 수 없고 파일이 손상이면 .bak 으로 읽되 원본은 옮기지 않는다")
+    void corruptFileWithUnavailableLockRecoversWithoutMoving() throws IOException {
+        // given
+        write(file(), fixture("v1-corrupt.json"));
+        write(dir.resolve("state.json.bak"), fixture("v1-history.json"));
+        Files.createDirectories(dir.resolve("state.lock"));
+
+        // when
+        LoadedHistory result = loaded(repository().load());
+
+        // then
+        assertThat(result.history().entries()).hasSize(2);
+        assertThat(result.access()).isEqualTo(StoreAccess.READ_ONLY);
+        assertThat(result.notices()).hasSize(2);
+        assertThat(result.notices().getFirst()).isEqualTo(new HistoryLoadNotice.RecoveredFromBackup(Optional.empty()));
+        assertThat(result.notices().getLast()).isInstanceOf(HistoryLoadNotice.LockUnavailable.class);
+        assertThat(Files.readString(file(), StandardCharsets.UTF_8)).isEqualTo(fixture("v1-corrupt.json"));
+        assertThat(corruptFiles()).isEmpty();
+    }
+
+    @Test
     @DisplayName("같은 파일을 연 두 번째 저장소는 읽기 전용이고, 첫 저장소를 닫으면 잠금이 풀린다")
     void secondRepositoryOnSameFileIsReadOnlyUntilFirstCloses() {
+        // 같은 JVM 안의 잠금 표(OverlappingFileLockException) 수준만 검증한다. POSIX 에서는 한 프로세스가 채널 하나를 닫으면 그
+        // 프로세스의 잠금이 모두 풀리므로, 같은 프로세스에 저장소 둘을 두는 것은 지원하지 않는다(ADR-0013). 프로세스 사이는
+        // lockHeldByAnotherProcessOpensReadOnly 가 본다.
+
         // given
         JsonStateRepository first = repository();
         assertThat(loaded(first.load()).access()).isEqualTo(StoreAccess.WRITABLE);
@@ -518,6 +643,20 @@ class JsonStateRepositoryTest {
         // then
         assertThat(saved.error()).containsInstanceOf(HistoryStoreError.ReadOnly.class);
         assertThat(file()).isDirectory();
+    }
+
+    @Test
+    @DisplayName("불러오기 전의 저장은 '불러오기 전에는 쓰지 않는다' ReadOnly 이고 파일을 만들지 않는다")
+    void saveBeforeLoadIsReadOnlyAndCreatesNothing() {
+        // given
+        JsonStateRepository repository = repository();
+
+        // when
+        Result<WorkHistory, HistoryStoreError> saved = repository.save(historyOf("C:\\other"));
+
+        // then
+        assertThat(saved.error()).contains(new HistoryStoreError.ReadOnly("불러오기 전에는 쓰지 않는다"));
+        assertThat(file()).doesNotExist();
     }
 
     // ---- 고쳐 읽기 ----
@@ -686,6 +825,44 @@ class JsonStateRepositoryTest {
         // then
         assertThat(saved.error()).containsInstanceOf(HistoryStoreError.Io.class);
         assertThat(Files.readAllBytes(file())).isEqualTo(before);
+    }
+
+    @Test
+    @DisplayName(".bak 을 쓰지 못해도 저장은 계속된다")
+    void backupFailureDoesNotStopSave() throws IOException {
+        // given
+        write(file(), fixture("v1-history.json"));
+        JsonStateRepository repository = repository();
+        repository.load();
+        // .bak 의 임시 파일 자리를 비어 있지 않은 폴더로 막아 백업 쓰기를 실패시킨다
+        Path blocker = Files.createDirectories(dir.resolve("state.json.bak.tmp"));
+        Files.writeString(blocker.resolve("keep"), "x");
+
+        // when
+        Result<WorkHistory, HistoryStoreError> saved = repository.save(historyOf("C:\\first"));
+
+        // then
+        assertThat(saved.value()).contains(historyOf("C:\\first"));
+        assertThat(dir.resolve("state.json.bak")).doesNotExist();
+        assertThat(entryAt(JSON.readTree(Files.readAllBytes(file())), "C:\\first"))
+                .isNotNull();
+    }
+
+    @Test
+    @DisplayName("저장한 파일에는 OS 와 상관없이 CR 이 없다")
+    void savedFileHasNoCarriageReturn() throws IOException {
+        // given
+        write(file(), fixture("v1-full.json"));
+        JsonStateRepository repository = repository();
+        LoadedHistory result = loaded(repository.load());
+
+        // when
+        repository.save(result.history());
+
+        // then
+        assertThat(new String(Files.readAllBytes(file()), StandardCharsets.UTF_8))
+                .contains("\n")
+                .doesNotContain("\r");
     }
 
     @Test
