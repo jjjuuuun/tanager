@@ -26,3 +26,8 @@
 - PowerShell 5.1 스크립트는 UTF-8 **BOM** 으로 저장해야 한글 주석 · 문자열이 깨지지 않는다. `-ExecutionPolicy Bypass` 로 실행 정책(Restricted)을 프로세스 범위에서만 우회한다.
 - 스캐너는 read 경계를 넘는 시퀀스 · BEL/ST 두 종료자를 처리한다(스파이크 `OscScanner`). 큰 출력 중 지연은 M3 에서 측정.
 - 미확인(M3): oh-my-posh · starship 같은 프롬프트 테마와의 공존 — 이 PC 에 설치돼 있지 않았다.
+
+## 개정: WSL bash 의 로그인 셸 설정 (#55, 2026-11-27)
+- 맥락: 셸 통합을 주입하려면 `bash --rcfile <tanager.bash> -i` 로 띄워야 하고, `--rcfile` 은 `-l` 과 함께 쓸 수 없다. 그러면 `~/.profile` 이 읽히지 않아 PATH 가 그냥 `wsl.exe` 를 띄울 때(로그인 셸)와 달라진다.
+- 결정: rcfile 이 bash 로그인 셸 순서를 흉내 낸다 — `/etc/profile` → `~/.bash_profile` | `~/.bash_login` | `~/.profile` 중 처음 있는 것 → 셋 다 없으면 `~/.bashrc`. 그 뒤에 프롬프트 훅을 덧붙인다(위 "사용자 rc 를 먼저 source" 그대로). 세부(Debian `/etc/bash.bashrc` 이중 실행 회피, bash-completion 보충)와 실측은 ADR-0014.
+- 결과: `~/.profile` 에서 늘린 PATH 가 로그인 셸과 같고, `~/.profile` 이 `~/.bashrc` 를 읽어도 `.bashrc` 는 한 번만 돈다(wsl 통합 테스트).
