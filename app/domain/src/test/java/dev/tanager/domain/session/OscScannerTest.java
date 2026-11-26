@@ -93,6 +93,58 @@ class OscScannerTest {
     }
 
     @Test
+    @DisplayName("본문이 정확히 4096 바이트면 받고 4097 바이트면 버린다 — BEL · ST, 한 번에 · 바이트 단위 모두")
+    void payloadLimitIsExact() {
+        // given: 본문 = "7;file://h/" + 경로 나머지
+        String head = "7;file://h/";
+        String atLimit = head + "a".repeat(OscScanner.MAX_PAYLOAD - head.length());
+        String overLimit = atLimit + "a";
+        CwdReport expected = new CwdReport.FileUri("h", atLimit.substring("7;file://h".length()));
+        for (byte[] ok : List.of(oscSt(atLimit), oscBel(atLimit))) {
+            // when / then
+            assertThat(feedOnce(ok)).containsExactly(expected);
+            assertThat(feedAll(OscScanner.initial(), byteByByte(ok))).containsExactly(expected);
+        }
+        for (byte[] tooLong : List.of(oscSt(overLimit), oscBel(overLimit))) {
+            assertThat(feedOnce(tooLong)).isEmpty();
+            assertThat(feedAll(OscScanner.initial(), byteByByte(tooLong))).isEmpty();
+        }
+    }
+
+    @Test
+    @DisplayName("경로에 NUL · 제어 문자(퍼센트 표기 또는 날 바이트)가 있으면 보고를 버리고 뒤의 정상 OSC 로 복귀한다")
+    void controlCharactersInPath_dropped() {
+        // given
+        List<String> bodies = List.of(
+                "7;file://h/a%00b",
+                "7;file://h/a%0Ab",
+                "7;file://h/a%1Bb",
+                "7;file://h/a%7Fb",
+                "7;file://h%09x/a",
+                "7;file://h/a\nb",
+                "9;9;C:\\a\tb");
+        for (String body : bodies) {
+            byte[] bytes = concat(oscSt(body), oscSt("7;file://h/ok"));
+            // when / then
+            assertThat(feedOnce(bytes)).as(body).containsExactly(new CwdReport.FileUri("h", "/ok"));
+        }
+    }
+
+    @Test
+    @DisplayName("진행 중인 스캐너 하나에 서로 다른 뒷부분을 먹여도 서로 섞이지 않는다 — 본문 버퍼를 공유하지 않는다")
+    void pendingScanner_isReusable() {
+        // given
+        OscScanner pending =
+                OscScanner.initial().feed(utf8("\u001b]7;file://h/ab")).next();
+        // when
+        List<CwdReport> c = pending.feed(utf8("c\u001b\\")).reports();
+        List<CwdReport> d = pending.feed(utf8("d\u001b\\")).reports();
+        // then
+        assertThat(c).containsExactly(new CwdReport.FileUri("h", "/abc"));
+        assertThat(d).containsExactly(new CwdReport.FileUri("h", "/abd"));
+    }
+
+    @Test
     @DisplayName("4096 바이트 안쪽의 긴 경로는 받아들인다")
     void largeButAllowedBody_accepted() {
         String path = "/" + "a".repeat(4000);

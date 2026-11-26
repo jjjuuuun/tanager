@@ -11,8 +11,9 @@ import java.util.Optional;
  * 셸 출력 바이트에서 cwd 를 알리는 OSC 7({@code ESC ] 7;file://host/경로})과 OSC 9;9({@code ESC ] 9;9;경로})를 뽑는 스트리밍
  * 스캐너. 종료자는 BEL 또는 ST({@code ESC \}). 시퀀스가 조각 경계에서 잘려도 {@link Scan#next()} 가 이어 받는다(ADR-0015).
  *
- * <p>불변 값이다. 불변식: 보관 중인 부분 본문 ≤ {@link #MAX_PAYLOAD}. {@link #feed} 는 받은 배열을 바꾸지 않는다. 진행 중인 OSC
- * 가 없고 조각에 ESC 가 없으면 복사 · 할당 없이 같은 결과를 돌려준다(NFR-01).
+ * <p>불변 값이다(동등성은 정의하지 않는다 — 같은 상태라도 다른 인스턴스일 수 있다). 불변식: 보관 중인 부분 본문 ≤ {@link
+ * #MAX_PAYLOAD}. {@link #feed} 는 받은 배열을 바꾸지 않는다. 진행 중인 이스케이프 시퀀스가 없고 조각에 ESC 가 없으면 복사 · 할당 없이
+ * 같은 결과를 돌려준다(NFR-01). 경로에 제어 문자(C0 · DEL)가 있는 보고는 버린다 — 경로가 될 수 없는 값이 이력으로 흘러가지 않게.
  */
 public final class OscScanner {
 
@@ -107,6 +108,9 @@ public final class OscScanner {
                     } else if (!skip) {
                         if (len == MAX_PAYLOAD) {
                             skip = true;
+                        } else if (len == 0 && b != OSC7.charAt(0) && b != OSC99.charAt(0)) {
+                            // 제목 · 하이퍼링크 같은 다른 번호는 버퍼를 만들지 않고 종료자까지 버린다
+                            skip = true;
                         } else {
                             if (buf.length == 0) {
                                 buf = new byte[MAX_PAYLOAD];
@@ -171,6 +175,17 @@ public final class OscScanner {
         return Optional.empty();
     }
 
+    // NUL · 줄바꿈 같은 제어 문자는 어느 OS 에서도 정상 경로가 아니다 — 터미널에 찍힌 임의 바이트가 이력을 더럽히지 않게 버린다.
+    private static Optional<String> withoutControls(String s) {
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c < 0x20 || c == 0x7F) {
+                return Optional.empty();
+            }
+        }
+        return Optional.of(s);
+    }
+
     // file://host/경로 — host 는 비어 있을 수 있고 경로는 '/' 부터 끝까지다.
     private static Optional<CwdReport> fileUri(byte[] buf, int from, int to) {
         if (!startsWith(buf, from, to, FILE_SCHEME)) {
@@ -181,14 +196,17 @@ public final class OscScanner {
         if (slash < 0) {
             return Optional.empty();
         }
-        Optional<String> host = percentDecodedUtf8(buf, hostStart, slash);
-        Optional<String> path = percentDecodedUtf8(buf, slash, to);
+        Optional<String> host = percentDecodedUtf8(buf, hostStart, slash).flatMap(OscScanner::withoutControls);
+        Optional<String> path = percentDecodedUtf8(buf, slash, to).flatMap(OscScanner::withoutControls);
         return host.flatMap(h -> path.map(p -> new CwdReport.FileUri(h, p)));
     }
 
     // PowerShell 프롬프트는 경로를 따옴표로 감싸고 cmd 의 $P 는 감싸지 않는다.
     private static Optional<CwdReport> windowsPath(byte[] buf, int from, int to) {
-        return strictUtf8(buf, from, to).map(OscScanner::unquote).map(CwdReport.WindowsPath::new);
+        return strictUtf8(buf, from, to)
+                .flatMap(OscScanner::withoutControls)
+                .map(OscScanner::unquote)
+                .map(CwdReport.WindowsPath::new);
     }
 
     private static String unquote(String s) {
