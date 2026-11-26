@@ -6,6 +6,8 @@ import dev.tanager.domain.history.PathError;
 import dev.tanager.domain.history.ShellEnvironment;
 import dev.tanager.domain.history.WorkspacePath;
 import dev.tanager.domain.shared.Result;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
 import net.jqwik.api.Arbitraries;
 import net.jqwik.api.Arbitrary;
 import net.jqwik.api.ForAll;
@@ -78,5 +80,18 @@ class CwdReportsTest {
                 .list()
                 .ofMaxSize(6)
                 .map(parts -> "/" + String.join("/", parts));
+    }
+
+    @Test
+    @DisplayName("OSC 7 의 퍼센트 디코딩 결과에 큰따옴표가 있으면 Err 가 된다")
+    void fileUri_decodedQuote_isRejected() {
+        // given 셸이 보낸 그대로의 바이트(경로의 " 는 %22 로 인코딩된다)를 스캐너가 디코딩한 보고
+        byte[] bytes = "\u001b]7;file://host/tmp/a%22b\u001b\\".getBytes(StandardCharsets.UTF_8);
+        List<CwdReport> reports = OscScanner.initial().feed(bytes).reports();
+        assertThat(reports).containsExactly(new CwdReport.FileUri("host", "/tmp/a\"b"));
+        // when
+        Result<WorkspacePath, PathError> result = CwdReports.toPath(reports.getFirst(), WSL);
+        // then
+        assertThat(result.error()).containsInstanceOf(PathError.UnsafeCharacter.class);
     }
 }

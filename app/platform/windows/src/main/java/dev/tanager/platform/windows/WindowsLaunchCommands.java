@@ -44,6 +44,8 @@ final class WindowsLaunchCommands {
     private static final String RC_WSLENV_ENTRY = RC_VARIABLE + "/p";
     private static final String WSLENV = "WSLENV";
     private static final String WSLENV_SEPARATOR = ":";
+    // wsl.exe 옵션의 끝. 뒤는 리눅스 기본 셸의 -c 가 읽는 원시 명령줄이다
+    private static final String WSL_SEPARATOR = "--";
 
     private WindowsLaunchCommands() {}
 
@@ -62,19 +64,56 @@ final class WindowsLaunchCommands {
                     "프로파일 환경 " + profile.env() + " 과 경로 환경 " + at.path().env() + " 이 다르다");
         }
         LaunchTemplate template = profile.launch();
-        return switch (profile.env()) {
+        LaunchCommand command = switch (profile.env()) {
             // 리눅스 경로는 Windows 작업 디렉터리로 줄 수 없다 — wsl.exe 의 --cd 로 넘긴다(ADR-0007)
             case ShellEnvironment.Wsl _ -> wsl(template, pathOr(dir, WSL_HOME), wslenv, integration);
             case ShellEnvironment.Windows _ ->
                 new LaunchCommand(
                         templateArgv(template), Optional.of(pathOr(dir, userProfile)), Map.of(), WINDOWS_NAMES);
         };
+        requireSafeArgv(profile.env(), command.argv());
+        return command;
+    }
+
+    /**
+     * 방어 겹(#107). pty4j 0.14 의 {@code joinCmdArgs} 는 공백 · 탭이 있는 원소를 큰따옴표로 감싸기만 한다 — 안의 {@code "} 는
+     * 이스케이프하지 않고, 끝 {@code \} 는 하나만 겹치고, {@code "} 로 시작하는 원소는 감싸지도 않는다. 그런 원소는 명령줄에서 인자가
+     * 갈라진다. 경로는 {@code WorkspacePath} 가 이미 막지만 템플릿 · 앞으로 생길 인자까지 여기서 한 번 더 막는다.
+     *
+     * <p>WSL 은 {@code --} 앞 원소에 {@code "} 가 있기만 해도 거부한다. wsl.exe 2.5.10 은 {@code "} 로 시작하는 토큰을 다음 {@code "}
+     * 까지 한 인자로 읽고 {@code \"} · {@code ""} 이스케이프가 없어서, 감싸지 않는 원소의 {@code "} 도 뒤 인자를 삼켜 {@code --cd} 값
+     * 뒤를 명령으로 실행하게 만들 수 있다. 템플릿이 {@code --} 를 잘못 넣어도 경로 원소가 검사에서 빠지지 않게 마지막 {@code --} 까지
+     * 본다. {@code --} 뒤는 리눅스 셸이 읽는 원시 명령줄이라 {@code "$TANAGER_RC"} 는 그대로 둔다.
+     *
+     * <p>이 검사는 wsl.exe 인자 분리만 막는다. cmd {@code /c} · PowerShell {@code -Command} 문자열의 셸 해석은 막지 못한다(ADR-0014).
+     *
+     * @throws IllegalArgumentException 안전하지 않은 원소가 있을 때. 정상 흐름에서는 일어나지 않는 버그다
+     */
+    static void requireSafeArgv(ShellEnvironment env, List<String> argv) {
+        for (String arg : argv) {
+            boolean wrapped = arg.indexOf(' ') >= 0 || arg.indexOf('\t') >= 0;
+            if (wrapped && (arg.indexOf('"') >= 0 || arg.endsWith("\\"))) {
+                throw new IllegalArgumentException("따옴표로 감쌀 기동 인자에 \" 가 있거나 \\ 로 끝난다: " + arg);
+            }
+        }
+        switch (env) {
+            case ShellEnvironment.Wsl _ -> {
+                int separator = argv.lastIndexOf(WSL_SEPARATOR);
+                List<String> options = separator < 0 ? argv : argv.subList(0, separator);
+                for (String arg : options) {
+                    if (arg.indexOf('"') >= 0) {
+                        throw new IllegalArgumentException("wsl.exe 의 -- 앞 인자에 \" 가 있다: " + arg);
+                    }
+                }
+            }
+            case ShellEnvironment.Windows _ -> {}
+        }
     }
 
     private static LaunchCommand wsl(
             LaunchTemplate template, String cd, Optional<String> wslenv, Integration integration) {
         List<String> argv = templateArgv(template);
-        argv.addAll(List.of("--cd", cd, "--"));
+        argv.addAll(List.of("--cd", cd, WSL_SEPARATOR));
         return switch (integration) {
             case Integration.Installed(var directory) -> {
                 argv.addAll(RC_OR_PLAIN_BASH);

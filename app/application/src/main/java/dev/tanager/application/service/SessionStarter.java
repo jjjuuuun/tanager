@@ -212,6 +212,8 @@ public final class SessionStarter implements StartSessionUseCase {
 
     // 경로가 있는지 미리 보지 않는다 — 기동이 WorkingDirectoryNotFound 를 주면 홈에서 한 번 더 띄운다(ADR-0009).
     // 홈으로 다시 띄울 때도 같은 설치 결과를 쓴다 — 설치는 프로세스에서 한 번이다(ADR-0014)
+    // launchCommand 의 IllegalArgumentException(환경 불일치 · #107 안전하지 않은 인자)은 잡지 않는다. 경로는 WorkspacePath 가,
+    // 환경은 세션 생성이 먼저 맞추므로 도달할 수 없는 버그 경로다 — LaunchFailed 로 바꾸면 버그가 평범한 기동 실패로 숨는다
     private Result<Launched, StartFailure> launch(
             TerminalSession starting, TerminalSize size, Integration installed, List<StartNotice> notices) {
         WorkingDir dir = startingDir(starting);
