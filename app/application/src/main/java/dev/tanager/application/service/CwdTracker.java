@@ -52,6 +52,10 @@ final class CwdTracker implements Consumer<byte[]> {
             return;
         }
         scanner = scan.next();
+        // 보고가 없는 조각이 대부분이다 — 출력마다 이터레이터를 만들지 않는다
+        if (scan.reports().isEmpty()) {
+            return;
+        }
         for (CwdReport report : scan.reports()) {
             try {
                 handle(report);
@@ -81,12 +85,13 @@ final class CwdTracker implements Consumer<byte[]> {
         };
     }
 
-    // 출력 내용은 남기지 않는다. 같은 원인이 프롬프트마다 반복돼 로그를 채우지 않게 한 번만 남긴다
+    // 출력 내용은 남기지 않는다. 같은 원인이 프롬프트마다 반복돼 로그를 채우지 않게 WARNING 은 한 번만, 이후는 DEBUG 로 남긴다
     private void failed(RuntimeException e) {
         if (failureLogged) {
+            LOG.log(Level.DEBUG, "창 " + pane.value() + " 의 cwd 추적 중 예외(반복)", e);
             return;
         }
         failureLogged = true;
-        LOG.log(Level.WARNING, "창 " + pane.value() + " 의 cwd 추적 중 예외 — 건너뛰고 계속 추적한다(이후 같은 예외는 남기지 않는다)", e);
+        LOG.log(Level.WARNING, "창 " + pane.value() + " 의 cwd 추적 중 예외 — 건너뛰고 계속 추적한다(이후 같은 예외는 DEBUG 로 남긴다)", e);
     }
 }
