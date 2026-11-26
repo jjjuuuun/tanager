@@ -1,4 +1,4 @@
-# 순서: gate → lint → (test-core ∥ test-windows) → package-smoke(dev · main push 만)
+# 순서: gate → lint → (test-core ∥ test-windows) → package-smoke(app-image · MSI — PR 과 push 모두)
 name: ci
 
 on:
@@ -64,7 +64,7 @@ jobs:
           distribution: ${{ env.JAVA_DISTRIBUTION }}
           java-version: ${{ env.JAVA_VERSION }}
       - uses: gradle/actions/setup-gradle@v4
-      - run: ./gradlew :tanager-domain:check :tanager-application:check :tanager-architecture-test:test jacocoCoverageVerification
+      - run: ./gradlew :domain:check :application:check :architecture:test jacocoCoverageVerification
       - if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -103,9 +103,9 @@ jobs:
   #     - uses: gradle/actions/setup-gradle@v4
   #     - run: ./gradlew check
 
+  # 빌드 · 패키징 변경을 병합 전에 잡으려고 PR 에서도 돈다(약 몇 분 더 걸리는 비용은 감수, #22)
   package-smoke:
-    name: 3. package smoke (jpackage app-image)
-    if: github.event_name == 'push'
+    name: 3. package smoke (jpackage app-image · MSI)
     needs: [test-core, test-windows]
     runs-on: windows-latest
     steps:
@@ -115,10 +115,27 @@ jobs:
           distribution: ${{ env.JAVA_DISTRIBUTION }}
           java-version: ${{ env.JAVA_VERSION }}
       - uses: gradle/actions/setup-gradle@v4
-      - run: ./gradlew :tanager-app:jpackageImage
+      - uses: ./.github/actions/setup-wix
+      # app-image → 고지(LICENSE · THIRD-PARTY-NOTICES · D2Coding OFL)와 글꼴 검사(ADR-0010) → MSI
+      - run: ./gradlew :bootstrap:jpackageImage :bootstrap:verifyAppImage :bootstrap:jpackageInstaller
         shell: pwsh
+      # release 와 같은 배포 파일 모으기 스크립트를 PR 에서 미리 돌려 본다(#22)
+      - name: 배포 파일 모으기 확인(release 와 같은 스크립트)
+        shell: pwsh
+        run: |
+          ./.github/scripts/collect-dist.ps1 -Version "0.0.0"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          foreach ($f in @("Tanager-0.0.0-windows-x64.zip", "Tanager-0.0.0-windows-x64.msi")) {
+            if (-not (Test-Path -LiteralPath $f)) { Write-Error "없음: $f"; exit 1 }
+          }
       - uses: actions/upload-artifact@v4
         with:
           name: tanager-windows-app-image
-          path: tanager-app/build/jpackage/
+          path: app/bootstrap/build/jpackage/
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tanager-windows-msi
+          path: app/bootstrap/build/jpackage-installer/*.msi
+          if-no-files-found: error
           retention-days: 7

@@ -1,0 +1,28 @@
+# WiX(MSI 빌드 도구)를 고정 버전으로 설치한다 — ci.yml package-smoke · release.yml 이 함께 쓴다 (#22)
+# JDK 25 jpackage 는 PATH 의 wix.exe(WiX 4 이상)를 찾고, 빌드할 때 Util · UI 확장을 쓴다.
+# 6 이상과 jpackage 의 조합은 확인하지 않았으므로 5.0.2 에 고정한다. 올릴 때는 이 파일 하나만 바꾸고 package-smoke 로 확인한다.
+name: setup-wix
+description: WiX 를 dotnet 전역 도구로 설치하고 jpackage 가 쓰는 확장을 더한다
+inputs:
+  version:
+    description: WiX 버전(도구와 확장이 같은 버전이어야 한다)
+    default: "5.0.2"
+runs:
+  using: composite
+  steps:
+    - shell: pwsh
+      env:
+        WIX_VERSION: ${{ inputs.version }}
+      # 외부 명령의 실패로는 멈추지 않으므로 $LASTEXITCODE 를 직접 본다. 변수 인수는 따옴표로 감싼다
+      run: |
+        dotnet tool install --global wix --version "$env:WIX_VERSION"
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        $tools = Join-Path "$env:USERPROFILE" ".dotnet\tools"
+        Add-Content -Path "$env:GITHUB_PATH" -Value "$tools"
+        $env:PATH = "$tools;$env:PATH"
+        wix extension add -g "WixToolset.Util.wixext/$env:WIX_VERSION" "WixToolset.UI.wixext/$env:WIX_VERSION"
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        wix --version
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        wix extension list -g
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

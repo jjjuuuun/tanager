@@ -1,11 +1,11 @@
 ---
 name: release
-description: 마일스톤이 끝났을 때 dev → main 릴리스 PR(chore(release): vX.Y.Z)을 열고, 그 마일스톤의 PR·리뷰를 모아 사용자가 한 번에 확인하게 한다. 사용자가 병합하면 승인을 받아 main 에 태그를 붙이고 release 워크플로와 마일스톤 닫기까지 마무리한다.
+description: 마일스톤이 끝났을 때 dev → main 릴리스 PR(chore(release): vX.Y.Z)을 열고, 그 마일스톤의 PR·리뷰를 모아 사용자가 한 번에 확인하게 한다. 사용자가 병합하면 main 에 태그를 붙이고 release 워크플로와 마일스톤 닫기까지 마무리한다.
 argument-hint: "[vX.Y.Z]"
 ---
 # /release $ARGUMENTS
 
-역할: PR 준비·리뷰·태그 실행은 Claude. **main 병합은 사용자**, **태그 생성·푸시는 사용자 승인 후**(`guard-git.sh` 가 승인 창을 띄운다).
+역할: PR 준비 · 리뷰 · 태그 · Release · hotfix · 역병합은 Claude(묻지 않는다). **사용자는 릴리스 PR(dev → main) 병합만** 한다.
 작업 PR 은 Claude 가 dev 에 병합해 왔으므로, **이 릴리스 PR 이 사용자가 그 마일스톤 전체를 확인하는 유일한 지점**이다. 본문만 읽고 판단할 수 있게 쓴다.
 
 ## A. 준비 확인 (하나라도 실패하면 멈추고 보고)
@@ -17,7 +17,7 @@ argument-hint: "[vX.Y.Z]"
 ## B. 변경 내역
 5. `git cliff origin/main..origin/dev --tag <버전> --strip all` (없으면 `git log --oneline --no-merges origin/main..origin/dev`).
 6. 버전이 맞는지 SemVer 로 검사: `!`/`BREAKING CHANGE` → MAJOR(1.0 전에는 MINOR), `feat` → MINOR, `fix`/`perf` → PATCH. 다르면 사용자에게 알리고 제안 버전을 같이 적는다.
-7. WSL 통합 테스트(CI 에서 안 도는 `@Tag("wsl")`): `cmd.exe /c gradlew.bat :tanager-platform-windows:test` 결과를 기록한다(M1 이후).
+7. WSL 통합 테스트(CI 에서 안 도는 `@Tag("wsl")`): `cmd.exe /c gradlew.bat :platform:windows:test` 결과를 기록한다(M1 이후).
 7-1. 포함된 PR 모으기: `gh pr list --base dev --state merged --search 'milestone:"<마일스톤>"' --json number,title,url,mergedAt` → PR 마다 `gh api repos/{owner}/{repo}/pulls/<n>/reviews` 에서 `## Claude 리뷰` 로 시작하는 마지막 코멘트의 **권고 줄**과 **남은 지적** 항목을 뽑는다. 사용자가 손으로 확인해야 하는 항목(UI · 한글 입력 · 설치 등)은 따로 모은다.
 
 ## C. 릴리스 PR (dev → main)
@@ -38,8 +38,14 @@ argument-hint: "[vX.Y.Z]"
 
 ## D. 사용자가 병합한 뒤
 10. `git fetch origin && git switch main && git pull --ff-only`
-11. `git tag -a <버전> -m "<버전> — <마일스톤 제목>"` → **승인 창** → `git push origin <버전>` → **승인 창**
-12. `gh run watch` 로 release 워크플로를 본다. 실패하면 원인을 보고(태그 삭제·재태그는 사용자 결정).
+11. `git tag -a <버전> -m "<버전> — <마일스톤 제목>"` → `git push origin <버전>`
+12. `gh run watch` 로 release 워크플로를 본다. 실패하면 아래대로 고치고 결과를 보고한다.
+    - 일시적 실패(네트워크 등)면 `gh run rerun <id> --failed`.
+    - 워크플로 자체가 틀렸으면 `hotfix/<n>-<slug>`(main 에서 분기) PR 로 고치고 merge commit 으로 병합한다(`/pr`).
+    - 병합 후 태그를 정한다. Release 가 없으면 A, 이미 있으면 B.
+      - A: 태그 옮기기. Release 가 아직 없을 때만 고를 수 있다. `git push origin :refs/tags/<버전>`(승인 창) → `git tag -d <버전>` → `git tag -a <버전> -m "…" <hotfix 병합 커밋>` → `git push origin <버전>`. v0.1.0 은 A 로 했다(2026-11-25).
+      - B: 다음 패치 버전으로 릴리스.
+    - 어느 쪽이든 끝나면 역병합 PR 을 연다(`/pr` D).
 13. 마일스톤 닫기: `gh api -X PATCH "repos/{owner}/{repo}/milestones/<번호>" -f state=closed`
 14. `git switch dev && git pull --ff-only` 로 돌아와 다음 마일스톤을 알린다.
 

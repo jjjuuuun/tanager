@@ -34,12 +34,12 @@ PowerShell 7(`pwsh`)과 사용자 정의 셸 프로파일은 일부러 지원 �
 
 **필요한 것:** Windows 10 또는 11 (x64, Windows 11 에서 확인). Java 는 설치하지 않아도 됩니다 — 필요한 만큼 줄인 Java 런타임이 함께 들어 있습니다.
 
-1. [최신 릴리스](https://github.com/jjjuuuun/tanager/releases)에서 `Tanager-<버전>-windows-x64.zip` 을 받습니다.
-2. 원하는 곳에 압축을 풉니다(관리자 권한 필요 없음).
-3. `Tanager\Tanager.exe` 를 실행합니다.
+[최신 릴리스](https://github.com/jjjuuuun/tanager/releases)에서 둘 중 하나를 받습니다. 어느 쪽도 관리자 권한이 필요 없습니다.
+
+- **설치 파일** `Tanager-<버전>-windows-x64.msi` — 실행하면 현재 사용자용으로 `%LOCALAPPDATA%\Tanager` 에 설치되고 시작 메뉴에 **Tanager** 가 생깁니다. 지우려면 **설정 → 앱** 에서 Tanager 를 제거합니다.
+- **압축 파일** `Tanager-<버전>-windows-x64.zip` — 원하는 곳에 풀고 `Tanager\Tanager.exe` 를 실행합니다. 지우려면 폴더를 삭제합니다.
 
 아직 코드 서명이 없어 Windows SmartScreen 경고가 뜰 수 있습니다. **추가 정보 → 실행**을 누르세요.
-지우려면 폴더를 삭제하면 됩니다. MSI 설치 파일은 v0.2.0 에서 추가합니다([#22](https://github.com/jjjuuuun/tanager/issues/22)).
 
 ## 사용 방법
 
@@ -79,9 +79,9 @@ git clone https://github.com/jjjuuuun/tanager.git
 cd tanager
 git switch dev                         # 개발은 dev 에서, main 은 최신 릴리스
 
-./gradlew check                        # 포맷 검사 + 전체 테스트 + 아키텍처 규칙 + 커버리지
-./gradlew :tanager-app:run             # 앱 실행
-./gradlew :tanager-app:jpackageImage   # Windows: tanager-app/build/jpackage/Tanager/Tanager.exe
+./gradlew check                      # 포맷 검사 + 전체 테스트 + 아키텍처 규칙 + 커버리지
+./gradlew :bootstrap:run             # 앱 실행
+./gradlew :bootstrap:jpackageImage   # Windows: app/bootstrap/build/jpackage/Tanager/Tanager.exe
 ```
 
 Windows 에서는 `./gradlew` 대신 `gradlew.bat` 을 씁니다. 같은 작업 트리를 WSL 과 Windows 에서 번갈아 빌드해도, WSL 쪽은 `build/wsl/` 에 쓰므로 섞이지 않습니다.
@@ -91,16 +91,21 @@ Windows 에서는 `./gradlew` 대신 `gradlew.bat` 을 씁니다. 같은 작업 
 Gradle 모듈로 나눈 헥사고날 아키텍처입니다([ADR-0002](docs/adr/0002-hexagonal-multimodule.md)). 의존은 안쪽으로만 향하고 ArchUnit 이 검사합니다.
 
 ```
-tanager-domain                 순수 Java 규칙 (I/O · UI · 스레드 없음)
-tanager-application            유스케이스와 포트
-tanager-adapter-pty            pty4j / ConPTY 로 터미널 실행
-tanager-adapter-persistence    상태 · 설정 저장 (JSON)
-tanager-adapter-toolkit-claude Claude Code 설정 읽기 (읽기 전용)
-tanager-platform-windows       WSL · PowerShell 5.1 · cmd 처리
-tanager-platform-macos         macOS 처리 (v1.1.0)
-tanager-ui-swing               Swing + FlatLaf + JediTerm 화면
-tanager-app                    조립 루트와 패키징
-tanager-architecture-test      ArchUnit 규칙
+app/
+├── domain/                순수 Java 규칙 (I/O · UI · 스레드 없음)
+├── application/           유스케이스와 포트
+├── adapter/
+│   ├── pty/               pty4j / ConPTY 로 터미널 실행
+│   ├── persistence/       상태 · 설정 저장 (JSON)
+│   └── toolkit/claude/    Claude Code 설정 읽기 (읽기 전용)
+├── platform/
+│   ├── windows/           WSL · PowerShell 5.1 · cmd 처리
+│   └── macos/             macOS 처리 (v1.1.0)
+├── ui/                    Swing + FlatLaf + JediTerm 화면
+├── bootstrap/             조립 루트와 패키징
+└── architecture/          ArchUnit 규칙
+build-logic/               Gradle 공통 설정(convention plugin)
+docs/                      계획서(HTML) · ADR
 ```
 
 기술 스택: Java 25 · Gradle 9.9 · Swing + FlatLaf · JediTerm · pty4j · Jackson · JUnit 6 · jqwik · ArchUnit · jpackage.

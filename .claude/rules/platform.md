@@ -1,7 +1,7 @@
 ---
 paths:
-  - "tanager-platform-*/**"
-  - "tanager-adapter-pty/**"
+  - "app/platform/*/**"
+  - "app/adapter/pty/**"
 ---
 # 플랫폼·PTY 주의사항
 

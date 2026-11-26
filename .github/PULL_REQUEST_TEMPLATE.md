@@ -21,7 +21,7 @@ Closes: #
 - [ ] **BREAKING CHANGE** (설정·저장 파일 스키마·키 바인딩 호환성 깨짐)
 
 ## 4. 변경 사항
-<!-- 모듈별로. 예) tanager-domain: LayoutTree.resize 추가 -->
+<!-- 모듈별로. 예) app/domain: LayoutTree.resize 추가 -->
 -
 
 ## 5. 설계 영향
