@@ -3,6 +3,7 @@ package dev.tanager.domain.history;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import dev.tanager.domain.shared.PaneId;
+import java.text.Normalizer;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -468,6 +469,22 @@ class DirectoryTreeTest {
             // then
             TreeNode.Folder r = folder(env(tree, WSL_U).children().get(0));
             assertThat(labels(r.children())).containsExactly("_archive", "alpha", "Beta");
+        }
+
+        @Test
+        @DisplayName("NFD 라벨도 NFC 로 맞춰 정렬한다")
+        void nfdLabelSortedAsNfc() {
+            // given
+            String sky = Normalizer.normalize("하늘", Normalizer.Form.NFD);
+            String river = Normalizer.normalize("가람", Normalizer.Form.NFC);
+            WorkHistory h = history(path(WSL_U, "/r/" + sky), path(WSL_U, "/r/" + river));
+
+            // when
+            HistoryTree tree = project(h, List.of(), query(WSL_U));
+
+            // then
+            TreeNode.Folder r = folder(env(tree, WSL_U).children().get(0));
+            assertThat(labels(r.children())).containsExactly(river, sky);
         }
 
         @Test
