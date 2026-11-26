@@ -35,12 +35,23 @@ public final class WorkspacePath {
         this.segments = split(path.substring(root.length()), separator(env));
     }
 
-    /** {@code raw} 를 {@code env} 의 규칙으로 정규화한다. 빈 값은 {@link PathError.Blank}, 상대 경로는 {@link PathError.NotAbsolute}. */
+    /**
+     * {@code raw} 를 {@code env} 의 규칙으로 정규화한다. 빈 값은 {@link PathError.Blank}, 안전하지 않은 문자가 있으면 {@link
+     * PathError.UnsafeCharacter}, 상대 경로는 {@link PathError.NotAbsolute}.
+     *
+     * <p>큰따옴표와 제어 문자(0x00–0x1F, 0x7F)는 정규화 전에 거부하고, WSL 은 역슬래시도 거부한다(Windows 는 구분자라 허용). 이 경로가
+     * wsl.exe {@code --cd} 같은 Windows 명령줄 인자로 쓰이는데, pty4j 의 {@code joinCmdArgs} 는 공백이 있는 원소를 큰따옴표로 감싸기만
+     * 하고 원소 안의 {@code "} 와 끝 {@code \} 를 이스케이프하지 않는다 — 인자가 갈라져 {@code --} 뒤 셸 명령으로 주입된다(#107). 이력 ·
+     * 복원 · 셸이 알린 경로가 모두 여기를 거치므로 출처에서 막는다.
+     */
     public static Result<WorkspacePath, PathError> of(ShellEnvironment env, String raw) {
         Objects.requireNonNull(env, "env");
         Objects.requireNonNull(raw, "raw");
         if (raw.isBlank()) {
             return Result.err(new PathError.Blank());
+        }
+        if (hasUnsafeCharacter(env, raw)) {
+            return Result.err(new PathError.UnsafeCharacter(raw));
         }
         Optional<String> normalized = switch (env) {
             case ShellEnvironment.Windows _ -> normalizeWindows(raw);
@@ -96,6 +107,14 @@ public final class WorkspacePath {
     @Override
     public String toString() {
         return "WorkspacePath[" + env + " " + path + "]";
+    }
+
+    private static boolean hasUnsafeCharacter(ShellEnvironment env, String raw) {
+        boolean backslashUnsafe = switch (env) {
+            case ShellEnvironment.Windows _ -> false;
+            case ShellEnvironment.Wsl _ -> true;
+        };
+        return raw.chars().anyMatch(c -> c == '"' || c < 0x20 || c == 0x7f || (backslashUnsafe && c == '\\'));
     }
 
     private static String separator(ShellEnvironment env) {

@@ -305,4 +305,74 @@ class WorkspacePathTest {
         // then
         assertThat(a).isEqualTo(b).hasSameHashCodeAs(b);
     }
+
+    // ---- 이슈 #107: wsl.exe --cd 인용 깨짐 방지 ----
+
+    @ParameterizedTest
+    @ValueSource(
+            strings = {
+                "/tmp/x\" -- touch /tmp/proof #",
+                "/tmp/a\"b",
+                "/tmp/a\\b",
+                "/tmp/a b\\",
+                "/tmp/a\nb",
+                "/tmp/a\u0000b",
+                "/tmp/a\tb",
+                "/tmp/a\u001bb",
+                "/tmp/a\u007fb"
+            })
+    @DisplayName("WSL 경로에 큰따옴표 · 역슬래시 · 제어 문자가 있으면 UnsafeCharacter 로 거부한다")
+    void wslRejectsUnsafeCharacters(String raw) {
+        // given / when
+        Result<WorkspacePath, PathError> result = WorkspacePath.of(WSL, raw);
+        // then
+        assertThat(result.isOk()).isFalse();
+        assertThat(result.error()).hasValue(new PathError.UnsafeCharacter(raw));
+    }
+
+    @ParameterizedTest
+    @ValueSource(
+            strings = {
+                "/tmp/it's",
+                "/tmp/a b",
+                "/tmp/한글 폴더",
+                "/tmp/$HOME",
+                "/tmp/`id`",
+                "/tmp/#1",
+                "/tmp/a;b",
+                "/tmp/a&b",
+                "/tmp/a|b(c)*?"
+            })
+    @DisplayName("WSL 경로의 작은따옴표 · 공백 · 한글 · 셸 특수 문자는 --cd 가 셸을 거치지 않으므로 허용한다")
+    void wslAllowsShellMetacharacters(String raw) {
+        assertThat(WorkspacePath.of(WSL, raw).isOk()).isTrue();
+        assertThat(norm(WSL, raw)).isEqualTo(raw);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"C:\\a\"b", "C:\\a\nb", "C:\\a\u0000b", "\\\\h\\s\\a\"b"})
+    @DisplayName("Windows 경로에 큰따옴표 · 제어 문자가 있으면 거부한다")
+    void windowsRejectsUnsafeCharacters(String raw) {
+        assertThat(WorkspacePath.of(WIN, raw).isOk()).isFalse();
+    }
+
+    @Property
+    @Label("WSL: 큰따옴표 · 역슬래시 · 제어 문자가 하나라도 있으면 항상 Err, 없으면 절대 경로는 Ok")
+    void wslUnsafeCharactersAlwaysRejected(@ForAll("anyText") String tail) {
+        boolean unsafe = tail.chars().anyMatch(c -> c == '"' || c == '\\' || c < 0x20 || c == 0x7f);
+        Result<WorkspacePath, PathError> result = WorkspacePath.of(WSL, "/" + tail);
+        if (unsafe) {
+            assertThat(result.isOk()).isFalse();
+        } else if (!tail.isBlank()) {
+            assertThat(result.isOk()).isTrue();
+        }
+    }
+
+    @Provide
+    Arbitrary<String> anyText() {
+        return Arbitraries.strings()
+                .withCharRange((char) 0, (char) 0x7f)
+                .withChars('한', '글', '\'', ' ')
+                .ofMaxLength(12);
+    }
 }

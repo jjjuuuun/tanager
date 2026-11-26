@@ -14,4 +14,14 @@ public sealed interface PathError {
             Objects.requireNonNull(raw, "raw");
         }
     }
+
+    /**
+     * 명령줄 인자로 옮길 때 안전하지 않은 문자가 있다 — 큰따옴표 · 제어 문자(0x00–0x1F, 0x7F), WSL 은 역슬래시도. {@code raw} 는 정규화 전
+     * 입력이다(#107).
+     */
+    record UnsafeCharacter(String raw) implements PathError {
+        public UnsafeCharacter {
+            Objects.requireNonNull(raw, "raw");
+        }
+    }
 }

@@ -799,4 +799,19 @@ class SessionStarterTest {
         assertThat(result.error()).contains(new StartFailure.NoShellAvailable());
         assertThat(config.loadCalls()).isZero();
     }
+
+    @Test
+    @DisplayName("큰따옴표가 든 WSL 시작 경로 설정은 홈에서 띄우고 잘못된 경로로 알린다")
+    void unsafeStartDirFallsBackToHome() {
+        // given
+        String raw = "/tmp/x\" -- touch /tmp/proof #";
+        config.willLoad(configOf(Optional.empty(), "wsl:A", raw));
+
+        // when
+        StartedSession session = started(starter.start(requestFor("wsl:A")));
+
+        // then
+        assertThat(platform.launchRequests()).containsExactly(new LaunchRequest(WSL_A, new WorkingDir.Home()));
+        assertThat(session.notices()).containsExactly(new StartNotice.StartDirInvalid(raw));
+    }
 }
