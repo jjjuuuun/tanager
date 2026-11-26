@@ -33,7 +33,8 @@ public interface PlatformModule {
      * <p>{@code integration} 은 셸 통합 설치 결과다(ADR-0014). {@link Integration.Installed} 면 셸에 통합 스크립트를 주입하고,
      * {@link Integration.Unavailable} 이면 통합 없이 띄우는 명령을 만든다.
      *
-     * @throws IllegalArgumentException {@code dir} 이 경로이고 그 환경이 {@code profile} 의 환경과 다를 때
+     * @throws IllegalArgumentException {@code dir} 이 경로이고 그 환경이 {@code profile} 의 환경과 다를 때, 또는 만든 argv 를 OS
+     *     명령줄로 옮기면 인자가 갈라질 때(#107 — {@code WorkspacePath} 가 먼저 막으므로 둘 다 호출자의 버그다)
      */
     LaunchCommand launchCommand(ShellProfile profile, WorkingDir dir, Integration integration);
 

@@ -13,6 +13,7 @@ import dev.tanager.domain.session.ProfileId;
 import dev.tanager.domain.session.ShellKind;
 import dev.tanager.domain.session.ShellProfile;
 import dev.tanager.domain.session.WorkingDir;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -192,18 +193,32 @@ class WindowsLaunchCommandsTest {
                 IntegrationMode.OSC7);
     }
 
-    @Test
-    @DisplayName("공백이 있어 따옴표로 감싸질 원소에 큰따옴표가 있으면 IllegalStateException 으로 거부한다")
-    void rejectsQuoteInWrappedElement() {
-        assertThatThrownBy(() -> of(wslWithArgs("-d", "Ub\"x y"), new WorkingDir.Home()))
-                .isInstanceOf(IllegalStateException.class);
+    private static ShellProfile powershellWithArgs(String... args) {
+        return new ShellProfile(
+                new ProfileId("powershell"),
+                "Windows PowerShell",
+                ShellKind.WINDOWS_POWERSHELL,
+                new ShellEnvironment.Windows(),
+                new LaunchTemplate(PS_EXE, List.of(args)),
+                IntegrationMode.OSC9_9);
     }
 
     @Test
-    @DisplayName("공백이 있어 따옴표로 감싸질 원소가 역슬래시로 끝나면 IllegalStateException 으로 거부한다")
+    @DisplayName("공백이 있어 따옴표로 감싸질 원소에 큰따옴표가 있으면 IllegalArgumentException 으로 거부한다")
+    void rejectsQuoteInWrappedElement() {
+        assertThatThrownBy(() -> of(wslWithArgs("-d", "Ub\"x y"), new WorkingDir.Home()))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> of(powershellWithArgs("-Command", "a\" b"), new WorkingDir.Home()))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("공백이 있어 따옴표로 감싸질 원소가 역슬래시로 끝나면 IllegalArgumentException 으로 거부한다")
     void rejectsTrailingBackslashInWrappedElement() {
         assertThatThrownBy(() -> of(wslWithArgs("-d", "Ub x\\"), new WorkingDir.Home()))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> of(powershellWithArgs("-File", "C:\\a b\\"), new WorkingDir.Home()))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
@@ -211,6 +226,34 @@ class WindowsLaunchCommandsTest {
     void allowsTrailingBackslashWithoutSpace() {
         LaunchCommand command = of(wslWithArgs("-d", "Ub\\"), new WorkingDir.Home());
         assertThat(command.argv()).contains("Ub\\");
+    }
+
+    @Test
+    @DisplayName("WSL 의 -- 앞 원소는 공백이 없어 감싸지지 않아도 큰따옴표가 있으면 거부한다(wsl.exe 가 \" 부터 다음 \" 까지 한 토큰으로 읽는다)")
+    void wslRejectsAnyQuoteBeforeSeparator() {
+        assertThatThrownBy(() -> of(wslWithArgs("-d", "Ub\"x"), new WorkingDir.Home()))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> of(wslWithArgs("-d", "\"Ub"), new WorkingDir.Home()))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("WSL 의 -- 뒤 셸 명령 원소의 큰따옴표(\"$TANAGER_RC\")는 허용한다")
+    void wslAllowsQuoteAfterSeparator() {
+        LaunchCommand command = WindowsLaunchCommands.of(
+                WSL,
+                new WorkingDir.Home(),
+                USER_PROFILE,
+                Optional.empty(),
+                new Integration.Installed(Path.of("integration-dir")));
+        assertThat(command.argv()).contains("\"$TANAGER_RC\"");
+    }
+
+    @Test
+    @DisplayName("Windows 셸은 감싸지지 않는 원소의 큰따옴표를 거부하지 않는다(-- 규칙은 wsl.exe 에만 해당)")
+    void windowsShellAllowsQuoteInUnwrappedElement() {
+        LaunchCommand command = of(powershellWithArgs("-Command", "a\"b"), new WorkingDir.Home());
+        assertThat(command.argv()).contains("a\"b");
     }
 
     @Test
