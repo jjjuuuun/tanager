@@ -71,4 +71,22 @@ class WindowsPlatformModuleTest {
                         .as(p.launch().executable())
                         .isTrue());
     }
+
+    @Test
+    @DisplayName("integration() 은 APPDATA 아래 Tanager/shell-integration 에 스크립트를 설치한다")
+    void integrationInstallsUnderAppData(@org.junit.jupiter.api.io.TempDir Path appdata) {
+        WindowsShellCatalog catalog = new WindowsShellCatalog(
+                new FakeCommandRunner(new CommandOutcome.NotStarted("x")),
+                key -> Optional.empty(),
+                Duration.ofSeconds(1));
+        WindowsPlatformModule custom = new WindowsPlatformModule(
+                catalog, key -> "APPDATA".equals(key) ? Optional.of(appdata.toString()) : Optional.empty());
+
+        var result = custom.integration().install();
+
+        Path expected = appdata.resolve("Tanager").resolve("shell-integration");
+        assertThat(result).isEqualTo(new dev.tanager.application.port.out.Integration.Installed(expected));
+        assertThat(expected.resolve("tanager.ps1")).isRegularFile();
+        assertThat(expected.resolve("tanager.bash")).isRegularFile();
+    }
 }

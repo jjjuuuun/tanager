@@ -40,4 +40,11 @@ class MacPlatformModuleTest {
     void shellsIsEmpty() {
         assertThat(module.shells()).isEmpty();
     }
+
+    @Test
+    @DisplayName("integration().install() 은 M7 전까지 예외 없이 Unavailable(M7) 이다")
+    void integrationIsUnavailable() {
+        assertThat(module.integration().install())
+                .isEqualTo(new dev.tanager.application.port.out.Integration.Unavailable("M7"));
+    }
 }

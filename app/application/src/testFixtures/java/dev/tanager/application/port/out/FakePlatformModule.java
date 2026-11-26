@@ -7,6 +7,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -23,6 +24,8 @@ public final class FakePlatformModule implements PlatformModule {
     private final AtomicInteger shellsCalls = new AtomicInteger();
     private final List<LaunchRequest> launchRequests = new ArrayList<>();
     private Path appData = Path.of("fake-appdata", "Tanager");
+    private ShellIntegration integration =
+            FakeShellIntegration.installedAt(Path.of("fake-appdata", "Tanager", "shell-integration"));
     private CountDownLatch shellsGate;
     private Optional<RuntimeException> shellsFailure = Optional.empty();
 
@@ -44,6 +47,12 @@ public final class FakePlatformModule implements PlatformModule {
 
     public synchronized FakePlatformModule withAppData(Path appData) {
         this.appData = appData;
+        return this;
+    }
+
+    /** {@code integration()} 이 돌려줄 셸 통합. 기본은 {@code Installed(fake-appdata/Tanager/shell-integration)}. */
+    public synchronized FakePlatformModule withIntegration(ShellIntegration integration) {
+        this.integration = Objects.requireNonNull(integration, "integration");
         return this;
     }
 
@@ -115,5 +124,10 @@ public final class FakePlatformModule implements PlatformModule {
     /** {@code launchCommand} 호출 기록(불변 사본). */
     public synchronized List<LaunchRequest> launchRequests() {
         return List.copyOf(launchRequests);
+    }
+
+    @Override
+    public synchronized ShellIntegration integration() {
+        return integration;
     }
 }

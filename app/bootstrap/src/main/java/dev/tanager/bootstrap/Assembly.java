@@ -3,6 +3,7 @@ package dev.tanager.bootstrap;
 import dev.tanager.adapter.persistence.JsonConfigRepository;
 import dev.tanager.application.port.in.ListProfilesUseCase;
 import dev.tanager.application.port.in.StartSessionUseCase;
+import dev.tanager.application.port.out.Integration;
 import dev.tanager.application.port.out.PlatformModule;
 import dev.tanager.application.port.out.PtyLauncher;
 import dev.tanager.application.service.DefaultProfileMemory;
@@ -33,9 +34,26 @@ record Assembly(ListProfilesUseCase profiles, StartSessionUseCase sessions) {
                 LOG.log(System.Logger.Level.ERROR, "셸 탐지 실패", e);
             }
         });
+        installShellIntegration(platform);
         JsonConfigRepository config =
                 new JsonConfigRepository(platform.dirs().appData().resolve(CONFIG_FILE));
         return new Assembly(
                 catalog, new SessionStarter(catalog, config, platform, launcher, new DefaultProfileMemory(config)));
+    }
+
+    /** 파일 I/O 라 백그라운드에서 한 번 돌린다. 결과는 아직 로그에만 남긴다 — 셸에 주입하는 일은 #55 · #81. */
+    private static void installShellIntegration(PlatformModule platform) {
+        Thread.ofVirtual().name("tanager-shell-integration").start(() -> {
+            try {
+                switch (platform.integration().install()) {
+                    case Integration.Installed(var directory) ->
+                        LOG.log(System.Logger.Level.INFO, "셸 통합 스크립트: {0}", directory);
+                    case Integration.Unavailable(var reason) ->
+                        LOG.log(System.Logger.Level.WARNING, "셸 통합 없음: {0}", reason);
+                }
+            } catch (RuntimeException e) {
+                LOG.log(System.Logger.Level.ERROR, "셸 통합 설치 실패", e);
+            }
+        });
     }
 }

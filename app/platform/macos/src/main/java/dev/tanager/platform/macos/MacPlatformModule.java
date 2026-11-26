@@ -1,9 +1,11 @@
 package dev.tanager.platform.macos;
 
 import dev.tanager.application.platform.OperatingSystem;
+import dev.tanager.application.port.out.Integration;
 import dev.tanager.application.port.out.LaunchCommand;
 import dev.tanager.application.port.out.PlatformDirs;
 import dev.tanager.application.port.out.PlatformModule;
+import dev.tanager.application.port.out.ShellIntegration;
 import dev.tanager.domain.session.ShellProfile;
 import dev.tanager.domain.session.WorkingDir;
 import java.util.List;
@@ -37,5 +39,11 @@ public final class MacPlatformModule implements PlatformModule {
     @Override
     public PlatformDirs dirs() {
         throw new UnsupportedOperationException("macOS 앱 폴더는 M7 에서 지원한다");
+    }
+
+    /** M7 에서 zsh 판을 채운다. 그때까지 셸 통합 없음. */
+    @Override
+    public ShellIntegration integration() {
+        return () -> new Integration.Unavailable("M7");
     }
 }
