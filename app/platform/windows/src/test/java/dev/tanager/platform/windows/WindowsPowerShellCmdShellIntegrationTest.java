@@ -48,7 +48,8 @@ import org.junit.jupiter.api.io.TempDir;
  * <ul>
  *   <li>PowerShell 은 앞에 {@code -NoProfile} 을 끼운다. {@code $PROFILE} 은 USERPROFILE · HOME 을 바꿔도 알려진 폴더(문서)에서 정해져서
  *       임시 홈으로 가릴 수 없다. 사용자 프로필(oh-my-posh · StrictMode 등)은 대신 테스트 스크립트로 흉내 낸다 — 아래 {@code userPrompt}
- *       테스트는 {@code -Command} 값만 {@code . $env:TEST_USER_PS1; . $env:TANAGER_PS1}(프로필 다음 우리 스크립트) 로 바꾼다.
+ *       테스트는 {@code -Command} 값 앞에 {@code TEST_USER_PS1} 을 스크립트 블록으로 읽는 문장을 붙인다(프로필 다음 우리 스크립트). 파일로
+ *       dot-source 하지 않는 것은 이 PC 의 실행 정책이 결과를 바꾸지 않게 하려고서다.
  *   <li>셸은 PTY 대신 파이프로 돌린다. 파이프 출력은 콘솔 코드 페이지(OEM)라 UTF-8 만 받는 {@link OscScanner} 에 넣기 전에 OEM 으로 읽어
  *       UTF-8 로 다시 인코딩한다(ConPTY 는 UTF-8 로 내보낸다). 한글을 OEM 이 표현하지 못하는 PC 에서는 한글 테스트를 건너뛴다.
  * </ul>
@@ -62,6 +63,15 @@ class WindowsPowerShellCmdShellIntegrationTest {
     private static final String USER_PROMPT = "[IT] $P$G";
     private static final String UNUSUAL_DIR = "한글 폴더 #1";
     private static final String UNUSUAL_APP_DATA = "O'Neil 한글 앱";
+    // 우리 스크립트를 실행 정책과 무관하게 다시 읽는 문장(기동 명령의 -Command 와 같은 방식)
+    private static final String LOAD_SCRIPT = ". ([scriptblock]::Create([IO.File]::ReadAllText($env:TANAGER_PS1)))";
+    private static final String LOAD_USER_SCRIPT =
+            ". ([scriptblock]::Create([IO.File]::ReadAllText($env:TEST_USER_PS1))); ";
+    // 붙여 쓴 문자열 리터럴이라 셸이 되울린 명령 줄에는 이 표지가 그대로 나오지 않는다
+    private static final String POLICY_PROBE = "'PO' + 'LICY=' + ((Get-ExecutionPolicy -List | ForEach-Object "
+            + "{ [string]$_.Scope + ':' + [string]$_.ExecutionPolicy }) -join ',') + ';EFFECTIVE=' + (Get-ExecutionPolicy)"
+            + " + ';CHILD=' + (powershell.exe -NoProfile -Command Get-ExecutionPolicy)";
+    private static final Pattern POLICY_LINE = Pattern.compile("POLICY=([^\\r\\n]*)");
 
     private static final ShellProfile POWERSHELL = new ShellProfile(
             new ProfileId("powershell"),
@@ -179,7 +189,7 @@ class WindowsPowerShellCmdShellIntegrationTest {
     @DisplayName("PowerShell: 스크립트를 두 번 dot-source 해도 OSC 는 프롬프트마다 한 번만 나온다")
     void powerShellDoesNotWrapTwice() throws Exception {
         // given / when
-        Run run = powerShell(temp.resolve("app"), temp, Optional.empty(), ". $env:TANAGER_PS1\nexit\n");
+        Run run = powerShell(temp.resolve("app"), temp, Optional.empty(), LOAD_SCRIPT + "\nexit\n");
 
         // then — 첫 프롬프트 1회 + 다시 source 한 뒤 프롬프트 1회
         assertThat(run.reports()).hasSize(2);
@@ -199,6 +209,53 @@ class WindowsPowerShellCmdShellIntegrationTest {
         assertThat(run.reports()).hasSize(2);
         assertSameDirectory(run.reports().get(1), elsewhere);
         assertThat(run.text()).contains("HKCU:\\>");
+    }
+
+    @Test
+    @DisplayName("PowerShell: 실행 정책을 바꾸지 않는다 — 범위별 정책 · 실효 정책 · 자식 PowerShell 의 정책이 맨 powershell -NoProfile 과 같다")
+    void powerShellKeepsExecutionPolicy() throws Exception {
+        // given
+        String expected = policyLine(plainPowerShell(POLICY_PROBE));
+
+        // when
+        Run run = powerShell(temp.resolve("app"), temp, Optional.empty(), POLICY_PROBE + "\nexit\n");
+
+        // then
+        assertThat(run.reports()).as("통합은 동작한다").isNotEmpty();
+        assertThat(policyLine(run.text())).isEqualTo(expected);
+    }
+
+    @Test
+    @DisplayName("PowerShell: 세션 환경에 PSExecutionPolicyPreference 가 생기지 않는다(자식 PowerShell 로 새지 않는다)")
+    void powerShellLeavesNoPolicyPreference() throws Exception {
+        // given
+        Assumptions.assumeTrue(
+                System.getenv("PSExecutionPolicyPreference") == null, "테스트 JVM 이 이미 PSExecutionPolicyPreference 를 가졌다");
+
+        // when
+        Run run = powerShell(
+                temp.resolve("app"),
+                temp,
+                Optional.empty(),
+                "'PR' + 'EF=[' + $env:PSExecutionPolicyPreference + ']'\nexit\n");
+
+        // then
+        assertThat(run.reports()).isNotEmpty();
+        assertThat(run.text()).contains("PREF=[]");
+    }
+
+    @Test
+    @DisplayName("PowerShell: TANAGER_PS1 이 없는 파일을 가리키면 오류 출력 없이 기본 프롬프트로 뜨고 OSC 는 없다")
+    void powerShellSkipsMissingScript() throws Exception {
+        // given
+        Integration missing = new Integration.Installed(temp.resolve("없는 폴더"));
+
+        // when
+        Run run = powerShell(missing, temp.resolve("app"), temp, Optional.empty(), Map.of(), "exit\n");
+
+        // then
+        assertThat(run.reports()).isEmpty();
+        assertThat(run.text()).contains("PS " + temp + ">").doesNotContain("FullyQualifiedErrorId");
     }
 
     // ---- cmd ----
@@ -271,19 +328,50 @@ class WindowsPowerShellCmdShellIntegrationTest {
     }
 
     private Run powerShell(Path appData, Path start, Optional<String> userScript, String stdin) throws Exception {
-        Integration integration = install(appData, Optional.empty());
+        return powerShell(install(appData, Optional.empty()), appData, start, userScript, Map.of(), stdin);
+    }
+
+    private Run powerShell(
+            Integration integration,
+            Path appData,
+            Path start,
+            Optional<String> userScript,
+            Map<String, String> extraEnv,
+            String stdin)
+            throws Exception {
         WindowsPlatformModule module = moduleWith(appData, Optional.empty());
         LaunchCommand command = module.launchCommand(POWERSHELL, new WorkingDir.At(windowsPath(start)), integration);
         List<String> argv = new ArrayList<>(command.argv());
         argv.add(1, "-NoProfile");
-        Map<String, String> extra = new HashMap<>();
+        Map<String, String> extra = new HashMap<>(extraEnv);
         if (userScript.isPresent()) {
             Path script = Files.writeString(
                     Files.createTempFile(temp, "user-", ".ps1"), "\uFEFF" + userScript.get(), StandardCharsets.UTF_8);
             extra.put("TEST_USER_PS1", script.toString());
-            argv.set(argv.indexOf("-Command") + 1, ". $env:TEST_USER_PS1; . $env:TANAGER_PS1");
+            int at = argv.indexOf("-Command") + 1;
+            argv.set(at, LOAD_USER_SCRIPT + argv.get(at));
         }
         return run(command, argv, extra, stdin);
+    }
+
+    /** 비교 기준: 통합도 프로필도 없는 맨 PowerShell 에서 {@code expression} 을 평가한 출력(OEM 으로 읽음). */
+    private static String plainPowerShell(String expression) throws Exception {
+        Process process = new ProcessBuilder(PS_EXE, "-NoLogo", "-NoProfile", "-Command", expression)
+                .redirectErrorStream(true)
+                .start();
+        process.getOutputStream().close();
+        CompletableFuture<byte[]> output = CompletableFuture.supplyAsync(() -> readAll(process));
+        if (!process.waitFor(SHELL_TIMEOUT.toSeconds(), TimeUnit.SECONDS)) {
+            process.destroyForcibly();
+            throw new AssertionError("기준 PowerShell 이 끝나지 않았다");
+        }
+        return new String(output.get(10, TimeUnit.SECONDS), oemCharset());
+    }
+
+    private static String policyLine(String output) {
+        Matcher matcher = POLICY_LINE.matcher(output);
+        assertThat(matcher.find()).as("정책 줄이 출력에 있다: %s", output).isTrue();
+        return matcher.group(1).strip();
     }
 
     private Run cmd(Path appData, Path start, Optional<String> userPrompt, String stdin) throws Exception {

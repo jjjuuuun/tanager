@@ -1,6 +1,7 @@
 package dev.tanager.platform.windows;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 
 import dev.tanager.application.port.out.Integration;
 import dev.tanager.application.port.out.LaunchCommand;
@@ -39,7 +40,9 @@ class WindowsPowerShellCmdInjectionTest {
     private static final String CMD_EXE = "C:\\Windows\\System32\\cmd.exe";
     private static final String USER_PROFILE = "C:\\Users\\me";
     private static final String PS_VARIABLE = "TANAGER_PS1";
-    private static final String PS_COMMAND = ". $env:TANAGER_PS1";
+    // 실행 정책을 바꾸지 않는다: 문자열로 만든 스크립트 블록에는 실행 정책이 적용되지 않는다. 파일이 없으면 조용히 건너뛴다
+    private static final String PS_COMMAND = "if (Test-Path -LiteralPath $env:TANAGER_PS1) "
+            + "{ . ([scriptblock]::Create([IO.File]::ReadAllText($env:TANAGER_PS1))) }";
     // cmd 의 $e 는 ESC, $P 는 현재 경로. OSC 9;9 의 따옴표는 cmd 쪽에서 붙이지 않는다(OscScanner 가 따옴표 없는 값도 읽는다)
     private static final String PROMPT_PREFIX = "$e]9;9;$P$e\\";
     private static final String DEFAULT_PROMPT = "$P$G";
@@ -88,14 +91,14 @@ class WindowsPowerShellCmdInjectionTest {
     // ---- PowerShell ----
 
     @Test
-    @DisplayName("셸 통합이 설치돼 있으면 PowerShell 은 -ExecutionPolicy Bypass 로 환경 변수 TANAGER_PS1 의 스크립트를 dot-source 하며 띄운다")
+    @DisplayName("셸 통합이 설치돼 있으면 PowerShell 은 실행 정책을 바꾸지 않고 환경 변수 TANAGER_PS1 의 스크립트를 스크립트 블록으로 dot-source 하며 띄운다")
     void installedPowerShellDotSourcesScriptFromEnvironment() {
         // given / when
         LaunchCommand command = of(POWERSHELL, windowsDir("C:\\work"), Optional.empty(), INSTALLED);
 
         // then
-        assertThat(command.argv())
-                .containsExactly(PS_EXE, "-NoLogo", "-NoExit", "-ExecutionPolicy", "Bypass", "-Command", PS_COMMAND);
+        assertThat(command.argv()).containsExactly(PS_EXE, "-NoLogo", "-NoExit", "-Command", PS_COMMAND);
+        assertThat(command.argv()).noneMatch(arg -> arg.equalsIgnoreCase("-ExecutionPolicy"));
         assertThat(command.environment()).isEqualTo(Map.of(PS_VARIABLE, ps1Of(INSTALLED_DIR)));
         assertThat(command.envNames()).isEqualTo(EnvNames.CASE_INSENSITIVE);
     }
@@ -128,6 +131,18 @@ class WindowsPowerShellCmdInjectionTest {
         assertThat(argv).noneMatch(arg -> arg.contains("O'Neil") || arg.contains("한글") || arg.contains("'"));
         assertThat(argv).noneMatch(arg -> arg.contains("\""));
         assertThat(command.environment()).containsEntry(PS_VARIABLE, ps1Of(appData));
+    }
+
+    @Test
+    @DisplayName("PowerShell -Command 문자열은 감싸지지만 \" 가 없고 \\ 로 끝나지 않아 방어 검사(requireSafeArgv)를 통과한다")
+    void powerShellCommandPassesArgvDefence() {
+        // given
+        LaunchCommand command = of(POWERSHELL, windowsDir("C:\\work"), Optional.empty(), INSTALLED);
+
+        // when / then
+        assertThat(PS_COMMAND).contains(" ").doesNotContain("\"").doesNotEndWith("\\");
+        assertThatCode(() -> WindowsLaunchCommands.requireSafeArgv(new ShellEnvironment.Windows(), command.argv()))
+                .doesNotThrowAnyException();
     }
 
     @Test

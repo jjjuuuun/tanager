@@ -51,9 +51,11 @@ final class WindowsLaunchCommands {
     private static final String PS_VARIABLE = "TANAGER_PS1";
     // -Command 문자열은 고정이다. 스크립트 경로(사용자 이름이 든 앱 데이터 경로)는 환경 변수로만 넘겨 PowerShell 의 따옴표 ·
     // 이스케이프 규칙(' 와 U+2018–U+201B)을 타지 않게 한다(#107, ADR-0014). 변수 값은 다시 단어로 갈리지 않는다.
-    // 프로세스 범위 Bypass: 사용자 정책(RemoteSigned 등)이 앱 데이터의 스크립트를 막지 않게. 그룹 정책이 막으면 통합이 없다(R4)
-    private static final List<String> PS_INTEGRATION_ARGS =
-            List.of("-NoExit", "-ExecutionPolicy", "Bypass", "-Command", ". $env:" + PS_VARIABLE);
+    // 파일이 아니라 문자열로 만든 스크립트 블록을 dot-source 한다 — 실행 정책은 스크립트 파일에만 적용되므로 -ExecutionPolicy
+    // Bypass 없이도 읽히고, 사용자의 정책(프로필 · 세션 · 자식 PowerShell)은 그대로 남는다. 파일이 없으면 조용히 건너뛴다
+    private static final String PS_LOAD_SCRIPT = "if (Test-Path -LiteralPath $env:" + PS_VARIABLE + ") "
+            + "{ . ([scriptblock]::Create([IO.File]::ReadAllText($env:" + PS_VARIABLE + "))) }";
+    private static final List<String> PS_INTEGRATION_ARGS = List.of("-NoExit", "-Command", PS_LOAD_SCRIPT);
     private static final String PROMPT = "PROMPT";
     // cmd 의 $e 는 ESC, $P 는 현재 경로. 따옴표는 붙이지 않는다 — OscScanner 가 따옴표 없는 OSC 9;9 도 읽는다
     private static final String PROMPT_PREFIX = "$e]9;9;$P$e\\";
@@ -78,7 +80,8 @@ final class WindowsLaunchCommands {
      *
      * <ul>
      *   <li>WSL bash: rcfile 을 주입하고, 앱 환경의 {@code wslenv} 는 보존한 채 {@code TANAGER_RC/p} 를 붙인다.
-     *   <li>PowerShell 5.1: 환경 변수 {@code TANAGER_PS1} 의 스크립트를 {@code -Command ". $env:TANAGER_PS1"} 로 dot-source 한다.
+     *   <li>PowerShell 5.1: 환경 변수 {@code TANAGER_PS1} 의 스크립트를 {@code -Command} 에서 스크립트 블록으로 dot-source 한다(실행
+     *       정책을 바꾸지 않는다).
      *   <li>cmd: 상속한 {@code prompt}(없거나 공백이면 {@code $P$G}) 앞에 OSC 9;9 를 붙인 {@code PROMPT} 를 준다.
      * </ul>
      */

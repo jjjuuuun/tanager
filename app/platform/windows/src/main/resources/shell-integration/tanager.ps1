@@ -1,5 +1,5 @@
-﻿# Tanager 셸 통합 (Windows PowerShell 5.1). 환경 변수 TANAGER_PS1 에 이 파일 경로를 받아 `-ExecutionPolicy Bypass -Command ". $env:TANAGER_PS1"` 로
-# 프로필($PROFILE)을 읽은 뒤 dot-source 된다. 경로는 명령 문자열에 넣지 않는다(ADR-0003 · 0014).
+﻿# Tanager 셸 통합 (Windows PowerShell 5.1). 환경 변수 TANAGER_PS1 에 이 파일 경로를 받아, 프로필($PROFILE)을 읽은 뒤 -Command 에서
+# 스크립트 블록으로 dot-source 된다(파일 실행이 아니라 실행 정책을 바꾸지 않는다). $PSScriptRoot 는 비어 있다(ADR-0003 · 0014).
 # 프롬프트마다 OSC 9;9 로 현재 경로를 알린다. 기존 prompt(oh-my-posh 등)를 감싸서 지우지 않는다.
 # 5.1 문법만 쓴다(`e · ?? · 삼항 없음). 파일은 UTF-8 BOM · CRLF — BOM 이 없으면 5.1 이 한글을 깨뜨린다.
 
