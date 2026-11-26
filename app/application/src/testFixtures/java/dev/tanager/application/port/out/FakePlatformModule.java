@@ -24,8 +24,8 @@ public final class FakePlatformModule implements PlatformModule {
     private final AtomicInteger shellsCalls = new AtomicInteger();
     private final List<LaunchRequest> launchRequests = new ArrayList<>();
     private Path appData = Path.of("fake-appdata", "Tanager");
-    private ShellIntegration integration =
-            FakeShellIntegration.installedAt(Path.of("fake-appdata", "Tanager", "shell-integration"));
+    private ShellIntegration defaultIntegration = defaultIntegrationFor(appData);
+    private Optional<ShellIntegration> customIntegration = Optional.empty();
     private CountDownLatch shellsGate;
     private Optional<RuntimeException> shellsFailure = Optional.empty();
 
@@ -45,15 +45,24 @@ public final class FakePlatformModule implements PlatformModule {
         return this;
     }
 
+    /** 앱 데이터 폴더. {@link #withIntegration} 을 주지 않았다면 기본 {@code integration()} 도 이 아래를 가리킨다. */
     public synchronized FakePlatformModule withAppData(Path appData) {
         this.appData = appData;
+        this.defaultIntegration = defaultIntegrationFor(appData);
         return this;
     }
 
-    /** {@code integration()} 이 돌려줄 셸 통합. 기본은 {@code Installed(fake-appdata/Tanager/shell-integration)}. */
+    /**
+     * {@code integration()} 이 돌려줄 셸 통합. 주지 않으면 {@code Installed(<appData>/shell-integration)} 을 돌려주는 Fake 다(기본
+     * appData 는 {@code fake-appdata/Tanager}).
+     */
     public synchronized FakePlatformModule withIntegration(ShellIntegration integration) {
-        this.integration = Objects.requireNonNull(integration, "integration");
+        this.customIntegration = Optional.of(Objects.requireNonNull(integration, "integration"));
         return this;
+    }
+
+    private static ShellIntegration defaultIntegrationFor(Path appData) {
+        return FakeShellIntegration.installedAt(appData.resolve("shell-integration"));
     }
 
     /** {@code launchCommand} 에 넘어온 인자 하나. */
@@ -128,6 +137,6 @@ public final class FakePlatformModule implements PlatformModule {
 
     @Override
     public synchronized ShellIntegration integration() {
-        return integration;
+        return customIntegration.orElse(defaultIntegration);
     }
 }
