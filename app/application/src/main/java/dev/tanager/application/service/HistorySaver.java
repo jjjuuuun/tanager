@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit;
  * 파일을 덮지 않는다. 실패하면 알리고(같은 오류가 이어지면 한 번만) 다음 변경 때 다시 시도한다.
  *
  * <p>상태는 모두 {@link #monitor} 로 지킨다. 이벤트 콜백(actor 스레드) · 예약(스케줄러 스레드) · 저장(I/O 스레드) · {@link #flush}
- * (종료 스레드)가 함께 만진다.
+ * (종료 스레드)가 함께 만진다. 출력 포트의 일정을 조율하는 가변 상태라 규칙 8 의 예외로 application 에 둔다(ADR-0013).
  */
 public final class HistorySaver {
     /** 첫 미저장 변경에서 저장까지. */
@@ -46,18 +46,26 @@ public final class HistorySaver {
     private boolean dirty;
     // 파일에 있다고 아는 이력(마지막으로 저장했거나 불러온 것). 같으면 다시 쓰지 않는다
     private Optional<WorkHistory> persisted = Optional.empty();
+    // 지금 쓰고 있는 이력. 쓰는 동안의 변경은 이것과 비교한다 — 끝나면 파일이 이 값이 된다
+    private Optional<WorkHistory> writing = Optional.empty();
     private Optional<HistoryStoreError> lastFailure = Optional.empty();
     private boolean loading;
     private boolean visitedWhileLoading;
 
-    /** 만들면서 {@code state} 의 이벤트를 구독한다. 불러오기 명령을 내기 전에 만든다. */
+    /**
+     * 만들면서 {@code state} 의 이벤트를 구독한다. 불러오기 명령을 내기 전에 만든다. 만들 때 이미 쌓여 있던 방문(불러오는 중의 방문)도 불러온 뒤
+     * 저장할 것으로 센다.
+     */
     public HistorySaver(StateActor state, HistoryRepository repository, Scheduler scheduler, Executor io) {
         this.state = Objects.requireNonNull(state, "state");
         this.repository = Objects.requireNonNull(repository, "repository");
         this.scheduler = Objects.requireNonNull(scheduler, "scheduler");
         this.io = Objects.requireNonNull(io, "io");
+        HistoryStore store = state.snapshot().store();
         synchronized (monitor) {
-            this.loading = state.snapshot().store() instanceof HistoryStore.Loading;
+            this.loading = store instanceof HistoryStore.Loading;
+            this.visitedWhileLoading =
+                    store instanceof HistoryStore.Loading l && !l.pending().isEmpty();
         }
         state.subscribe(this::onEvent);
     }
@@ -66,7 +74,8 @@ public final class HistorySaver {
      * 예약을 거두고 미저장 변경을 부른 스레드에서 바로 저장한다(종료 때, ADR-0012). 진행 중인 저장은 {@code timeout} 까지 기다린다. 쓸 수
      * 있는 상태가 아니면 저장하지 않는다.
      *
-     * @return 저장할 것이 없었거나 저장했으면 {@code true}. 진행 중 저장이 제때 끝나지 않았거나 저장이 실패했으면 {@code false}
+     * @return 저장할 것이 없었거나 저장했으면 {@code true}. 쓸 수 없는 상태(ReadOnly · Loading)여서 저장하지 않았을 때도 {@code
+     *     true}. 진행 중 저장이 제때 끝나지 않았거나 저장이 실패했으면 {@code false}
      */
     public boolean flush(Duration timeout) {
         long deadline = System.nanoTime() + timeout.toNanos();
@@ -106,7 +115,7 @@ public final class HistorySaver {
                     loading = true;
                     visitedWhileLoading = !pending.isEmpty();
                 }
-                case HistoryStore.ReadOnly(var reason) -> loading = false;
+                case HistoryStore.ReadOnly(var _) -> loading = false;
                 case HistoryStore.Writable() -> changed(history);
             }
         }
@@ -120,7 +129,8 @@ public final class HistorySaver {
                 persisted = Optional.of(history);
             }
         }
-        if (persisted.equals(Optional.of(history))) {
+        // 쓰는 중이면 끝난 뒤의 파일과 비교한다. 쓰는 동안 원래 값으로 되돌린 변경을 놓치지 않는다
+        if (writing.or(() -> persisted).equals(Optional.of(history))) {
             return;
         }
         dirty = true;
@@ -156,10 +166,15 @@ public final class HistorySaver {
 
     // monitor 밖(블로킹 I/O). startSave 가 true 를 준 뒤에만 부른다
     private boolean saveLatest() {
-        WorkHistory latest = state.snapshot().history();
+        WorkHistory latest;
         boolean unchanged;
+        // monitor 안에서 읽는다: 이 뒤의 변경은 콜백이 writing 과 비교하고, 이 앞의 변경은 latest 에 들어 있다
         synchronized (monitor) {
+            latest = state.snapshot().history();
             unchanged = persisted.equals(Optional.of(latest));
+            if (!unchanged) {
+                writing = Optional.of(latest);
+            }
         }
         Result<WorkHistory, HistoryStoreError> result = unchanged ? Result.ok(latest) : save(latest);
         return finish(latest, result);
@@ -180,6 +195,7 @@ public final class HistorySaver {
         boolean saved = result.error().isEmpty();
         synchronized (monitor) {
             saving = false;
+            writing = Optional.empty();
             if (saved) {
                 persisted = Optional.of(latest);
                 lastFailure = Optional.empty();

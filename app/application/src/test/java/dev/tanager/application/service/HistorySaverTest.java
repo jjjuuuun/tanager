@@ -7,9 +7,13 @@ import dev.tanager.application.port.in.AppEvent;
 import dev.tanager.application.port.out.FakeScheduler;
 import dev.tanager.application.port.out.HistoryStoreError;
 import dev.tanager.application.port.out.InMemoryHistoryRepository;
+import dev.tanager.application.port.out.LoadedHistory;
+import dev.tanager.application.port.out.StoreAccess;
 import dev.tanager.application.state.AppState;
+import dev.tanager.application.state.HistoryLoaded;
 import dev.tanager.application.state.HistoryStore;
 import dev.tanager.application.state.ManualExecutor;
+import dev.tanager.application.state.PendingVisit;
 import dev.tanager.application.state.StateActor;
 import dev.tanager.application.state.Transition;
 import dev.tanager.domain.history.HistoryPolicy;
@@ -23,9 +27,11 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import net.jqwik.api.ForAll;
 import net.jqwik.api.Label;
 import net.jqwik.api.Property;
+import net.jqwik.api.constraints.IntRange;
 import net.jqwik.api.constraints.Size;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -49,12 +55,15 @@ class HistorySaverTest {
         final StateActor actor;
         final HistorySaver saver;
 
-        Rig(HistoryStore store) {
+        Rig(WorkHistory initial, HistoryStore store) {
             repository.load();
-            actor = new StateActor(
-                    AppState.initial(WorkHistory.empty(HistoryPolicy.DEFAULT)).withStore(store), actorExecutor);
+            actor = new StateActor(AppState.initial(initial).withStore(store), actorExecutor);
             actor.subscribe(events::add);
             saver = new HistorySaver(actor, repository, scheduler, io);
+        }
+
+        Rig(HistoryStore store) {
+            this(WorkHistory.empty(HistoryPolicy.DEFAULT), store);
         }
 
         Rig() {
@@ -68,6 +77,34 @@ class HistorySaverTest {
                 return new Transition<>(current.withHistory(next), List.of(new AppEvent.HistoryChanged(next)), true);
             });
             settle();
+        }
+
+        /** VisitRecorder 처럼 A 방문을 기록하고, 불러오는 중이면 불러온 이력 위에 다시 적용되게 쌓아 둔다. */
+        void visitQueued() {
+            actor.submit(current -> {
+                WorkHistory next = current.history().recordVisit(A, Instant.EPOCH);
+                HistoryStore store = current.store() instanceof HistoryStore.Loading loading
+                        ? loading.queued(new PendingVisit(A, Instant.EPOCH))
+                        : current.store();
+                return new Transition<>(
+                        current.withHistory(next).withStore(store), List.of(new AppEvent.HistoryChanged(next)), true);
+            });
+            settle();
+        }
+
+        /** 파일에서 {@code fromFile} 을 쓸 수 있게 불러왔다. */
+        void load(WorkHistory fromFile) {
+            actor.submit(new HistoryLoaded(new LoadedHistory(fromFile, StoreAccess.WRITABLE, List.of())));
+            settle();
+        }
+
+        /** A 를 고정하거나 푼다. 저장 실행기는 돌리지 않는다(다른 스레드가 저장 중일 수 있다). */
+        void pin(boolean pinned) {
+            actor.submit(current -> {
+                WorkHistory next = current.history().pin(A, pinned).value().orElseThrow();
+                return new Transition<>(current.withHistory(next), List.of(new AppEvent.HistoryChanged(next)), true);
+            });
+            actorExecutor.runAll();
         }
 
         /** 시간을 진행하고 그 결과로 생긴 일(저장 · 알림)을 모두 끝낸다. */
@@ -176,8 +213,7 @@ class HistorySaverTest {
     @Property(tries = 50)
     @Label("변경 간격이 어떻든 저장 수는 변경 수를 넘지 않고, 변경은 1초 안에 저장되며, 끝에는 모두 저장돼 있다")
     void anyChangePatternIsSavedWithinOneSecond(
-            @ForAll @Size(min = 1, max = 30)
-                    List<@net.jqwik.api.constraints.IntRange(min = 0, max = 150) Integer> gapsInTensOfMillis) {
+            @ForAll @Size(min = 1, max = 30) List<@IntRange(min = 0, max = 150) Integer> gapsInTensOfMillis) {
         // given
         Rig rig = new Rig();
         List<Integer> changeTimes = new ArrayList<>(); // 10ms 단위
@@ -236,7 +272,7 @@ class HistorySaverTest {
             };
             change.run();
             scheduler.advance(SECOND);
-            assertThat(entered.await(5, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            assertThat(entered.await(5, TimeUnit.SECONDS)).isTrue();
 
             // when 첫 저장이 막힌 동안 변경하고 시간을 한참 진행
             change.run();
@@ -280,6 +316,97 @@ class HistorySaverTest {
 
         // then
         assertThat(rig.saves()).isZero();
+    }
+
+    @Test
+    @DisplayName("불러오는 동안 방문이 쌓였으면 불러온 뒤 1초가 지나면 합친 이력을 한 번 저장한다")
+    void visitWhileLoadingIsSavedOneSecondAfterLoad() {
+        // given
+        Rig rig = new Rig(new HistoryStore.Loading(List.of()));
+        rig.visitQueued();
+        rig.advance(Duration.ofSeconds(5));
+        assertThat(rig.saves()).isZero();
+
+        // when
+        rig.load(fileWithA(3));
+        rig.advance(Duration.ofMillis(900));
+
+        // then
+        assertThat(rig.saves()).isZero();
+
+        // when
+        rig.advance(Duration.ofMillis(100));
+
+        // then
+        assertThat(rig.saves()).isEqualTo(1);
+        assertThat(rig.lastSavedChange()).isEqualTo(4);
+    }
+
+    @Test
+    @DisplayName("불러오는 동안 방문이 없었으면 불러온 이력은 파일과 같아 시간이 흘러도 flush 해도 저장하지 않는다")
+    void loadWithoutPendingVisitsIsNeverSaved() {
+        // given
+        Rig rig = new Rig(new HistoryStore.Loading(List.of()));
+
+        // when
+        rig.load(fileWithA(3));
+        rig.advance(Duration.ofSeconds(5));
+
+        // then
+        assertThat(rig.saves()).isZero();
+        assertThat(rig.saver.flush(Duration.ofSeconds(2))).isTrue();
+        assertThat(rig.saves()).isZero();
+    }
+
+    @Test
+    @DisplayName("저장기를 만들기 전에 이미 쌓인 방문도 불러온 뒤 저장한다")
+    void visitsQueuedBeforeSaverExistsAreSavedAfterLoad() {
+        // given 저장기를 만들 때 이미 방문 하나가 쌓여 있다
+        WorkHistory visited = WorkHistory.empty(HistoryPolicy.DEFAULT).recordVisit(A, Instant.EPOCH);
+        Rig rig = new Rig(visited, new HistoryStore.Loading(List.of(new PendingVisit(A, Instant.EPOCH))));
+
+        // when
+        rig.load(fileWithA(3));
+        rig.advance(SECOND);
+
+        // then
+        assertThat(rig.saves()).isEqualTo(1);
+        assertThat(rig.lastSavedChange()).isEqualTo(4);
+    }
+
+    @Test
+    @DisplayName("저장하는 동안 이력을 파일에 있던 값으로 되돌리면 저장이 끝난 뒤 되돌린 이력을 다시 저장한다")
+    void revertingDuringSaveIsSavedAfterSaveEnds() throws Exception {
+        // given A 를 방문해 저장했고(파일: 고정 안 됨), 고정한 이력을 저장하는 중이다
+        Rig rig = new Rig();
+        rig.change();
+        rig.advance(SECOND);
+        WorkHistory unpinned = rig.actor.snapshot().history();
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        rig.repository.willBlockSave(entered, release);
+        rig.pin(true);
+        rig.scheduler.advance(SECOND);
+        Thread saving = Thread.ofVirtual().start(rig.io::runAll);
+        assertThat(entered.await(5, TimeUnit.SECONDS)).isTrue();
+
+        // when 저장 중에 고정을 풀고(처음 파일과 같다) 저장이 끝난다
+        rig.pin(false);
+        release.countDown();
+        saving.join();
+        rig.advance(SECOND);
+
+        // then
+        assertThat(rig.saves()).isEqualTo(3);
+        assertThat(rig.repository.saves().get(2)).isEqualTo(unpinned);
+    }
+
+    private static WorkHistory fileWithA(int visits) {
+        WorkHistory history = WorkHistory.empty(HistoryPolicy.DEFAULT);
+        for (int i = 0; i < visits; i++) {
+            history = history.recordVisit(A, Instant.EPOCH);
+        }
+        return history;
     }
 
     @Test
@@ -440,7 +567,7 @@ class HistorySaverTest {
         rig.change();
         rig.scheduler.advance(SECOND);
         Thread blocked = Thread.ofVirtual().start(rig.io::runAll);
-        assertThat(entered.await(5, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+        assertThat(entered.await(5, TimeUnit.SECONDS)).isTrue();
 
         // when
         long started = System.nanoTime();

@@ -268,6 +268,30 @@ class AssemblyTest {
     }
 
     @Test
+    @DisplayName("불러오기 전에 기록된 방문은 종료 때 불러온 이력과 합쳐 state.json 에 저장된다")
+    void visitBeforeLoadIsSavedOnShutdown() throws Exception {
+        // given 조립 직후 곧바로 방문한다
+        Assembly assembly = assembleWithState(stateJson(1));
+        visit(assembly, INFRA);
+        await().atMost(Duration.ofSeconds(5))
+                .until(() -> assembly.state().snapshot().store() instanceof HistoryStore.Writable
+                        && assembly.state()
+                                        .snapshot()
+                                        .history()
+                                        .find(INFRA)
+                                        .map(e -> e.visitCount())
+                                        .orElse(0)
+                                == 6);
+
+        // when
+        assembly.shutdown();
+
+        // then
+        assertThat(Files.readString(appData.resolve("state.json"), StandardCharsets.UTF_8))
+                .containsPattern("\"visitCount\"\\s*:\\s*6");
+    }
+
+    @Test
     @DisplayName("종료(shutdown)는 1초 안에 생긴 미저장 변경을 바로 state.json 에 저장하고 이후 명령은 거부된다")
     void shutdownFlushesUnsavedChangesAndRejectsLaterCommands() throws Exception {
         // given
