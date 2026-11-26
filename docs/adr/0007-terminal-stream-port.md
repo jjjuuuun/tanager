@@ -20,6 +20,7 @@ M2 에서 셸을 실제로 띄운다. 터미널 출력은 화면(JediTerm), cwd 
 **기동 명령 조립**
 1. pty 어댑터가 `ShellProfile` 을 받아 직접 조립한다. 어댑터가 WSL · PowerShell 을 알게 되고, macOS 가 들어오면 어댑터를 고쳐야 한다.
 2. **`PlatformModule.launchCommand(profile, cwd)` 가 `LaunchCommand(argv, workingDirectory, environment)` 를 만들고, `PtyLauncher` 는 그것만 실행한다.** 셸 통합 주입(M3)도 같은 자리에 들어간다.
+   - 개정: 시그니처는 ADR-0009 에서 `launchCommand(ShellProfile, WorkingDir)`, ADR-0014(#55)에서 셸 통합 결과를 받는 `launchCommand(ShellProfile, WorkingDir, Integration)` 가 됐다. 순수 계산이라는 점은 같다.
 
 **구독 전 출력**
 1. 첫 구독 때 읽기를 시작한다. 두 번째 구독자는 첫 프롬프트를 놓친다.

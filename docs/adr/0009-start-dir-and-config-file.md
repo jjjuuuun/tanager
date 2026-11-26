@@ -36,6 +36,7 @@
   - `SessionState` 의 `Starting.dir` · `Running.cwd` · `Exited.lastCwd` 는 `WorkingDir` 가 된다.
   - `TerminalSession.cwdChanged(WorkspacePath)` 는 `At` 으로 바꾼다.
   - `PlatformModule.launchCommand(ShellProfile, WorkingDir)` 로 바꾼다(ADR-0007 개정).
+    - 개정: ADR-0014(#55)에서 셸 통합 결과를 세 번째 인자로 받는 `launchCommand(ShellProfile, WorkingDir, Integration)` 가 됐다.
     - 순수 계산은 그대로다.
     - Windows 홈은 모듈을 만들 때 환경 변수에서 한 번 읽는다.
 - **Windows 경로가 있는지는 미리 확인하지 않는다.**

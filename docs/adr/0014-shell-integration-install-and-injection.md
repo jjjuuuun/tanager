@@ -45,29 +45,35 @@ ADR-0003 은 셸 통합 스크립트가 프롬프트마다 OSC 7(bash) · OSC 9;
 
 ### WSL (#55 에서 구현됨)
 - 환경 `TANAGER_RC=<설치 폴더>\tanager.bash`(`Path.toString`, Windows 경로)와 `WSLENV=<기존>:TANAGER_RC/p`(기존이 없으면 `TANAGER_RC/p`)를 준다. `/p` 는 WSL 이 Windows 경로를 자기 마운트 경로로 바꾸게 한다 — automount 루트를 몰라도 된다.
-- argv 는 `wsl.exe -d <d> --cd <경로|~> -- bash --rcfile "$TANAGER_RC" -i` 다. 작업 디렉터리는 비운다(ADR-0007).
-  - `wsl.exe` 는 `--` 뒤 명령을 리눅스 기본 셸(`$SHELL -c`)로 실행하므로 변수가 거기서 펼쳐진다.
+- argv 는 `wsl.exe -d <d> --cd <경로|~> -- [ -r "$TANAGER_RC" ] && exec bash --rcfile "$TANAGER_RC" -i || exec bash -i` 다. 작업 디렉터리는 비운다(ADR-0007).
+  - `wsl.exe` 는 `--` 뒤 명령을 리눅스 기본 로그인 셸(`/etc/passwd`)의 `-c` 로 실행하므로 변수와 `&&` · `||` 가 거기서 해석된다.
+  - rcfile 을 읽을 수 없으면(지워짐 · 권한 · 변환 실패) 맨 bash(`--rcfile` 이 없는 파일이면 아무 설정도 없는 셸)가 아니라 M2 와 같은 `bash -i`(`~/.bashrc` 를 읽음)로 물러선다(#55 리뷰). `exec` 라 기본 셸이 중간에 남지 않는다(실측: `SHLVL=1`, 부모는 WSL Relay).
+  - `--` 뒤 원소는 모두 공백이 없다(`WindowsWslInjectionTest` 가 검사).
   - argv 원소는 큰따옴표를 **포함한** `"$TANAGER_RC"` 다. 따옴표가 없으면 기본 셸이 펼친 경로를 공백에서 가른다 — Windows 사용자 이름에 공백이 있으면 rcfile 을 못 찾는다(실측: `[…/사용자]` `['x]` `[공백/tanager.bash]` 셋으로 갈림). 작은따옴표는 펼쳐지지 않는다.
-  - 공백 · 탭이 없는 원소라 Windows 명령줄로 옮길 때 다시 감싸지 않는다. JDK `ProcessBuilder` 와 pty4j 0.14 의 `joinCmdArgs`(ConPTY 도 같은 함수) 모두 그대로 넘긴다.
+  - 공백 · 탭이 없는 원소는 Windows 명령줄로 옮길 때 다시 감싸이지 않는다. JDK `ProcessBuilder` 와 pty4j 0.14 의 `joinCmdArgs`(ConPTY 도 같은 함수) 모두 그대로 넘긴다.
 - 기존 `WSLENV` 는 모듈을 만들 때 환경에서 한 번 읽는다(순수 계산 유지). 병합 규칙:
   1. `:` 로 나누고 앞뒤 공백을 지운 뒤 빈 항목을 버린다.
   2. 이름(`/` 앞)이 `TANAGER_RC` 인 항목은 대소문자를 무시하고 지운다 — Tanager 안에서 Tanager 를 띄우면 상속한 WSLENV 에 이미 있다.
   3. 나머지는 순서대로 두고 맨 뒤에 `TANAGER_RC/p` 하나를 붙인다.
 - `/p` 변환은 한글 · 공백 · `'` 가 든 앱 데이터 경로에서도 맞게 동작했다. 그래서 (a) `/mnt/` 직접 계산으로 물러서지 않는다 — 직접 계산해도 같은 따옴표 문제가 남는다.
 - `Unavailable` 이면 M2 명령(`… -- bash -i`) 그대로 띄우고 환경 변수를 더하지 않는다. PowerShell · cmd 는 #81 전까지 그대로다.
+- 기본 로그인 셸이 bash 가 아닌 배포판 사용자(zsh · fish 등)는 `[ … ] && … || …` 와 `"$TANAGER_RC"` 를 그 셸이 해석한다. 이 PC 는 bash 라 확인하지 않았다(미검증).
 
 ### #55 로그인 셸 설정
 - `tanager.bash` 가 bash 로그인 셸 순서를 흉내 낸다: `/etc/profile` → `~/.bash_profile` | `~/.bash_login` | `~/.profile` 중 처음 있는 것 → 셋 다 없으면 `~/.bashrc`. 그냥 `wsl.exe` 를 띄울 때(로그인 셸)와 PATH 가 같다. VS Code 셸 통합과 같은 방식이다.
 - Debian 계열 `/etc/bash.bashrc` 이중 실행을 막으려고 `/etc/profile` 을 source 하는 동안만 `PS1` 을 비운다(아래 "#55 에서 확인한 것" 의 회피책 (a)).
-  - 끝나면 원래 값으로 되돌린다. 원래 unset 이었으면 unset 으로 되돌린다.
+  - `/etc/bash.bashrc` 가 있을 때(Debian · Ubuntu · Arch)만 비운다. Fedora 계열의 `/etc/bashrc` 는 `PS1` 을 보고 대화형 설정을 정하고 `BASHRCSOURCED` 를 남기므로, 비우면 그 블록을 건너뛴 채 다시 읽히지 않는다(#55 리뷰).
+  - 끝난 뒤 `PS1` 이 비어 있을 때만 원래 값으로 되돌린다. 원래 unset 이었으면 unset 으로 되돌린다. `/etc/profile` 이 `PS1` 을 새로 정했으면 그 값을 둔다(Debian 은 정하지 않으므로 동작이 같다).
   - 비운 `PS1` 때문에 `/etc/profile.d/bash_completion.sh` 도 completion 을 불러오지 않는다(`PS1` 이 있을 때만 불러온다). 그래서 되돌린 뒤 `BASH_COMPLETION_VERSINFO` 가 없고 그 파일을 읽을 수 있으면 직접 source 한다. 로그인 셸과 같아진다.
 - 스크립트 내용은 #80 에 넣었고, 동작 검증(@Tag wsl)은 #55 에서 했다. ADR-0003 에 개정 절을 남겼다.
+- Fedora 계열은 이 흉내와 별개로 `/etc/profile.d/*.sh` 를 두 번 읽을 수 있다. 우리 셸은 로그인 셸이 아니므로, `/etc/profile` 이 한 번 읽은 뒤 `~/.bashrc` → `/etc/bashrc` 가 "로그인 셸이 아니면 profile.d 를 읽는다" 분기로 다시 읽는다. 대부분 두 번 돌아도 무해하다(미검증, 이 PC 에 Fedora 없음).
 
 ### 훅 공존 (스크립트는 #80, 검증은 #55 · #81)
 - bash
   - `PROMPT_COMMAND` 가 배열(bash 5.1+)이면 원소를 더하고, 문자열이면 앞에 붙인다.
   - 훅은 받은 `$?` 를 그대로 돌려준다. 뒤의 훅과 `PS1` 이 직전 명령의 상태를 본다.
-  - 이미 들어 있으면 두 번 넣지 않는다.
+  - 이미 들어 있으면 두 번 넣지 않는다(rcfile 을 다시 source 해도 하나).
+  - 사용자가 셸 안에서 `exec bash` 를 하면 새 bash 는 `--rcfile` 없이 뜬다. `PROMPT_COMMAND` 를 export 해 두지 않았다면 훅이 사라져 그 뒤로 cwd 추적이 끊긴다. export 해 두었으면 아래처럼 함수도 export 되므로 이어진다.
   - 사용자가 `PROMPT_COMMAND` 를 export 해 두면 중첩 bash 가 훅 이름만 물려받아 `__tanager_prompt: command not found` 가 뜬다. 그래서 export 돼 있으면 `__tanager_prompt` · `__tanager_osc7` 도 `export -f` 한다(자식 bash 도 OSC 7 을 낸다).
   - 퍼센트 인코딩 함수 첫 줄은 `local LC_ALL=C` 다. 없으면 한글이 코드 포인트(`%D55C`)로 나간다(M0 재현).
 - PowerShell 5.1
@@ -106,11 +112,17 @@ ADR-0003 은 셸 통합 스크립트가 프롬프트마다 OSC 7(bash) · OSC 9;
   | #55 최종 스크립트 | 1번 | `2 11` | 같음 |
 
   - `PS1` 이 unset 인 셸에서 source 해도 unset 이 유지된다. `bash -n` 통과, LF · BOM 없음 · `local LC_ALL=C` 유지.
-- wsl 통합 테스트(`WindowsWslShellIntegrationTest`, 실제 `wsl.exe` + `WindowsPlatformModule` 이 만든 기동 명령, 12개 모두 실행 · 통과):
+  - 리뷰 반영 판(`/etc/bash.bashrc` 조건 · 비어 있을 때만 복원)도 같은 표의 최종 행과 같다. `/etc/bash.bashrc` 가 없는 분기는 Ubuntu 에서 조건만 바꿔 돌려 오류 없이 도는 것만 봤다(그 경우 sudo 안내는 당연히 2번).
+- wsl 통합 테스트(`WindowsWslShellIntegrationTest`, 실제 `wsl.exe` + `WindowsPlatformModule` 이 만든 기동 명령, 14개 모두 실행 · 통과):
   - 첫 프롬프트 OSC 7 이 시작 경로다. 한글 · 공백 · `'` 시작 경로와 `cd` 한 경로를 그대로 알린다.
   - 한글 · 공백 · `'` 가 든 Windows 앱 데이터 경로에서도 rcfile 을 찾는다.
   - `~/.profile` 이 늘린 PATH 가 `bash -l` 과 같다. `~/.profile` → `~/.bashrc` 는 한 번만 돈다.
-  - sudo 안내 한 번, PS1 복원, bash-completion 이 로그인 셸과 같다.
+  - sudo 안내 한 번, PS1 · bash-completion 이 `bash -l -i` 와 같다. PS1 이 없는 비대화형 bash 에서 source 해도 PS1 이 생기지 않는다.
+  - rcfile 이 없는 경로면 `bash -i` 로 물러서 `~/.bashrc` 의 별칭이 정의되고 OSC 7 은 나오지 않는다.
   - 배열 · 문자열 · export 된 `PROMPT_COMMAND` 에서 사용자 훅과 우리 훅이 모두 돌고 `$?` 를 본다. rcfile 을 다시 읽어도 훅은 하나다.
 - pty4j(ConPTY, `WinConPtyProcess`)로 같은 argv · 환경을 직접 띄워(앱 데이터 폴더 `사용자 'x 공백`) 첫 프롬프트에 OSC 7 `file://<host>/tmp`, `cd ~` 뒤 홈 경로가 나오는 것을 봤다(수동 확인, 2026-11-27).
-- 미검증: automount 루트가 `/` 인 배포판(이 PC 에는 Ubuntu-24.04 하나뿐) — `/p` 변환을 쓰므로 맞을 것으로 보지만 확인하지 않았다. 앱 패키지(`Tanager.exe`)로 띄운 실제 창.
+- 미검증
+  - automount 루트가 `/` 인 배포판(이 PC 에는 Ubuntu-24.04 하나뿐) — `/p` 변환을 쓰므로 맞을 것으로 보지만 확인하지 않았다.
+  - Fedora 계열(`/etc/bashrc` · `BASHRCSOURCED`, profile.d 두 번 읽기) — 이 PC 에 없다.
+  - 기본 로그인 셸이 bash 가 아닌 사용자.
+  - 앱 패키지(`Tanager.exe`)로 띄운 실제 창.
