@@ -83,12 +83,13 @@ JediTerm 3.76 소스에서 확인한 사실:
 - 앱 종료 순서에 이력 저장을 넣는다. 셸 종료 대기(4초) 안에서 한다.
   1. 모든 창 `stream.close()`(기동 중이면 기동이 끝난 뒤 그 스트림)
   2. 창 `dispose()`(바로 사라진다)
-  3. 비데몬 플랫폼 스레드에서 앱 종료 훅(bootstrap 의 `Assembly.shutdown`, ADR-0012)
+  3. 비데몬 플랫폼 스레드(`tanager-exit`)가 앱 종료 훅(bootstrap 의 `Assembly.shutdown`, ADR-0012)을 **따로 데몬 스레드에서** 돌리고, 창을 닫은 때부터의 기한(4초) 중 남은 만큼만 join 한다(`ExitSequence`). 훅이 저장 I/O 에서 멈춰도 종료가 기한을 넘기지 않는다.
      - 상태 실행기를 닫고 남은 명령을 처리한다(최대 1초).
      - `HistorySaver.flush` 로 미저장 이력을 1초 예약을 기다리지 않고 바로 저장한다(최대 2초). 저장할 것이 없거나 읽기 전용이면 쓰지 않는다.
-     - 저장소를 닫아 `state.lock` 을 푼다.
-  4. 모든 `onExit` 를 **창을 닫은 때부터** 최대 4초까지 기다린다. 셸은 3 동안에도 끝나고 있으므로 pty 어댑터의 유예(3초)를 덮는 예산은 그대로다.
-  5. `System.exit(0)`
+     - flush 가 성공했으면 저장소를 닫아 `state.lock` 을 푼다. **flush 가 실패했으면(진행 중 저장이 시간을 넘김 · 저장 실패) 닫지 않는다.** `JsonStateRepository.close` 는 진행 중인 `save` 와 같은 monitor 를 기다려 종료를 붙잡을 수 있다. 프로세스가 끝나면 OS 가 잠금을 푼다.
+  4. 모든 `onExit` 를 같은 기한의 남은 시간만큼 기다린다. 셸은 3 동안에도 끝나고 있으므로 pty 어댑터의 유예(3초)를 덮는 예산은 그대로다.
+  5. `System.exit(0)` — `finally` 에서 부른다. 훅 · 대기 중 Error 가 나도 프로세스가 끝난다.
 - ui 는 `application.state` 를 쓸 수 없다(ArchUnit). 그래서 bootstrap 이 `SwingUi.showMainWindow(…, AppEvents, Runnable onShutdown)` 로 종료 훅을 넘긴다. 훅이 던져도 로그만 남기고 종료를 계속한다.
 - 상태 실행기를 셸보다 먼저 닫으므로, 그 뒤에 끝난 셸의 "세션 끝남" 명령은 거부된다(경고 로그 한 줄). 종료 중이라 화면에 반영할 곳이 없어 그대로 둔다.
+- 같은 까닭으로 종료 중 `HistorySaver` 의 알림 명령(`flush` 의 저장 실패를 상태줄에 알리는 `StoreNotice`)도 거부돼 경고 로그만 남는다. 창이 이미 사라져 보일 곳이 없다.
 - 저장소 알림(`StoreNotice` — 불러오기 복구 · 읽기 전용 · 저장 실패)은 `AppEvents.subscribeOnUi` 로 받아 상태줄 알림에 쌓는다. 같은 문장은 한 번만 쌓는다(`Notices`).

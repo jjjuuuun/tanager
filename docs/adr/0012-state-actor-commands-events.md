@@ -62,10 +62,10 @@ M3 에서 공유 상태(작업 경로 이력 `WorkHistory`, 살아 있는 세션
   - 그래서 액터 밖의 소비자(저장 · 트리 투영)는 항목 수가 언제나 한도 이하라고 가정하지 않는다.
 
 ## 결과
-- java-style 규칙 8("가변 상태는 adapter 와 StateActor 안에만")을 그대로 지킨다. StateActor 의 가변 필드는 상태 참조(volatile)와 구독 목록뿐이다.
+- java-style 규칙 8("가변 상태는 adapter 와 StateActor 안에만")을 지킨다. StateActor 의 가변 필드는 상태 참조(volatile)와 구독 목록뿐이다. 예외는 둘이다 — 스트림 구독 콜백 안의 스레드 한정 파서 상태(ADR-0015)와, 출력 포트 일정 조율용 가변 상태를 단일 monitor 로 지켜 application.service 에 두는 것(`HistorySaver`, ADR-0013 개정 절).
 - 상태 변경 규칙은 명령 함수 단위 테스트로, 직렬화 · 순서 · 예외 격리는 `StateActorTest` · `StateActorConcurrencyTest` 로 고정한다.
 - 명령 하나가 오래 걸리면 뒤의 모든 명령과 이벤트가 밀린다. 명령에 I/O 를 넣지 않는다(저장은 `HistoryChanged` 를 받은 쪽이 I/O 실행기에서 한다).
 - 구독자가 실행기 스레드에서 돈다. UI 콜백은 반드시 `AppEvents.subscribeOnUi` 로 받아 EDT 로 넘긴다.
 - 실행기가 직렬(한 번에 하나, 제출 순서)인지는 타입으로 강제할 수 없다. `Executor` 를 받기 때문이다. 운영은 `serialExecutor()`, 테스트는 `ManualExecutor` 나 단일 스레드 실행기만 넘긴다.
-- 종료 순서는 #79 에서 정한다: 실행기 `shutdown` → `awaitTermination` → 스냅샷 저장. 종료 뒤의 `submit` 은 거부 예외로 실패한 응답을 받는다.
+- 종료 순서 → ADR-0011 개정 절(#79): 실행기 `shutdown` → `awaitTermination` → 미저장 이력 저장(`HistorySaver.flush`) → 저장소 닫기. 종료 뒤의 `submit` 은 거부 예외로 실패한 응답을 받는다.
 - 조립(bootstrap 에서 `StateActor` · `SwingUiDispatcher` 를 만들어 넘기기)은 처음 쓰는 이슈(#77 CwdTracker · #79 이력 불러오기 · 저장)에서 한다.
