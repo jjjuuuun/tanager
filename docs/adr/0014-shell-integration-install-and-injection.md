@@ -126,3 +126,13 @@ ADR-0003 은 셸 통합 스크립트가 프롬프트마다 OSC 7(bash) · OSC 9;
   - Fedora 계열(`/etc/bashrc` · `BASHRCSOURCED`, profile.d 두 번 읽기) — 이 PC 에 없다.
   - 기본 로그인 셸이 bash 가 아닌 사용자.
   - 앱 패키지(`Tanager.exe`)로 띄운 실제 창.
+
+## #107 시작 경로의 명령 주입 막기 (2026-11-27)
+- 문제: WSL 시작 경로는 `wsl.exe … --cd <경로> -- …` 의 argv 원소로 넘긴다. pty4j 0.14 의 `WinPtyProcess.joinCmdArgs`(ConPTY 도 같은 함수)는 공백 · 탭이 있는 원소를 `"…"` 로 감싸기만 한다. 원소 안의 `"` 는 이스케이프하지 않고, 끝 `\` 는 하나만 겹친다. 그래서 `/tmp/x" -- touch /tmp/proof #` 같은 경로는 인자가 갈라지고, wsl.exe 가 `--` 뒤 원시 명령줄을 기본 셸의 `-c` 로 넘겨 `touch` 가 실행된다(#55 리뷰에서 재현). M3 부터는 셸이 알린 경로(OSC 7)가 다시 시작 · 트리에서 열기 · 복원의 시작 경로가 되므로, `"` 가 든 디렉터리에 들어가는 것만으로 명령이 실행될 수 있다.
+- 선택지: (a) CommandLineToArgvW 규칙으로 직접 이스케이프한 명령줄을 pty4j `RawCommandString` 으로 넘긴다. wsl.exe 가 `--` 뒤를 셸에 다시 넘기므로 셸 수준 따옴표 처리까지 겹쳐야 해 틀리기 쉽다. (b) **경로의 출처에서 위험한 문자를 거부한다.**
+- **(b) 를 골랐다.** 정상 작업 경로에 `"` · 제어 문자가 들어갈 일은 드물고, 거부해도 홈에서 띄우고 알리면 된다.
+  - 출처: `WorkspacePath.of` 가 빈 값 검사 다음, 정규화 전에 `"` 와 제어 문자(0x00–0x1F, 0x7F)를 `PathError.UnsafeCharacter(raw)` 로 거부한다. WSL 은 `\` 도 거부한다(Windows 는 구분자라 허용). 이력 · 복원 · OSC 7 · `config.json` 이 모두 이 타입을 거치므로 한 곳에서 막힌다.
+    - `config.json` 의 `startDir` 이 이런 경로면 기존 `StartNotice.StartDirInvalid` 로 홈에서 띄우고 알린다(새 알림을 만들지 않는다).
+    - `--cd` 는 셸을 거치지 않으므로 `'` · 공백 · 한글 · `$` · 백틱 · `;` · `&` · `|` · `#` 는 그대로 허용한다.
+  - 방어 겹: `WindowsLaunchCommands.of` 가 최종 argv 에서 감싸질 원소(공백 · 탭이 있는 원소)에 `"` 가 있거나 `\` 로 끝나면 `IllegalStateException` 을 던진다. 템플릿이나 앞으로 생길 인자가 같은 결함을 다시 만들지 않게 한다. 감싸지 않는 원소(`"$TANAGER_RC"` 등)는 그대로 둔다.
+- PowerShell · cmd 는 해당되지 않는다. 작업 디렉터리를 argv 가 아니라 `CreateProcess` 의 `lpCurrentDirectory` 로 넘긴다(`LaunchCommand.workingDirectory`, ADR-0007).
