@@ -9,6 +9,7 @@ import dev.tanager.domain.history.ShellEnvironment;
 import dev.tanager.domain.history.WorkspacePath;
 import dev.tanager.domain.shared.PaneId;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -270,5 +271,18 @@ class LiveSessionsTest {
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new LiveSession(P1, 0, runningAtHome(), Optional.empty()))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("두 창이 같은 번호를 가지면 생성자가 거부한다")
+    void rejectsDuplicateNumbers() {
+        // given
+        LiveSession first = new LiveSession(P1, 1, runningAtHome(), Optional.empty());
+        LiveSession second = new LiveSession(P2, 1, runningAtHome(), Optional.empty());
+
+        // when / then
+        assertThatThrownBy(() -> new LiveSessions(Map.of(P1, first, P2, second), 2))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("1");
     }
 }

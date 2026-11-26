@@ -5,16 +5,18 @@ import dev.tanager.domain.history.WorkspacePath;
 import dev.tanager.domain.shared.PaneId;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * 창별 세션과 표시 번호("#1 bash")의 불변 모음. 번호는 처음 띄운 순서대로 주고, 창을 지워도 다시 쓰지 않는다 — 트리에서 본 "#2"
  * 가 다른 세션을 가리키지 않게. 바꾸는 메서드는 새 값을 돌려준다.
  *
- * <p>불변식: 키는 그 값의 창 · 모든 번호 &lt; nextNumber · nextNumber ≥ 1.
+ * <p>불변식: 키는 그 값의 창 · 번호는 창마다 다르다 · 모든 번호 &lt; nextNumber · nextNumber ≥ 1.
  */
 public record LiveSessions(Map<PaneId, LiveSession> byPane, int nextNumber) {
 
@@ -25,6 +27,7 @@ public record LiveSessions(Map<PaneId, LiveSession> byPane, int nextNumber) {
         if (nextNumber < 1) {
             throw new IllegalArgumentException("다음 번호는 1 이상이어야 한다: " + nextNumber);
         }
+        Set<Integer> numbers = new HashSet<>();
         for (Map.Entry<PaneId, LiveSession> entry : byPane.entrySet()) {
             if (!entry.getKey().equals(entry.getValue().pane())) {
                 throw new IllegalArgumentException("키와 세션의 창이 다르다: " + entry.getKey());
@@ -32,6 +35,10 @@ public record LiveSessions(Map<PaneId, LiveSession> byPane, int nextNumber) {
             if (entry.getValue().number() >= nextNumber) {
                 throw new IllegalArgumentException(
                         "번호가 다음 번호보다 작아야 한다: " + entry.getValue().number());
+            }
+            if (!numbers.add(entry.getValue().number())) {
+                throw new IllegalArgumentException(
+                        "두 창이 같은 번호를 가진다: " + entry.getValue().number());
             }
         }
     }
