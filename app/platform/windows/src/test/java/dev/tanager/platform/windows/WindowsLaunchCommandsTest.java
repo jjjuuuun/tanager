@@ -222,6 +222,24 @@ class WindowsLaunchCommandsTest {
     }
 
     @Test
+    @DisplayName("탭만 있어도 감싸지는 원소이므로 큰따옴표 · 끝 역슬래시를 거부한다")
+    void tabOnlyElementIsTreatedAsWrapped() {
+        assertThatThrownBy(() -> of(powershellWithArgs("-Command", "a\t\"b"), new WorkingDir.Home()))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> of(powershellWithArgs("-File", "C:\\a\tb\\"), new WorkingDir.Home()))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("큰따옴표로 시작하는 공백 원소는 pty4j 가 감싸지 않고 그대로 넘기므로 거부한다")
+    void rejectsElementStartingWithQuoteAndContainingSpace() {
+        assertThatThrownBy(() -> of(powershellWithArgs("-Command", "\"a b"), new WorkingDir.Home()))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> of(wslWithArgs("-d", "\"Ub x\""), new WorkingDir.Home()))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     @DisplayName("공백이 없는 원소의 끝 역슬래시는 감싸지지 않으므로 거부하지 않는다")
     void allowsTrailingBackslashWithoutSpace() {
         LaunchCommand command = of(wslWithArgs("-d", "Ub\\"), new WorkingDir.Home());
@@ -257,10 +275,16 @@ class WindowsLaunchCommandsTest {
     }
 
     @Test
-    @DisplayName("WSL 위험 경로는 WorkspacePath 단계에서 막혀 launchCommand 에 도달하지 못한다")
-    void unsafeWslPathNeverReachesLaunchCommand() {
-        assertThat(WorkspacePath.of(new ShellEnvironment.Wsl("Ubuntu"), "/tmp/x\" -- touch /tmp/proof #")
-                        .isOk())
-                .isFalse();
+    @DisplayName("위험 WSL 경로는 WorkspacePath 가 거부하고, 우회해 같은 문자열로 --cd argv 를 만들어도 방어 검사가 거부한다")
+    void unsafeWslPathIsRejectedAtSourceAndAtArgv() {
+        // given
+        ShellEnvironment ubuntu = new ShellEnvironment.Wsl("Ubuntu");
+        String unsafe = "/tmp/x\" -- touch /tmp/proof #";
+        List<String> bypassed = List.of(WSL_EXE, "-d", "Ubuntu", "--cd", unsafe, "--", "bash", "-i");
+
+        // when / then
+        assertThat(WorkspacePath.of(ubuntu, unsafe).isOk()).isFalse();
+        assertThatThrownBy(() -> WindowsLaunchCommands.requireSafeArgv(ubuntu, bypassed))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 }
