@@ -154,7 +154,7 @@ public final class SessionStarter implements StartSessionUseCase {
     private Result<StartedSession, StartFailure> launchTracked(
             PaneId pane, TerminalSession starting, TerminalSize size, List<StartNotice> notices) {
         Integration installed = integration.await();
-        return launch(starting, size, notices).map(launched -> tracked(pane, launched, installed, notices));
+        return launch(starting, size, installed, notices).map(launched -> tracked(pane, launched, installed, notices));
     }
 
     /** 돌려주기 전에 (1) 창의 세션 등록 (2) cwd 추적 (3) 종료 등록 순으로 붙인다. */
@@ -211,15 +211,16 @@ public final class SessionStarter implements StartSessionUseCase {
     private record Launched(TerminalSession running, TerminalStream stream) {}
 
     // 경로가 있는지 미리 보지 않는다 — 기동이 WorkingDirectoryNotFound 를 주면 홈에서 한 번 더 띄운다(ADR-0009).
+    // 홈으로 다시 띄울 때도 같은 설치 결과를 쓴다 — 설치는 프로세스에서 한 번이다(ADR-0014)
     private Result<Launched, StartFailure> launch(
-            TerminalSession starting, TerminalSize size, List<StartNotice> notices) {
+            TerminalSession starting, TerminalSize size, Integration installed, List<StartNotice> notices) {
         WorkingDir dir = startingDir(starting);
         Result<TerminalStream, LaunchError> launched =
-                launcher.launch(platform.launchCommand(starting.profile(), dir), size);
+                launcher.launch(platform.launchCommand(starting.profile(), dir, installed), size);
         if (dir instanceof WorkingDir.At at && isMissingDirectory(launched)) {
             notices.add(new StartNotice.StartDirMissing(at.path()));
             TerminalSession atHome = expect(TerminalSession.start(starting.profile(), new WorkingDir.Home()));
-            return launch(atHome, size, notices);
+            return launch(atHome, size, installed, notices);
         }
         return launched.fold(
                 stream -> Result.ok(new Launched(expect(starting.launched(stream.pid())), stream)),

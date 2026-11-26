@@ -17,12 +17,14 @@ import java.util.concurrent.atomic.AtomicInteger;
  *
  * <p>{@code launchCommand} 규칙: argv 는 {@code [실행 파일, 템플릿 인자...]} 이고 Home 이면 {@code "--home"} 이 붙는다. 작업
  * 디렉터리는 {@code At} 이면 그 경로 문자열, Home 이면 비어 있다. 경로 환경이 프로파일과 다르면 포트 계약대로
- * {@link IllegalArgumentException}. 스레드 안전.
+ * {@link IllegalArgumentException}. 셸 통합 결과({@code integration})는 argv 에 영향을 주지 않고 {@link
+ * #launchIntegrations} 로만 기록한다. 스레드 안전.
  */
 public final class FakePlatformModule implements PlatformModule {
     private final List<ShellProfile> shells;
     private final AtomicInteger shellsCalls = new AtomicInteger();
     private final List<LaunchRequest> launchRequests = new ArrayList<>();
+    private final List<Integration> launchIntegrations = new ArrayList<>();
     private Path appData = Path.of("fake-appdata", "Tanager");
     private ShellIntegration defaultIntegration = defaultIntegrationFor(appData);
     private Optional<ShellIntegration> customIntegration = Optional.empty();
@@ -101,13 +103,15 @@ public final class FakePlatformModule implements PlatformModule {
     }
 
     @Override
-    public synchronized LaunchCommand launchCommand(ShellProfile profile, WorkingDir dir) {
+    public synchronized LaunchCommand launchCommand(ShellProfile profile, WorkingDir dir, Integration integration) {
+        Objects.requireNonNull(integration, "integration");
         // 포트 계약과 같게: 다른 환경의 경로는 거부한다(기록하지 않는다)
         if (dir instanceof WorkingDir.At at && !at.path().env().equals(profile.env())) {
             throw new IllegalArgumentException(
                     "프로파일 환경 " + profile.env() + " 과 경로 환경 " + at.path().env() + " 이 다르다");
         }
         launchRequests.add(new LaunchRequest(profile, dir));
+        launchIntegrations.add(integration);
         List<String> argv = new ArrayList<>();
         argv.add(profile.launch().executable());
         argv.addAll(profile.launch().args());
@@ -133,6 +137,11 @@ public final class FakePlatformModule implements PlatformModule {
     /** {@code launchCommand} 호출 기록(불변 사본). */
     public synchronized List<LaunchRequest> launchRequests() {
         return List.copyOf(launchRequests);
+    }
+
+    /** {@code launchCommand} 호출마다 받은 셸 통합 결과(호출 순서, 불변 사본). 인자는 {@link LaunchRequest} 와 같은 인덱스다. */
+    public synchronized List<Integration> launchIntegrations() {
+        return List.copyOf(launchIntegrations);
     }
 
     @Override

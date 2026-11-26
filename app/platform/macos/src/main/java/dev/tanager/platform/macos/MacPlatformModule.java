@@ -31,7 +31,7 @@ public final class MacPlatformModule implements PlatformModule {
 
     /** M7 에서 채운다. 그때까지는 지원하지 않는다. */
     @Override
-    public LaunchCommand launchCommand(ShellProfile profile, WorkingDir dir) {
+    public LaunchCommand launchCommand(ShellProfile profile, WorkingDir dir, Integration integration) {
         throw new UnsupportedOperationException("macOS 셸 기동은 M7 에서 지원한다");
     }
 

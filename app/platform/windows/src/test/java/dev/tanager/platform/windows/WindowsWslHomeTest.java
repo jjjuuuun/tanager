@@ -2,6 +2,7 @@ package dev.tanager.platform.windows;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import dev.tanager.application.port.out.Integration;
 import dev.tanager.domain.history.ShellEnvironment;
 import dev.tanager.domain.session.IntegrationMode;
 import dev.tanager.domain.session.LaunchTemplate;
@@ -42,7 +43,12 @@ class WindowsWslHomeTest {
                 new ShellEnvironment.Wsl(distro),
                 new LaunchTemplate(WSL_EXE, List.of("-d", distro)),
                 IntegrationMode.OSC7);
-        List<String> argv = new ArrayList<>(WindowsLaunchCommands.of(profile, new WorkingDir.Home(), "C:\\Users\\me")
+        List<String> argv = new ArrayList<>(WindowsLaunchCommands.of(
+                        profile,
+                        new WorkingDir.Home(),
+                        "C:\\Users\\me",
+                        Optional.empty(),
+                        new Integration.Unavailable("통합 없음"))
                 .argv());
         // 끝의 "bash -i" 를 한 줄 검사 스크립트로 바꿔 같은 --cd 인자를 그대로 쓴다
         argv.removeLast();

@@ -2,6 +2,7 @@ package dev.tanager.platform.windows;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import dev.tanager.application.port.out.Integration;
 import dev.tanager.domain.history.ShellEnvironment;
 import dev.tanager.domain.history.WorkspacePath;
 import dev.tanager.domain.session.IntegrationMode;
@@ -18,6 +19,7 @@ import org.junit.jupiter.api.Test;
 
 class WindowsPlatformModuleLaunchTest {
 
+    private static final Integration NO_INTEGRATION = new Integration.Unavailable("통합 없음");
     private static final ShellProfile POWERSHELL = new ShellProfile(
             new ProfileId("powershell"),
             "Windows PowerShell",
@@ -38,7 +40,8 @@ class WindowsPlatformModuleLaunchTest {
     @DisplayName("홈에서 띄우면 생성 때 읽은 USERPROFILE 이 작업 디렉터리가 된다")
     void homeResolvesToUserProfileFromEnv() {
         // when
-        var command = module(Optional.of("D:\\사용자\\나")).launchCommand(POWERSHELL, new WorkingDir.Home());
+        var command =
+                module(Optional.of("D:\\사용자\\나")).launchCommand(POWERSHELL, new WorkingDir.Home(), NO_INTEGRATION);
 
         // then
         assertThat(command.workingDirectory()).contains("D:\\사용자\\나");
@@ -48,7 +51,8 @@ class WindowsPlatformModuleLaunchTest {
     @DisplayName("USERPROFILE 이 슬래시 경로면 역슬래시로 정규화하고, 절대 경로가 아니면 대체 홈을 쓴다 — 기동이 예외로 끝나지 않는다")
     void userProfileIsNormalizedOrFallsBack() {
         // given / when
-        var slashed = module(Optional.of("C:/Users/me")).launchCommand(POWERSHELL, new WorkingDir.Home());
+        var slashed =
+                module(Optional.of("C:/Users/me")).launchCommand(POWERSHELL, new WorkingDir.Home(), NO_INTEGRATION);
         WindowsShellCatalog catalog = new WindowsShellCatalog(
                 new FakeCommandRunner(new CommandOutcome.NotStarted("x")),
                 key -> Optional.empty(),
@@ -57,7 +61,7 @@ class WindowsPlatformModuleLaunchTest {
                         catalog,
                         key -> key.equals("USERPROFILE") ? Optional.of("relative") : Optional.empty(),
                         "E:\\대체\\홈")
-                .launchCommand(POWERSHELL, new WorkingDir.Home());
+                .launchCommand(POWERSHELL, new WorkingDir.Home(), NO_INTEGRATION);
         // then
         assertThat(slashed.workingDirectory()).contains("C:\\Users\\me");
         assertThat(relative.workingDirectory()).contains("E:\\대체\\홈");
@@ -76,7 +80,7 @@ class WindowsPlatformModuleLaunchTest {
                     catalog, key -> key.equals("USERPROFILE") ? userProfile : Optional.empty(), "E:\\대체\\홈");
 
             // when
-            var command = module.launchCommand(POWERSHELL, new WorkingDir.Home());
+            var command = module.launchCommand(POWERSHELL, new WorkingDir.Home(), NO_INTEGRATION);
 
             // then
             assertThat(command.workingDirectory())
@@ -101,10 +105,11 @@ class WindowsPlatformModuleLaunchTest {
                 .orElseThrow());
 
         // when
-        var command = module(Optional.of("C:\\Users\\me")).launchCommand(cmd, cwd);
+        var command = module(Optional.of("C:\\Users\\me")).launchCommand(cmd, cwd, NO_INTEGRATION);
 
         // then
-        assertThat(command).isEqualTo(WindowsLaunchCommands.of(cmd, cwd, "C:\\Users\\me"));
+        assertThat(command)
+                .isEqualTo(WindowsLaunchCommands.of(cmd, cwd, "C:\\Users\\me", Optional.empty(), NO_INTEGRATION));
         assertThat(command.argv()).containsExactly("C:\\Windows\\System32\\cmd.exe");
     }
 }

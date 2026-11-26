@@ -2,6 +2,7 @@ package dev.tanager.application.platform;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import dev.tanager.application.port.out.Integration;
 import dev.tanager.application.port.out.LaunchCommand;
 import dev.tanager.application.port.out.PlatformDirs;
 import dev.tanager.application.port.out.PlatformModule;
@@ -30,7 +31,7 @@ class PlatformSelectionTest {
         }
 
         @Override
-        public LaunchCommand launchCommand(ShellProfile profile, WorkingDir dir) {
+        public LaunchCommand launchCommand(ShellProfile profile, WorkingDir dir, Integration integration) {
             throw new UnsupportedOperationException("선택 테스트에서는 쓰지 않는다");
         }
 
