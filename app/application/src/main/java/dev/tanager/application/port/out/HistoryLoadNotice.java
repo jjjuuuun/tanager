@@ -1,6 +1,7 @@
 package dev.tanager.application.port.out;
 
 import java.util.Objects;
+import java.util.Optional;
 
 /** 이력을 읽으면서 생겨 사용자에게 알릴 일. 읽기는 계속된다. */
 public sealed interface HistoryLoadNotice {
@@ -8,11 +9,20 @@ public sealed interface HistoryLoadNotice {
     /** 사용자에게 보여 줄 한 줄 설명. */
     String describe();
 
-    /** 저장 파일이 손상돼 백업(.bak)에서 읽었다. */
-    record RecoveredFromBackup() implements HistoryLoadNotice {
+    /**
+     * 저장 파일이 손상돼 백업(.bak)에서 읽었다. 손상 원본은 {@code corruptMovedTo}(파일 이름)로 옮겼다 — 다른 인스턴스가 쓰고 있어 옮기지
+     * 않았으면 empty.
+     */
+    record RecoveredFromBackup(Optional<String> corruptMovedTo) implements HistoryLoadNotice {
+        public RecoveredFromBackup {
+            Objects.requireNonNull(corruptMovedTo, "corruptMovedTo");
+        }
+
         @Override
         public String describe() {
-            return "이력 파일이 손상돼 백업에서 복구했다";
+            return corruptMovedTo
+                    .map(name -> "이력 파일이 손상돼 백업에서 복구했다(손상 파일은 " + name + " 로 옮겼다)")
+                    .orElse("이력 파일이 손상돼 백업에서 복구했다");
         }
     }
 
@@ -47,6 +57,18 @@ public sealed interface HistoryLoadNotice {
         @Override
         public String describe() {
             return "새 버전(schemaVersion " + version + ")이 쓴 이력 파일이라 읽기만 한다";
+        }
+    }
+
+    /** 잠금 파일(state.lock)을 열 수 없어 다른 인스턴스와 겹치지 않는지 알 수 없다. 읽기만 한다. */
+    record LockUnavailable(String detail) implements HistoryLoadNotice {
+        public LockUnavailable {
+            Objects.requireNonNull(detail, "detail");
+        }
+
+        @Override
+        public String describe() {
+            return "이력 잠금 파일을 열 수 없어 읽기만 한다: " + detail;
         }
     }
 
