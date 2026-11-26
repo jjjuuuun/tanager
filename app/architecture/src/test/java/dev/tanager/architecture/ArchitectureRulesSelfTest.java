@@ -63,6 +63,15 @@ class ArchitectureRulesSelfTest {
     }
 
     @Test
+    void domainCycleRuleCatchesPackagesDependingOnEachOther() {
+        EvaluationResult result =
+                ArchitectureRules.domainPackagesAreFreeOfCycles(FIXTURE).evaluate(fixtures);
+
+        assertThat(result.hasViolation()).isTrue();
+        assertThat(result.getFailureReport().getDetails()).anyMatch(d -> d.contains("CycleA") || d.contains("CycleB"));
+    }
+
+    @Test
     void platformIndependenceCatchesCrossPlatformUse() {
         EvaluationResult result =
                 ArchitectureRules.platformsAreIndependent(FIXTURE).evaluate(fixtures);

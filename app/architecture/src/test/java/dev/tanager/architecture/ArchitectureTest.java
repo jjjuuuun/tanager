@@ -72,6 +72,12 @@ class ArchitectureTest {
     }
 
     @Test
+    @DisplayName("domain 패키지(컨텍스트) 사이에 순환 의존이 없다")
+    void domainPackagesAreFreeOfCycles() {
+        ArchitectureRules.domainPackagesAreFreeOfCycles(BASE).check(production);
+    }
+
+    @Test
     void platformsAreIndependent() {
         ArchitectureRules.platformsAreIndependent(BASE).allowEmptyShould(true).check(production);
     }
