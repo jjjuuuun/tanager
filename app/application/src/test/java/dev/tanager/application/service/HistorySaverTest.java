@@ -79,7 +79,10 @@ class HistorySaverTest {
             settle();
         }
 
-        /** VisitRecorder 처럼 A 방문을 기록하고, 불러오는 중이면 불러온 이력 위에 다시 적용되게 쌓아 둔다. */
+        /**
+         * VisitRecorder 처럼 A 방문을 기록하고, 불러오는 중이면 불러온 이력 위에 다시 적용되게 쌓아 둔다. VisitRecorder 의 대기열 규칙과 같게
+         * 유지한다.
+         */
         void visitQueued() {
             actor.submit(current -> {
                 WorkHistory next = current.history().recordVisit(A, Instant.EPOCH);
