@@ -3,18 +3,22 @@ package dev.tanager.application.port.in;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import dev.tanager.application.port.out.ConfigError;
 import dev.tanager.application.port.out.LaunchError;
 import dev.tanager.application.port.out.ScriptedTerminalStream;
 import dev.tanager.domain.history.ShellEnvironment;
 import dev.tanager.domain.session.IntegrationMode;
 import dev.tanager.domain.session.LaunchTemplate;
 import dev.tanager.domain.session.ProfileId;
+import dev.tanager.domain.session.ProfileResolution;
 import dev.tanager.domain.session.SessionState;
 import dev.tanager.domain.session.ShellKind;
 import dev.tanager.domain.session.ShellProfile;
 import dev.tanager.domain.session.TerminalSession;
 import dev.tanager.domain.session.WorkingDir;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -64,5 +68,61 @@ class StartResultTest {
         assertThatThrownBy(() -> new StartFailure.LaunchFailed(
                         inState(new SessionState.Running(1, new WorkingDir.Home())), error, List.of()))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    private static final dev.tanager.application.port.out.TerminalSize SIZE =
+            new dev.tanager.application.port.out.TerminalSize(100, 30);
+
+    @Test
+    @DisplayName("기억을 켠 요청은 프로파일이 있어야 한다")
+    void rememberRequiresProfile() {
+        assertThatThrownBy(() -> new StartRequest(Optional.empty(), true, Optional.empty(), SIZE))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("remembered 요청은 프로파일 · 경로 없이 기억도 켜지 않는다")
+    void rememberedRequestIsEmpty() {
+        // when
+        StartRequest request = StartRequest.remembered(SIZE);
+        // then
+        assertThat(request.profile()).isEmpty();
+        assertThat(request.rememberAsDefault()).isFalse();
+        assertThat(request.dir()).isEmpty();
+        assertThat(request.size()).isEqualTo(SIZE);
+    }
+
+    @Test
+    @DisplayName("chosen 요청은 고른 프로파일과 기억 여부를 담고 경로는 비운다")
+    void chosenRequestCarriesProfileAndRemember() {
+        // when
+        StartRequest request = StartRequest.chosen(new ProfileId("cmd"), true, SIZE);
+        // then
+        assertThat(request.profile()).contains(new ProfileId("cmd"));
+        assertThat(request.rememberAsDefault()).isTrue();
+        assertThat(request.dir()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("ChoiceRequired 는 알림 목록을 방어 복사한다")
+    void choiceRequiredCopiesNotices() {
+        // given
+        List<StartNotice> mutable = new ArrayList<>(List.of(new StartNotice.StartDirInvalid("foo")));
+        StartFailure.ChoiceRequired failure =
+                new StartFailure.ChoiceRequired(new ProfileResolution.Choose(List.of(CMD), Optional.empty()), mutable);
+        // when
+        mutable.clear();
+        // then
+        assertThat(failure.notices()).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("DefaultNotSaved 는 셸 id 와 저장 실패 이유를 문장으로 설명한다")
+    void defaultNotSavedDescribes() {
+        // when
+        String text = new StartNotice.DefaultNotSaved(new ProfileId("cmd"), new ConfigError.WouldOverwrite("손상된 파일이다"))
+                .describe();
+        // then
+        assertThat(text).isEqualTo("기본 셸 cmd 을 저장하지 못했다 — 설정 파일을 덮어쓰지 않았다: 손상된 파일이다");
     }
 }

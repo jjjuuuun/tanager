@@ -36,19 +36,6 @@ public sealed interface StartNotice {
         }
     }
 
-    /** {@code requested} 프로파일이 없어 {@code used} 로 띄웠다. 설정은 바꾸지 않았다. */
-    record ProfileReplaced(ProfileId requested, ProfileId used) implements StartNotice {
-        public ProfileReplaced {
-            Objects.requireNonNull(requested, "requested");
-            Objects.requireNonNull(used, "used");
-        }
-
-        @Override
-        public String describe() {
-            return "프로파일 " + requested.value() + " 이 없어 " + used.value() + " 로 시작했다";
-        }
-    }
-
     /** 설정의 시작 경로 {@code raw} 가 그 환경의 절대 경로가 아니라 홈에서 띄웠다. */
     record StartDirInvalid(String raw) implements StartNotice {
         public StartDirInvalid {
@@ -70,6 +57,19 @@ public sealed interface StartNotice {
         @Override
         public String describe() {
             return "시작 경로 " + requested.path() + " 가 없어 홈에서 시작했다";
+        }
+    }
+
+    /** 셸은 띄웠지만 기본 셸로 저장하지 못했다. 설정 파일은 그대로다. */
+    record DefaultNotSaved(ProfileId profile, ConfigError error) implements StartNotice {
+        public DefaultNotSaved {
+            Objects.requireNonNull(profile, "profile");
+            Objects.requireNonNull(error, "error");
+        }
+
+        @Override
+        public String describe() {
+            return "기본 셸 " + profile.value() + " 을 저장하지 못했다 — " + error.describe();
         }
     }
 }

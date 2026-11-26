@@ -1,6 +1,7 @@
 package dev.tanager.application.service;
 
 import dev.tanager.application.port.in.ListProfilesUseCase;
+import dev.tanager.application.port.in.RememberDefaultProfileUseCase;
 import dev.tanager.application.port.in.StartFailure;
 import dev.tanager.application.port.in.StartNotice;
 import dev.tanager.application.port.in.StartRequest;
@@ -15,8 +16,7 @@ import dev.tanager.application.port.out.PtyLauncher;
 import dev.tanager.application.port.out.TerminalSize;
 import dev.tanager.application.port.out.TerminalStream;
 import dev.tanager.domain.history.WorkspacePath;
-import dev.tanager.domain.session.DefaultProfile;
-import dev.tanager.domain.session.ProfileChoice;
+import dev.tanager.domain.session.ProfileResolution;
 import dev.tanager.domain.session.SessionState;
 import dev.tanager.domain.session.ShellProfile;
 import dev.tanager.domain.session.TerminalSession;
@@ -29,8 +29,8 @@ import java.util.Optional;
 import java.util.concurrent.CompletionStage;
 
 /**
- * 프로파일 · 시작 경로를 정해 셸을 띄운다(FR-SES-02 · 04, ADR-0009). 설정은 읽기만 하고 저장하지 않는다 — 기본값으로 대체한
- * 결정은 이번 실행에서만 쓰고 알림으로 알린다.
+ * 프로파일 · 시작 경로를 정해 셸을 띄운다(FR-SES-02 · 04, ADR-0009). 띄울 셸을 정할 수 없으면 다른 셸로 바꾸지 않고 사용자에게 고르게
+ * 한다. 설정은 사용자가 기억을 켜고 고른 셸이 떴을 때만 저장한다.
  */
 public final class SessionStarter implements StartSessionUseCase {
     private static final String HOME_SHORTHAND = "~";
@@ -39,13 +39,19 @@ public final class SessionStarter implements StartSessionUseCase {
     private final ConfigRepository config;
     private final PlatformModule platform;
     private final PtyLauncher launcher;
+    private final RememberDefaultProfileUseCase memory;
 
     public SessionStarter(
-            ListProfilesUseCase profiles, ConfigRepository config, PlatformModule platform, PtyLauncher launcher) {
+            ListProfilesUseCase profiles,
+            ConfigRepository config,
+            PlatformModule platform,
+            PtyLauncher launcher,
+            RememberDefaultProfileUseCase memory) {
         this.profiles = Objects.requireNonNull(profiles, "profiles");
         this.config = Objects.requireNonNull(config, "config");
         this.platform = Objects.requireNonNull(platform, "platform");
         this.launcher = Objects.requireNonNull(launcher, "launcher");
+        this.memory = Objects.requireNonNull(memory, "memory");
     }
 
     @Override
@@ -56,15 +62,33 @@ public final class SessionStarter implements StartSessionUseCase {
             return Result.err(new StartFailure.NoShellAvailable());
         }
         AppConfig settings = loadConfig(notices);
-        ProfileChoice choice = DefaultProfile.choose(request.profile().or(settings::defaultProfile), available)
-                .orElseThrow(() -> new IllegalStateException("비지 않은 목록에서 프로파일을 고르지 못했다"));
-        ShellProfile profile = choice.profile();
-        choice.replaced().ifPresent(replaced -> notices.add(new StartNotice.ProfileReplaced(replaced, profile.id())));
+        return switch (ProfileResolution.resolve(request.profile().or(settings::defaultProfile), available)) {
+            case ProfileResolution.Found found -> startFound(found.profile(), request, settings, notices);
+            case ProfileResolution.Choose choose -> Result.err(new StartFailure.ChoiceRequired(choose, notices));
+            case ProfileResolution.NoShell _ -> Result.err(new StartFailure.NoShellAvailable());
+        };
+    }
+
+    private Result<StartedSession, StartFailure> startFound(
+            ShellProfile profile, StartRequest request, AppConfig settings, List<StartNotice> notices) {
         WorkingDir dir = request.dir().orElseGet(() -> configuredDir(profile, settings, notices));
-        return TerminalSession.start(profile, dir)
+        Result<StartedSession, StartFailure> started = TerminalSession.start(profile, dir)
                 .fold(
                         starting -> launch(starting, request.size(), notices),
                         error -> Result.err(new StartFailure.Rejected(error)));
+        if (request.rememberAsDefault() && started.isOk()) {
+            return started.map(session -> remembered(session, profile));
+        }
+        return started;
+    }
+
+    // 띄우지 못한 셸은 기억하지 않는다. 저장이 실패해도 셸은 그대로 쓰고 마지막 알림으로 알린다.
+    private StartedSession remembered(StartedSession session, ShellProfile profile) {
+        return memory.remember(profile.id()).fold(saved -> session, error -> {
+            List<StartNotice> notices = new ArrayList<>(session.notices());
+            notices.add(new StartNotice.DefaultNotSaved(profile.id(), error));
+            return new StartedSession(session.session(), session.stream(), session.exited(), notices);
+        });
     }
 
     @Override

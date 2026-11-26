@@ -20,9 +20,10 @@ import java.util.Optional;
  */
 record PaneView(String header, String status, Optional<String> overlay, Optional<String> hint) {
     static final String STARTING = "셸을 시작하는 중…";
-    static final String EXITED_HINT = "Enter 다시 시작 · Esc 닫기";
-    static final String RETRY_HINT = "Enter 다시 시도 · Esc 닫기";
+    static final String EXITED_HINT = "Enter 다시 시작 · Tab 다른 셸 · Esc 닫기";
+    static final String RETRY_HINT = "Enter 다시 시도 · Tab 다른 셸 · Esc 닫기";
     static final String CLOSE_HINT = "Esc 닫기";
+    static final String PICKING_HEADER = "셸 선택";
 
     PaneView {
         Objects.requireNonNull(header, "header");
@@ -33,9 +34,8 @@ record PaneView(String header, String status, Optional<String> overlay, Optional
 
     static PaneView of(PaneState state) {
         return switch (state) {
-            case PaneState.Launching(Attempt.Fresh _) -> plain(STARTING, "");
-            case PaneState.Launching(Attempt.Restart(TerminalSession exited)) ->
-                plain(STARTING, status(exited.profile()));
+            case PaneState.Launching(Attempt attempt) ->
+                plain(STARTING, attempt.knownProfile().map(PaneView::status).orElse(""));
             case PaneState.Running(var started) ->
                 plain(header(started.session()), status(started.session().profile()));
             case PaneState.Exited(TerminalSession session) ->
@@ -47,10 +47,14 @@ record PaneView(String header, String status, Optional<String> overlay, Optional
             case PaneState.Failed failed -> failed(failed);
             case PaneState.Errored(String detail, Attempt retry) ->
                 new PaneView(
-                        profileOf(retry).map(PaneView::shell).orElse("Tanager"),
-                        profileOf(retry).map(PaneView::status).orElse(""),
+                        retry.knownProfile().map(PaneView::shell).orElse("Tanager"),
+                        retry.knownProfile().map(PaneView::status).orElse(""),
                         Optional.of("셸을 시작하다 예상하지 못한 오류가 났다 — " + detail),
                         Optional.of(RETRY_HINT));
+            case PaneState.Picking picking -> {
+                PickerView picker = PickerView.of(picking);
+                yield new PaneView(PICKING_HEADER, "", picker.missing(), Optional.of(picker.hint()));
+            }
             case PaneState.Closed _ -> plain("", "");
         };
     }
@@ -80,6 +84,7 @@ record PaneView(String header, String status, Optional<String> overlay, Optional
                         "",
                         Optional.of("세션을 시작할 수 없다 — " + describe(rejected.error())),
                         Optional.of(CLOSE_HINT));
+            case StartFailure.ChoiceRequired _ -> throw new IllegalStateException("선택이 필요하다는 결과는 Failed 에 담기지 않는다");
         };
     }
 
@@ -89,21 +94,13 @@ record PaneView(String header, String status, Optional<String> overlay, Optional
 
     private static Optional<ShellProfile> profileOf(PaneState state) {
         return switch (state) {
-            case PaneState.Launching(Attempt.Restart(TerminalSession exited)) -> Optional.of(exited.profile());
-            case PaneState.Launching(Attempt.Fresh _) -> Optional.empty();
+            case PaneState.Launching(Attempt attempt) -> attempt.knownProfile();
             case PaneState.Running(var started) -> Optional.of(started.session().profile());
             case PaneState.Exited(TerminalSession session) -> Optional.of(session.profile());
             case PaneState.Failed(StartFailure.LaunchFailed launch, Attempt _) ->
                 Optional.of(launch.failed().profile());
-            case PaneState.Errored(String _, Attempt retry) -> profileOf(retry);
-            case PaneState.Failed _, PaneState.Closed _ -> Optional.empty();
-        };
-    }
-
-    private static Optional<ShellProfile> profileOf(Attempt attempt) {
-        return switch (attempt) {
-            case Attempt.Fresh _ -> Optional.empty();
-            case Attempt.Restart(TerminalSession exited) -> Optional.of(exited.profile());
+            case PaneState.Errored(String _, Attempt retry) -> retry.knownProfile();
+            case PaneState.Failed _, PaneState.Picking _, PaneState.Closed _ -> Optional.empty();
         };
     }
 
@@ -129,7 +126,7 @@ record PaneView(String header, String status, Optional<String> overlay, Optional
     }
 
     /** "WSL · Ubuntu · bash" / "Windows · Windows PowerShell". */
-    private static String status(ShellProfile profile) {
+    static String status(ShellProfile profile) {
         String env = switch (profile.env()) {
             case ShellEnvironment.Wsl(String distro) -> "WSL · " + distro;
             case ShellEnvironment.Windows _ -> "Windows";

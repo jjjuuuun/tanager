@@ -21,7 +21,6 @@ import dev.tanager.ui.terminal.TerminalSettings;
 import dev.tanager.ui.theme.JediTermColors;
 import java.time.Duration;
 import java.util.List;
-import java.util.Optional;
 import java.util.ServiceLoader;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -59,7 +58,7 @@ class PowerShellSmokeTest {
                 .findFirst()
                 .orElseThrow();
         StartedSession started = assembly.sessions()
-                .start(new StartRequest(Optional.of(powershell.id()), Optional.empty(), new TerminalSize(120, 30)))
+                .start(StartRequest.chosen(powershell.id(), false, new TerminalSize(120, 30)))
                 .value()
                 .orElseThrow();
         StreamTtyConnector connector = StreamTtyConnector.attach(started.stream(), "powershell");

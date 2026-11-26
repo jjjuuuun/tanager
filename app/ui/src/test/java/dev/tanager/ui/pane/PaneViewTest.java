@@ -49,7 +49,7 @@ class PaneViewTest {
 
         // then
         assertThat(view.overlay()).hasValueSatisfying(text -> assertThat(text).contains("터졌다"));
-        assertThat(view.hint()).contains("Enter 다시 시도 · Esc 닫기");
+        assertThat(view.hint()).contains("Enter 다시 시도 · Tab 다른 셸 · Esc 닫기");
     }
 
     @Test
@@ -82,5 +82,85 @@ class PaneViewTest {
         assertThat(PaneView.tabTitle(new PaneState.Exited(PaneFixtures.exited(0))))
                 .isEqualTo("cmd");
         assertThat(PaneView.tabTitle(new PaneState.Closed())).isEqualTo("Tanager");
+    }
+
+    private static final java.util.List<dev.tanager.domain.session.ShellProfile> SHELLS =
+            List.of(PaneFixtures.CMD, PaneFixtures.UBUNTU);
+
+    private static PaneState.Picking picking(Optional<dev.tanager.domain.session.ProfileId> missing, PickerExit exit) {
+        return new PaneState.Picking(
+                ShellPicker.atStartup(new dev.tanager.domain.session.ProfileResolution.Choose(SHELLS, missing)), exit);
+    }
+
+    @Test
+    @DisplayName("종료 띠의 안내는 Tab 다른 셸을 포함한다")
+    void exitedHint() {
+        assertThat(PaneView.of(new PaneState.Exited(PaneFixtures.exited(0))).hint())
+                .contains("Enter 다시 시작 · Tab 다른 셸 · Esc 닫기");
+    }
+
+    @Test
+    @DisplayName("다시 시도할 수 있는 실패 화면의 안내는 Tab 다른 셸을 포함하고 셸 없음 · 거부는 Esc 만이다")
+    void retryAndCloseHints() {
+        // then
+        assertThat(PaneView.of(new PaneState.Failed(PaneFixtures.launchFailed(), FRESH))
+                        .hint())
+                .contains("Enter 다시 시도 · Tab 다른 셸 · Esc 닫기");
+        assertThat(PaneView.of(new PaneState.Errored("x", FRESH)).hint()).contains("Enter 다시 시도 · Tab 다른 셸 · Esc 닫기");
+        assertThat(PaneView.of(new PaneState.Failed(new StartFailure.NoShellAvailable(), FRESH))
+                        .hint())
+                .contains("Esc 닫기");
+    }
+
+    @Test
+    @DisplayName("시작 때의 선택 화면은 머리줄 셸 선택 · 빈 상태줄이고 안내는 Esc 닫기로 끝난다")
+    void startupPickerView() {
+        // when
+        PaneView view = PaneView.of(picking(Optional.empty(), new PickerExit.CloseWindow()));
+
+        // then
+        assertThat(view.header()).isEqualTo("셸 선택");
+        assertThat(view.status()).isEmpty();
+        assertThat(view.overlay()).isEmpty();
+        assertThat(view.hint()).hasValueSatisfying(text -> assertThat(text).endsWith("Esc 닫기"));
+        assertThat(PaneView.tabTitle(picking(Optional.empty(), new PickerExit.CloseWindow())))
+                .isEqualTo("Tanager");
+    }
+
+    @Test
+    @DisplayName("기억한 셸이 사라졌으면 안내 문장을 덮는 글자로 보인다")
+    void missingShellOverlay() {
+        // when
+        PaneView view = PaneView.of(picking(
+                Optional.of(new dev.tanager.domain.session.ProfileId("wsl:Gone")), new PickerExit.CloseWindow()));
+
+        // then
+        assertThat(view.overlay()).contains("기억한 셸 wsl:Gone 를 찾을 수 없다 — 열 셸을 골라 주세요");
+    }
+
+    @Test
+    @DisplayName("Tab 으로 연 선택 화면의 안내는 Esc 돌아가기로 끝난다")
+    void returnablePickerHint() {
+        // when
+        PaneView view = PaneView.of(
+                picking(Optional.empty(), new PickerExit.ReturnTo(new PaneState.Exited(PaneFixtures.exited(0)))));
+
+        // then
+        assertThat(view.hint()).hasValueSatisfying(text -> assertThat(text).endsWith("Esc 돌아가기"));
+    }
+
+    @Test
+    @DisplayName("고른 셸을 띄우는 중이면 머리줄은 시작 중, 상태줄과 탭 제목은 그 셸이다")
+    void launchingChosenShell() {
+        // given
+        PaneState launching = new PaneState.Launching(new Attempt.Chosen(PaneFixtures.UBUNTU, true));
+
+        // when
+        PaneView view = PaneView.of(launching);
+
+        // then
+        assertThat(view.header()).isEqualTo(PaneView.STARTING);
+        assertThat(view.status()).isEqualTo("WSL · Ubuntu · bash");
+        assertThat(PaneView.tabTitle(launching)).isEqualTo("Ubuntu");
     }
 }

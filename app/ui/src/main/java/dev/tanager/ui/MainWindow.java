@@ -1,6 +1,7 @@
 package dev.tanager.ui;
 
 import com.formdev.flatlaf.FlatClientProperties;
+import dev.tanager.application.port.in.ListProfilesUseCase;
 import dev.tanager.application.port.in.StartSessionUseCase;
 import dev.tanager.ui.pane.PaneController;
 import dev.tanager.ui.terminal.TerminalSettings;
@@ -10,7 +11,6 @@ import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ExecutionException;
@@ -48,13 +48,17 @@ final class MainWindow implements PaneController.Host {
     private final JLabel tab = new JLabel("Tanager");
     private final JLabel statusLeft = new JLabel();
     private final JLabel statusRight = new JLabel();
-    private final List<String> notices = new ArrayList<>();
+    private Notices notices = new Notices(List.of());
     private final PaneController pane;
     private boolean closing;
 
-    MainWindow(StartSessionUseCase sessions, TerminalSettings settings, Executor background) {
+    MainWindow(
+            StartSessionUseCase sessions,
+            ListProfilesUseCase profiles,
+            TerminalSettings settings,
+            Executor background) {
         Executor ui = SwingUtilities::invokeLater;
-        this.pane = new PaneController(ui, background, sessions, settings, this);
+        this.pane = new PaneController(ui, background, sessions, profiles, settings, this);
         frame.setJMenuBar(titleBarTabs());
         frame.getContentPane().add(paneArea(), BorderLayout.CENTER);
         frame.getContentPane().add(statusBar(), BorderLayout.SOUTH);
@@ -90,13 +94,11 @@ final class MainWindow implements PaneController.Host {
         for (String message : messages) {
             LOG.log(System.Logger.Level.WARNING, "알림: {0}", message);
         }
-        notices.addAll(messages);
-        if (notices.isEmpty()) {
-            return;
-        }
-        String more = notices.size() > 1 ? " (+" + (notices.size() - 1) + ")" : "";
-        statusRight.setText(notices.getFirst() + more);
-        statusRight.setToolTipText(tooltip(notices));
+        notices = notices.add(messages);
+        notices.summary().ifPresent(summary -> {
+            statusRight.setText(summary);
+            statusRight.setToolTipText(tooltip(notices.messages()));
+        });
     }
 
     /** M2 는 창이 하나라 마지막 창이 닫히면 확인 없이 앱을 끝낸다(ADR-0011). */
