@@ -72,7 +72,7 @@ public final class OscScanner {
         Objects.requireNonNull(chunk, "chunk");
         int from = 0;
         if (mode == Mode.GROUND) {
-            from = indexOfEsc(chunk);
+            from = indexOf(chunk, 0, chunk.length, ESC);
             if (from < 0) {
                 return IDLE;
             }
@@ -98,9 +98,7 @@ public final class OscScanner {
                 }
                 case BODY -> {
                     if (b == BEL) {
-                        if (!skip) {
-                            parse(buf, len).ifPresent(reports::add);
-                        }
+                        completed(buf, len, skip).ifPresent(reports::add);
                         m = Mode.GROUND;
                     } else if (b == ESC) {
                         m = Mode.BODY_ESCAPE;
@@ -120,9 +118,7 @@ public final class OscScanner {
                 }
                 case BODY_ESCAPE -> {
                     if (b == ST_END) {
-                        if (!skip) {
-                            parse(buf, len).ifPresent(reports::add);
-                        }
+                        completed(buf, len, skip).ifPresent(reports::add);
                         m = Mode.GROUND;
                     } else {
                         // ESC 뒤 다른 글자는 OSC 를 취소하고, 그 ESC 는 새 이스케이프 시퀀스의 시작이다(xterm 과 같다).
@@ -144,15 +140,6 @@ public final class OscScanner {
         return new Scan(next, reports);
     }
 
-    private static int indexOfEsc(byte[] chunk) {
-        for (int i = 0; i < chunk.length; i++) {
-            if (chunk[i] == ESC) {
-                return i;
-            }
-        }
-        return -1;
-    }
-
     private static Mode afterEscape(byte b) {
         if (b == OSC_START) {
             return Mode.BODY;
@@ -166,8 +153,12 @@ public final class OscScanner {
     }
 
     private static boolean sharesPrefix(byte[] buf, int len, String ascii) {
-        int n = Math.min(len, ascii.length());
-        return startsWith(buf, 0, n, ascii.substring(0, n));
+        return matches(buf, 0, ascii, Math.min(len, ascii.length()));
+    }
+
+    // 종료자를 만난 본문. 버리는 중이었으면 보고가 없다.
+    private static Optional<CwdReport> completed(byte[] buf, int len, boolean skip) {
+        return skip ? Optional.empty() : parse(buf, len);
     }
 
     private static Optional<CwdReport> parse(byte[] buf, int len) {
@@ -248,10 +239,12 @@ public final class OscScanner {
     }
 
     private static boolean startsWith(byte[] buf, int from, int to, String ascii) {
-        if (to - from < ascii.length()) {
-            return false;
-        }
-        for (int k = 0; k < ascii.length(); k++) {
+        return to - from >= ascii.length() && matches(buf, from, ascii, ascii.length());
+    }
+
+    // buf[from..from+n) 가 ascii 의 앞 n 글자와 같은가.
+    private static boolean matches(byte[] buf, int from, String ascii, int n) {
+        for (int k = 0; k < n; k++) {
             if (buf[from + k] != ascii.charAt(k)) {
                 return false;
             }
