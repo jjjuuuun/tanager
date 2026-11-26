@@ -2,12 +2,10 @@ package dev.tanager.domain.history;
 
 import dev.tanager.domain.shared.Result;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.regex.Pattern;
 
 /**
  * 환경별로 정규화된 절대 작업 경로. 경로를 {@code String} 으로 비교하지 않도록 비교 규칙을 이 타입이 가진다 —
@@ -175,10 +173,21 @@ public final class WorkspacePath {
         return Optional.of(WSL_SEP + String.join(WSL_SEP, resolveDots(split(raw, WSL_SEP))));
     }
 
+    // 빈 세그먼트는 버린다. 정규식을 쓰지 않는다 — parent() 사슬마다 불려 트리 투영의 대부분을 차지한다.
     private static List<String> split(String s, String separator) {
-        return Arrays.stream(s.split(Pattern.quote(separator)))
-                .filter(seg -> !seg.isEmpty())
-                .toList();
+        List<String> out = new ArrayList<>();
+        int start = 0;
+        while (start < s.length()) {
+            int end = s.indexOf(separator, start);
+            if (end < 0) {
+                end = s.length();
+            }
+            if (end > start) {
+                out.add(s.substring(start, end));
+            }
+            start = end + separator.length();
+        }
+        return List.copyOf(out);
     }
 
     private static boolean isDot(String seg) {
