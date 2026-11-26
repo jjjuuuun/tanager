@@ -72,6 +72,18 @@ class ArchitectureRulesSelfTest {
     }
 
     @Test
+    void domainCycleRuleAllowsOneWayDependency() {
+        // when
+        List<String> details = ArchitectureRules.domainPackagesAreFreeOfCycles(FIXTURE)
+                .evaluate(fixtures)
+                .getFailureReport()
+                .getDetails();
+
+        // then
+        assertThat(details).as("한 방향 의존(onewaya → onewayb)은 순환이 아니다").noneMatch(d -> d.contains("OneWay"));
+    }
+
+    @Test
     void platformIndependenceCatchesCrossPlatformUse() {
         EvaluationResult result =
                 ArchitectureRules.platformsAreIndependent(FIXTURE).evaluate(fixtures);
