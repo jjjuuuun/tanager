@@ -16,6 +16,7 @@ import dev.tanager.application.port.out.ScriptedTerminalStream;
 import dev.tanager.application.port.out.TerminalSize;
 import dev.tanager.application.state.AppState;
 import dev.tanager.application.state.FakeClock;
+import dev.tanager.application.state.ManualExecutor;
 import dev.tanager.application.state.StateActor;
 import dev.tanager.domain.history.HistoryPolicy;
 import dev.tanager.domain.history.SessionLeaf;
@@ -57,16 +58,26 @@ class SessionStarterTrackingTest {
     private final InMemoryConfigRepository config = new InMemoryConfigRepository();
     private final StateActor state =
             new StateActor(AppState.initial(WorkHistory.empty(HistoryPolicy.DEFAULT)), Runnable::run);
-    private final List<AppEvent> events = new ArrayList<>();
-    private final SessionStarter starter = new SessionStarter(
-            new ProfileCatalog(platform),
-            config,
-            platform,
-            new IntegrationStatus(platform),
-            launcher,
-            new DefaultProfileMemory(config),
-            state,
-            new VisitRecorder(state, FakeClock.atEpoch()));
+    private final List<AppEvent> events = eventsOf(state);
+    private final SessionStarter starter = starterOn(state);
+
+    private static List<AppEvent> eventsOf(StateActor actor) {
+        List<AppEvent> received = new ArrayList<>();
+        actor.subscribe(received::add);
+        return received;
+    }
+
+    private SessionStarter starterOn(StateActor actor) {
+        return new SessionStarter(
+                new ProfileCatalog(platform),
+                config,
+                platform,
+                new IntegrationStatus(platform),
+                launcher,
+                new DefaultProfileMemory(config),
+                actor,
+                new VisitRecorder(actor, FakeClock.atEpoch()));
+    }
 
     private static ShellProfile profile(String id, ShellKind kind, ShellEnvironment env, IntegrationMode mode) {
         return new ShellProfile(new ProfileId(id), id, kind, env, new LaunchTemplate(id + ".exe", List.of()), mode);
@@ -89,7 +100,6 @@ class SessionStarterTrackingTest {
     }
 
     private StartedSession start(PaneId pane, ShellProfile profile, Optional<WorkingDir> dir) {
-        state.subscribe(events::add);
         return starter.start(new StartRequest(pane, Optional.of(profile.id()), false, dir, SIZE))
                 .value()
                 .orElseThrow();
@@ -307,11 +317,38 @@ class SessionStarterTrackingTest {
     }
 
     @Test
+    @DisplayName("재시작한 새 세션 등록이 먼저 큐에 들어간 뒤 옛 셸의 종료가 오면 옛 종료는 버려 새 세션은 Running 이다")
+    void lateExitOfOldShellAfterRestartIsIgnored() {
+        // given: 상태 명령을 손으로 돌리는 액터 — 큐에 들어간 순서를 테스트가 정한다
+        ManualExecutor queue = new ManualExecutor();
+        StateActor manual = new StateActor(AppState.initial(WorkHistory.empty(HistoryPolicy.DEFAULT)), queue);
+        SessionStarter manualStarter = starterOn(manual);
+        StartedSession first = manualStarter
+                .start(new StartRequest(P1, Optional.of(BASH.id()), false, Optional.empty(), SIZE))
+                .value()
+                .orElseThrow();
+        first.stream().start();
+        queue.runAll();
+        TerminalSession exited = first.session().exited(0).value().orElseThrow();
+
+        // when: (1) 새 세션 등록 (2) 옛 셸의 종료 순으로 큐에 들어간다
+        manualStarter.restart(P1, exited, SIZE).value().orElseThrow();
+        streamOf(0).exit(0);
+        queue.runAll();
+
+        // then
+        SessionLeaf leaf = manual.snapshot().sessions().leaves().getFirst();
+        assertThat(manual.snapshot().sessions().leaves()).hasSize(1);
+        assertThat(leaf.pane()).isEqualTo(P1);
+        assertThat(leaf.status()).isEqualTo(new SessionStatus.Running());
+        assertThat(leaf.number()).isEqualTo(1);
+    }
+
+    @Test
     @DisplayName("기동에 실패하면 세션을 등록하지 않는다")
     void failedLaunchRegistersNothing() {
         // given
         launcher.willFail(new LaunchError.StartFailed("x"));
-        state.subscribe(events::add);
 
         // when
         var result = starter.start(new StartRequest(P1, Optional.of(BASH.id()), false, Optional.empty(), SIZE));
