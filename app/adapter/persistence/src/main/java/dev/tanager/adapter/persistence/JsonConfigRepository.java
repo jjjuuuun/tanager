@@ -12,7 +12,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -22,8 +21,6 @@ import java.util.Optional;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.TokenStreamLocation;
 import tools.jackson.core.json.JsonReadFeature;
-import tools.jackson.core.util.DefaultIndenter;
-import tools.jackson.core.util.DefaultPrettyPrinter;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectWriter;
 import tools.jackson.databind.json.JsonMapper;
@@ -35,7 +32,6 @@ import tools.jackson.databind.node.ObjectNode;
  * 해석할 수 없는 schemaVersion 의 파일은 덮어쓰지 않으며, 임시 파일에 쓴 뒤 원자적으로 바꾼다).
  */
 public final class JsonConfigRepository implements ConfigRepository {
-    private static final System.Logger LOG = System.getLogger(JsonConfigRepository.class.getName());
     private static final int SCHEMA_VERSION = 1;
 
     private static final String KEY_SCHEMA_VERSION = "schemaVersion";
@@ -47,9 +43,7 @@ public final class JsonConfigRepository implements ConfigRepository {
     private static final JsonMapper MAPPER = JsonMapper.builder()
             .enable(JsonReadFeature.ALLOW_JAVA_COMMENTS, JsonReadFeature.ALLOW_TRAILING_COMMA)
             .build();
-    // 줄바꿈을 OS 와 상관없이 LF 로 고정해 WSL 과 Windows 가 같은 파일을 만들게 한다
-    private static final ObjectWriter WRITER =
-            MAPPER.writer().with(new DefaultPrettyPrinter().withObjectIndenter(new DefaultIndenter("  ", "\n")));
+    private static final ObjectWriter WRITER = JsonFiles.prettyWriter(MAPPER);
 
     private final Path file;
 
@@ -267,26 +261,11 @@ public final class JsonConfigRepository implements ConfigRepository {
     }
 
     private Result<Path, ConfigError> write(ObjectNode root) {
-        Path tmp = file.resolveSibling(file.getFileName() + ".tmp");
         try {
-            Path parent = file.toAbsolutePath().getParent();
-            if (parent != null) {
-                Files.createDirectories(parent);
-            }
-            Files.write(tmp, WRITER.writeValueAsBytes(root));
-            Files.move(tmp, file, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            JsonFiles.writeAtomically(file, WRITER.writeValueAsBytes(root));
             return Result.ok(file);
         } catch (IOException | JacksonException e) {
-            deleteQuietly(tmp);
             return Result.err(new ConfigError.WriteFailed(file + ": " + e));
-        }
-    }
-
-    private static void deleteQuietly(Path tmp) {
-        try {
-            Files.deleteIfExists(tmp);
-        } catch (IOException e) {
-            LOG.log(System.Logger.Level.WARNING, "임시 설정 파일을 지우지 못했다: {0}", tmp);
         }
     }
 }

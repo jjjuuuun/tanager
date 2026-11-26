@@ -19,7 +19,6 @@ import java.nio.channels.OverlappingFileLockException;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.time.Instant;
 import java.time.InstantSource;
@@ -33,8 +32,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import tools.jackson.core.JacksonException;
-import tools.jackson.core.util.DefaultIndenter;
-import tools.jackson.core.util.DefaultPrettyPrinter;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectWriter;
 import tools.jackson.databind.json.JsonMapper;
@@ -61,9 +58,7 @@ public final class JsonStateRepository implements HistoryRepository, AutoCloseab
             DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'").withZone(ZoneOffset.UTC);
 
     private static final JsonMapper MAPPER = JsonMapper.builder().build();
-    // 줄바꿈을 OS 와 상관없이 LF 로 고정해 WSL 과 Windows 가 같은 파일을 만들게 한다
-    private static final ObjectWriter WRITER =
-            MAPPER.writer().with(new DefaultPrettyPrinter().withObjectIndenter(new DefaultIndenter("  ", "\n")));
+    private static final ObjectWriter WRITER = JsonFiles.prettyWriter(MAPPER);
 
     // 저장 순서: 환경 → 경로. 파일 내용이 Map 순회 순서와 무관하게 결정적이다.
     private static final Comparator<VisitedDirectory> FILE_ORDER = Comparator.comparing(
@@ -128,14 +123,14 @@ public final class JsonStateRepository implements HistoryRepository, AutoCloseab
                 root = recovered.value().orElseThrow();
             }
         }
-        Parsed parsed = root.map(JsonStateRepository::parse).orElseGet(Parsed::empty);
-        if (parsed.skipped() > 0) {
-            notices.add(new HistoryLoadNotice.EntriesSkipped(parsed.skipped()));
+        Contents contents = root.map(JsonStateRepository::parse).orElseGet(Contents::empty);
+        if (contents.skipped() > 0) {
+            notices.add(new HistoryLoadNotice.EntriesSkipped(contents.skipped()));
         }
         Optional<String> readOnly = Optional.empty();
-        if (parsed.version() > SCHEMA_VERSION) {
-            notices.add(new HistoryLoadNotice.NewerSchema(parsed.version()));
-            readOnly = Optional.of("새 버전(schemaVersion " + parsed.version() + ")이 쓴 파일이다");
+        if (contents.version() > SCHEMA_VERSION) {
+            notices.add(new HistoryLoadNotice.NewerSchema(contents.version()));
+            readOnly = Optional.of("새 버전(schemaVersion " + contents.version() + ")이 쓴 파일이다");
         }
         if (!locked) {
             notices.add(new HistoryLoadNotice.LockedByOtherInstance());
@@ -144,7 +139,7 @@ public final class JsonStateRepository implements HistoryRepository, AutoCloseab
         mode = readOnly.<Mode>map(Mode.ReadOnly::new).orElseGet(Mode.Writable::new);
         otherKeys = root.map(JsonStateRepository::withoutHistory).orElseGet(MAPPER::createObjectNode);
         StoreAccess access = readOnly.isPresent() ? StoreAccess.READ_ONLY : StoreAccess.WRITABLE;
-        return Result.ok(new LoadedHistory(WorkHistory.restore(parsed.entries(), policy), access, notices));
+        return Result.ok(new LoadedHistory(WorkHistory.restore(contents.entries(), policy), access, notices));
     }
 
     @Override
@@ -161,7 +156,7 @@ public final class JsonStateRepository implements HistoryRepository, AutoCloseab
         }
         takeBackupOnce();
         try {
-            writeAtomically(file, WRITER.writeValueAsBytes(document(history)));
+            JsonFiles.writeAtomically(file, WRITER.writeValueAsBytes(document(history)));
             return Result.ok(history);
         } catch (IOException | JacksonException e) {
             return Result.err(new HistoryStoreError.Io(file + ": " + e));
@@ -300,19 +295,19 @@ public final class JsonStateRepository implements HistoryRepository, AutoCloseab
         return Result.ok(Optional.empty());
     }
 
-    private record Parsed(List<VisitedDirectory> entries, int skipped, int version) {
-        static Parsed empty() {
-            return new Parsed(List.of(), 0, SCHEMA_VERSION);
+    private record Contents(List<VisitedDirectory> entries, int skipped, int version) {
+        static Contents empty() {
+            return new Contents(List.of(), 0, SCHEMA_VERSION);
         }
     }
 
-    private static Parsed parse(ObjectNode root) {
+    private static Contents parse(ObjectNode root) {
         JsonNode versionNode = root.get(KEY_SCHEMA_VERSION);
         int version = versionNode == null ? SCHEMA_VERSION : versionNode.intValue();
         JsonNode history = root.get(KEY_HISTORY);
         JsonNode entries = history == null ? null : history.get(KEY_ENTRIES);
         if (entries == null) {
-            return new Parsed(List.of(), 0, version);
+            return new Contents(List.of(), 0, version);
         }
         List<VisitedDirectory> out = new ArrayList<>();
         int skipped = 0;
@@ -324,7 +319,7 @@ public final class JsonStateRepository implements HistoryRepository, AutoCloseab
                 skipped++;
             }
         }
-        return new Parsed(out, skipped, version);
+        return new Contents(out, skipped, version);
     }
 
     // sources 는 읽지 않는다(지금은 shell 만 쓴다). 항목 안의 모르는 필드는 보존하지 않는다(ADR-0013).
@@ -424,7 +419,7 @@ public final class JsonStateRepository implements HistoryRepository, AutoCloseab
         }
         backupTaken = true;
         try {
-            writeAtomically(backup, Files.readAllBytes(file));
+            JsonFiles.writeAtomically(backup, Files.readAllBytes(file));
         } catch (NoSuchFileException e) {
             // 처음 저장이라 남길 것이 없다
         } catch (IOException e) {
@@ -470,28 +465,5 @@ public final class JsonStateRepository implements HistoryRepository, AutoCloseab
             case ShellEnvironment.Windows _ -> KIND_WINDOWS;
             case ShellEnvironment.Wsl wsl -> KIND_WSL + ":" + wsl.distro();
         };
-    }
-
-    private static void writeAtomically(Path target, byte[] bytes) throws IOException {
-        Path tmp = target.resolveSibling(target.getFileName() + ".tmp");
-        try {
-            Path parent = target.toAbsolutePath().getParent();
-            if (parent != null) {
-                Files.createDirectories(parent);
-            }
-            Files.write(tmp, bytes);
-            Files.move(tmp, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-        } catch (IOException e) {
-            deleteQuietly(tmp);
-            throw e;
-        }
-    }
-
-    private static void deleteQuietly(Path tmp) {
-        try {
-            Files.deleteIfExists(tmp);
-        } catch (IOException e) {
-            LOG.log(System.Logger.Level.WARNING, "임시 이력 파일을 지우지 못했다: {0}", tmp);
-        }
     }
 }
