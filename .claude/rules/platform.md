@@ -8,6 +8,7 @@ paths:
 - `wsl.exe --list --quiet` 출력은 **UTF-16LE** 이다. 환경변수 `WSL_UTF8=1` 을 주거나 UTF-16LE 로 디코딩한다.
 - WSL 세션 기동: `wsl.exe -d <배포판> --cd <경로|~> -- [ -r "$TANAGER_RC" ] && exec bash --rcfile "$TANAGER_RC" -i || exec bash -i` (ADR-0014). `--` 뒤는 기본 로그인 셸(`/etc/passwd`)의 `-c` 가 해석하고, 원소마다 공백이 없어야 한다. rcfile 을 못 읽으면 M2 와 같은 `bash -i` 로 물러선다. 통합 스크립트는 Windows 쪽 `%APPDATA%\Tanager\shell-integration\` 에 풀고, 환경 `TANAGER_RC=<그 폴더>\tanager.bash`(Windows 경로) + `WSLENV=<기존>:TANAGER_RC/p` 로 넘긴다 — `/mnt/<드라이브>/` 를 직접 계산하지 않는다(automount 루트가 바뀐 배포판에서 틀림).
   - `"$TANAGER_RC"` 는 argv 원소에 큰따옴표까지 넣는다. `--` 뒤는 리눅스 기본 셸이 펼치므로 따옴표가 없으면 공백 경로(사용자 이름)에서 갈린다.
+  - Windows 명령줄 인자에 사용자 경로를 넣을 때는 `"` · 끝 `\` · 제어 문자를 거부한다(#107). pty4j `joinCmdArgs` 는 공백 원소를 감싸기만 하고 이스케이프하지 않는다 — `WorkspacePath` 가 출처에서, `WindowsLaunchCommands` 가 argv 에서 한 번 더 막는다(ADR-0014).
   - 기존 `WSLENV` 는 지우지 않고 보존한다(빈 항목 · 기존 `TANAGER_RC` 항목만 정리).
   - `--rcfile` 은 `-l` 과 못 쓰므로 `tanager.bash` 가 로그인 셸 순서를 흉내 낸다. `/etc/bash.bashrc` 가 있는 배포판에서만 `/etc/profile` 을 읽는 동안 `PS1` 을 비워 이중 실행을 막고(Fedora 계열 `/etc/bashrc` 는 건드리지 않음), 그 때문에 빠진 bash-completion 은 다시 불러온다.
 - WSL 리소스 수집은 **실행 중인 WSL 세션이 있을 때만** `wsl.exe -d <배포판> -- sh -c 'cat /proc/meminfo; df -kP /'` 로, 5초 이상 간격. 세션이 없을 때 `wsl.exe` 를 부르면 VM 이 깨어난다.
