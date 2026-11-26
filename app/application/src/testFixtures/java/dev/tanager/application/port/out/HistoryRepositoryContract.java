@@ -95,4 +95,19 @@ public abstract class HistoryRepositoryContract {
         assertThat(repository.load().value().orElseThrow().history())
                 .isEqualTo(WorkHistory.empty(HistoryPolicy.DEFAULT));
     }
+
+    @Test
+    @DisplayName("불러오기 전의 저장은 ReadOnly 이고 저장하지 않는다")
+    public void saveBeforeLoadIsReadOnly() {
+        // given
+        HistoryRepository repository = repository();
+
+        // when
+        Result<WorkHistory, HistoryStoreError> saved = repository.save(sample());
+
+        // then
+        assertThat(saved.error()).containsInstanceOf(HistoryStoreError.ReadOnly.class);
+        assertThat(repository.load().value().orElseThrow().history())
+                .isEqualTo(WorkHistory.empty(HistoryPolicy.DEFAULT));
+    }
 }

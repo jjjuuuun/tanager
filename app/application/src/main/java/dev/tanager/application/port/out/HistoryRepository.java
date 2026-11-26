@@ -12,6 +12,12 @@ public interface HistoryRepository {
      */
     Result<LoadedHistory, HistoryStoreError> load();
 
-    /** 원자적으로 쓴다. {@link #load} 가 읽기 전용으로 열었으면 쓰지 않고 {@link HistoryStoreError.ReadOnly}. 성공하면 받은 이력을 돌려준다. */
+    /**
+     * 원자적으로 쓴다. 성공하면 받은 이력을 돌려준다.
+     *
+     * <p>마지막 {@link #load} 가 성공해 {@link StoreAccess#WRITABLE} 로 열었을 때만 쓴다. 그 밖에는 — load 전, {@link
+     * StoreAccess#READ_ONLY} 로 열었을 때, 마지막 load 가 실패했을 때, 구현이 닫을 수 있다면 닫은 뒤 — 파일을 건드리지 않고 {@link
+     * HistoryStoreError.ReadOnly} 다. load 때 읽은 다른 키를 모르는 채 빈 이력으로 덮어쓰지 않으려는 것이다(ADR-0013).
+     */
     Result<WorkHistory, HistoryStoreError> save(WorkHistory history);
 }
