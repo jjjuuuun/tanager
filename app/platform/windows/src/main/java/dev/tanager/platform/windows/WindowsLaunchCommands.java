@@ -62,13 +62,28 @@ final class WindowsLaunchCommands {
                     "프로파일 환경 " + profile.env() + " 과 경로 환경 " + at.path().env() + " 이 다르다");
         }
         LaunchTemplate template = profile.launch();
-        return switch (profile.env()) {
+        LaunchCommand command = switch (profile.env()) {
             // 리눅스 경로는 Windows 작업 디렉터리로 줄 수 없다 — wsl.exe 의 --cd 로 넘긴다(ADR-0007)
             case ShellEnvironment.Wsl _ -> wsl(template, pathOr(dir, WSL_HOME), wslenv, integration);
             case ShellEnvironment.Windows _ ->
                 new LaunchCommand(
                         templateArgv(template), Optional.of(pathOr(dir, userProfile)), Map.of(), WINDOWS_NAMES);
         };
+        command.argv().forEach(WindowsLaunchCommands::requireSafeToWrap);
+        return command;
+    }
+
+    /**
+     * pty4j 의 {@code joinCmdArgs} 는 공백 · 탭이 있는 원소를 큰따옴표로 감싸기만 한다 — 안의 {@code "} 는 이스케이프하지 않고 끝
+     * {@code \} 는 하나만 겹친다. 그런 원소는 인자가 갈라져 wsl.exe {@code --} 뒤 셸 명령으로 주입될 수 있다(#107). 경로는
+     * {@code WorkspacePath} 가 이미 막지만 템플릿 · 앞으로 생길 인자까지 여기서 한 번 더 막는다. 감싸지 않는 원소는 그대로 둔다
+     * ({@code "$TANAGER_RC"}).
+     */
+    private static void requireSafeToWrap(String arg) {
+        boolean wrapped = arg.indexOf(' ') >= 0 || arg.indexOf('\t') >= 0;
+        if (wrapped && (arg.indexOf('"') >= 0 || arg.endsWith("\\"))) {
+            throw new IllegalStateException("따옴표로 감쌀 기동 인자에 \" 가 있거나 \\ 로 끝난다: " + arg);
+        }
     }
 
     private static LaunchCommand wsl(

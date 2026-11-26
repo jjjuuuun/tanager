@@ -179,4 +179,45 @@ class WindowsLaunchCommandsTest {
         assertThat(cmd.argv()).containsExactly(CMD_EXE);
         assertThat(cmd.environment()).isEqualTo(Map.of());
     }
+
+    // ---- 이슈 #107: pty4j 가 이스케이프하지 않는 따옴표 · 끝 역슬래시 방어 ----
+
+    private static ShellProfile wslWithArgs(String... args) {
+        return new ShellProfile(
+                new ProfileId("wsl:Ubuntu"),
+                "Ubuntu",
+                ShellKind.BASH,
+                new ShellEnvironment.Wsl("Ubuntu"),
+                new LaunchTemplate(WSL_EXE, List.of(args)),
+                IntegrationMode.OSC7);
+    }
+
+    @Test
+    @DisplayName("공백이 있어 따옴표로 감싸질 원소에 큰따옴표가 있으면 IllegalStateException 으로 거부한다")
+    void rejectsQuoteInWrappedElement() {
+        assertThatThrownBy(() -> of(wslWithArgs("-d", "Ub\"x y"), new WorkingDir.Home()))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    @DisplayName("공백이 있어 따옴표로 감싸질 원소가 역슬래시로 끝나면 IllegalStateException 으로 거부한다")
+    void rejectsTrailingBackslashInWrappedElement() {
+        assertThatThrownBy(() -> of(wslWithArgs("-d", "Ub x\\"), new WorkingDir.Home()))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    @DisplayName("공백이 없는 원소의 끝 역슬래시는 감싸지지 않으므로 거부하지 않는다")
+    void allowsTrailingBackslashWithoutSpace() {
+        LaunchCommand command = of(wslWithArgs("-d", "Ub\\"), new WorkingDir.Home());
+        assertThat(command.argv()).contains("Ub\\");
+    }
+
+    @Test
+    @DisplayName("WSL 위험 경로는 WorkspacePath 단계에서 막혀 launchCommand 에 도달하지 못한다")
+    void unsafeWslPathNeverReachesLaunchCommand() {
+        assertThat(WorkspacePath.of(new ShellEnvironment.Wsl("Ubuntu"), "/tmp/x\" -- touch /tmp/proof #")
+                        .isOk())
+                .isFalse();
+    }
 }
