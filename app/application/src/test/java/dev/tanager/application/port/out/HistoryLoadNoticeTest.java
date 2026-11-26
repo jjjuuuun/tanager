@@ -21,7 +21,7 @@ class HistoryLoadNoticeTest {
         String text = notice.describe();
 
         // then
-        assertThat(text).isEqualTo("이력 파일이 손상돼 백업에서 복구했다(손상 파일은 state.json.corrupt-20261126T010203Z 로 옮겼다)");
+        assertThat(text).isEqualTo("이력 파일이 손상돼 백업에서 복구했다(손상 파일은 state.json.corrupt-20261126T010203Z 로 복사해 두었다)");
     }
 
     @Test

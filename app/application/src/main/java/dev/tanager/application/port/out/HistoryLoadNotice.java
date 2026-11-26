@@ -10,18 +10,18 @@ public sealed interface HistoryLoadNotice {
     String describe();
 
     /**
-     * 저장 파일이 손상돼 백업(.bak)에서 읽었다. 손상 원본은 {@code corruptMovedTo}(파일 이름)에 복사해 두고 저장 파일을 백업 내용으로 바꿨다
+     * 저장 파일이 손상돼 백업(.bak)에서 읽었다. 손상 원본은 {@code corruptKeptAs}(파일 이름)에 복사해 두고 저장 파일을 백업 내용으로 바꿨다
      * — 다른 인스턴스가 쓰고 있어 아무것도 바꾸지 않았으면 empty.
      */
-    record RecoveredFromBackup(Optional<String> corruptMovedTo) implements HistoryLoadNotice {
+    record RecoveredFromBackup(Optional<String> corruptKeptAs) implements HistoryLoadNotice {
         public RecoveredFromBackup {
-            Objects.requireNonNull(corruptMovedTo, "corruptMovedTo");
+            Objects.requireNonNull(corruptKeptAs, "corruptKeptAs");
         }
 
         @Override
         public String describe() {
-            return corruptMovedTo
-                    .map(name -> "이력 파일이 손상돼 백업에서 복구했다(손상 파일은 " + name + " 로 옮겼다)")
+            return corruptKeptAs
+                    .map(name -> "이력 파일이 손상돼 백업에서 복구했다(손상 파일은 " + name + " 로 복사해 두었다)")
                     .orElse("이력 파일이 손상돼 백업에서 복구했다");
         }
     }
