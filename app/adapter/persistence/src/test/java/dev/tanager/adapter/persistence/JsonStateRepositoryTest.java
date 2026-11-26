@@ -78,9 +78,17 @@ class JsonStateRepositoryTest {
         return repository;
     }
 
+    // 손상 원본을 옆에 두는 일(.bak 이 없으면 옮기기, 있으면 복사)을 모두 같은 동작으로 바꾼다 — 실패 주입용
     private JsonStateRepository repositoryMovingWith(JsonStateRepository.Mover mover) {
         JsonStateRepository repository =
-                new JsonStateRepository(file(), HistoryPolicy.DEFAULT, InstantSource.fixed(NOW), mover);
+                new JsonStateRepository(file(), HistoryPolicy.DEFAULT, InstantSource.fixed(NOW), mover, mover::move);
+        opened.add(repository);
+        return repository;
+    }
+
+    private JsonStateRepository repositoryCopyingWith(JsonStateRepository.Copier copier) {
+        JsonStateRepository repository = new JsonStateRepository(
+                file(), HistoryPolicy.DEFAULT, InstantSource.fixed(NOW), (from, to) -> Files.move(from, to), copier);
         opened.add(repository);
         return repository;
     }
@@ -466,15 +474,40 @@ class JsonStateRepositoryTest {
     }
 
     @Test
-    @DisplayName(".bak 으로 복구하면서 state.json 을 되돌려 쓰지 못하면 Io 오류이고 손상 원본을 제자리로 돌려 놓는다")
-    void recoveryRestoreFailureMovesCorruptOriginalBack() throws IOException {
+    @DisplayName(".bak 으로 복구할 때 손상 원본은 복사해 남기고 state.json 은 어느 단계에서도 없어지지 않는다")
+    void recoveryCopiesCorruptOriginalSoStateFileIsNeverMissing() throws IOException {
         // given
         write(file(), fixture("v1-corrupt.json"));
         write(dir.resolve("state.json.bak"), fixture("v1-history.json"));
-        // state.json 의 임시 파일 자리를 비어 있지 않은 폴더로 막아 되돌려 쓰기를 실패시킨다
-        Path blocker = Files.createDirectories(dir.resolve("state.json.tmp"));
-        Files.writeString(blocker.resolve("keep"), "x");
-        JsonStateRepository repository = repository();
+        List<String> stateDuringCopy = new ArrayList<>();
+        JsonStateRepository repository = repositoryCopyingWith((from, to) -> {
+            stateDuringCopy.add(Files.readString(file(), StandardCharsets.UTF_8));
+            Files.copy(from, to);
+            stateDuringCopy.add(Files.readString(file(), StandardCharsets.UTF_8));
+        });
+
+        // when
+        LoadedHistory result = loaded(repository.load());
+
+        // then
+        assertThat(stateDuringCopy).containsExactly(fixture("v1-corrupt.json"), fixture("v1-corrupt.json"));
+        assertThat(Files.readString(file(), StandardCharsets.UTF_8)).isEqualTo(fixture("v1-history.json"));
+        assertThat(Files.readString(dir.resolve("state.json.corrupt-20261126T010203Z"), StandardCharsets.UTF_8))
+                .isEqualTo(fixture("v1-corrupt.json"));
+        assertThat(result.notices())
+                .containsExactly(
+                        new HistoryLoadNotice.RecoveredFromBackup(Optional.of("state.json.corrupt-20261126T010203Z")));
+    }
+
+    @Test
+    @DisplayName(".bak 으로 복구하면서 손상 원본을 복사하지 못하면 Io 오류이고 아무것도 바뀌지 않는다")
+    void recoveryCopyFailureIsIoAndTouchesNothing() throws IOException {
+        // given
+        write(file(), fixture("v1-corrupt.json"));
+        write(dir.resolve("state.json.bak"), fixture("v1-history.json"));
+        JsonStateRepository repository = repositoryCopyingWith((from, to) -> {
+            throw new IOException("복사 거부");
+        });
 
         // when
         Result<LoadedHistory, HistoryStoreError> result = repository.load();
@@ -489,32 +522,56 @@ class JsonStateRepositoryTest {
     }
 
     @Test
-    @DisplayName("되돌려 쓰기도 손상 원본 돌려 놓기도 실패하면 Io 오류이고 .bak 과 옮긴 손상 원본은 그대로 남는다")
-    void recoveryRestoreAndMoveBackFailureKeepsBackupAndCorruptCopy() throws IOException {
+    @DisplayName(".bak 으로 복구하면서 state.json 을 되돌려 쓰지 못하면 Io 오류이고 손상 원본은 제자리, 복사본은 남는다")
+    void recoveryRestoreFailureLeavesCorruptOriginalInPlace() throws IOException {
         // given
         write(file(), fixture("v1-corrupt.json"));
         write(dir.resolve("state.json.bak"), fixture("v1-history.json"));
+        // state.json 의 임시 파일 자리를 비어 있지 않은 폴더로 막아 되돌려 쓰기를 실패시킨다
         Path blocker = Files.createDirectories(dir.resolve("state.json.tmp"));
         Files.writeString(blocker.resolve("keep"), "x");
-        List<Path> moves = new ArrayList<>();
-        JsonStateRepository repository = repositoryMovingWith((from, to) -> {
-            moves.add(to);
-            if (moves.size() > 1) {
-                throw new IOException("돌려 놓기 거부");
-            }
-            Files.move(from, to);
-        });
+        JsonStateRepository repository = repository();
 
         // when
         Result<LoadedHistory, HistoryStoreError> result = repository.load();
 
         // then
-        assertThat(result.error()).containsInstanceOf(HistoryStoreError.Io.class);
-        assertThat(Files.readString(dir.resolve("state.json.bak"), StandardCharsets.UTF_8))
-                .isEqualTo(fixture("v1-history.json"));
+        assertThat(result.error())
+                .get()
+                .isInstanceOfSatisfying(
+                        HistoryStoreError.Io.class,
+                        io -> assertThat(io.detail()).contains("손상된 이력 파일은 제자리에 그대로 있다"));
+        assertThat(Files.readString(file(), StandardCharsets.UTF_8)).isEqualTo(fixture("v1-corrupt.json"));
         assertThat(Files.readString(dir.resolve("state.json.corrupt-20261126T010203Z"), StandardCharsets.UTF_8))
                 .isEqualTo(fixture("v1-corrupt.json"));
+        assertThat(Files.readString(dir.resolve("state.json.bak"), StandardCharsets.UTF_8))
+                .isEqualTo(fixture("v1-history.json"));
         assertThat(repository.save(historyOf("C:\\new")).error()).containsInstanceOf(HistoryStoreError.ReadOnly.class);
+    }
+
+    @Test
+    @DisplayName(".bak 으로 복구할 때도 복사할 이름이 이미 있으면 -1, -2 를 붙이고 있던 파일은 건드리지 않는다")
+    void recoveryCopyNameCollisionGetsNumberSuffix() throws IOException {
+        // given
+        write(file(), fixture("v1-corrupt.json"));
+        write(dir.resolve("state.json.bak"), fixture("v1-history.json"));
+        write(dir.resolve("state.json.corrupt-20261126T010203Z"), "earlier");
+        write(dir.resolve("state.json.corrupt-20261126T010203Z-1"), "earlier too");
+
+        // when
+        LoadedHistory result = loaded(repository().load());
+
+        // then
+        assertThat(result.notices())
+                .containsExactly(new HistoryLoadNotice.RecoveredFromBackup(
+                        Optional.of("state.json.corrupt-20261126T010203Z-2")));
+        assertThat(Files.readString(dir.resolve("state.json.corrupt-20261126T010203Z"), StandardCharsets.UTF_8))
+                .isEqualTo("earlier");
+        assertThat(Files.readString(dir.resolve("state.json.corrupt-20261126T010203Z-1"), StandardCharsets.UTF_8))
+                .isEqualTo("earlier too");
+        assertThat(Files.readString(dir.resolve("state.json.corrupt-20261126T010203Z-2"), StandardCharsets.UTF_8))
+                .isEqualTo(fixture("v1-corrupt.json"));
+        assertThat(Files.readString(file(), StandardCharsets.UTF_8)).isEqualTo(fixture("v1-history.json"));
     }
 
     @Test

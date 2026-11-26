@@ -42,8 +42,8 @@ import tools.jackson.databind.node.ObjectNode;
 
 /**
  * state.json 의 history 부분(ADR-0013, SDD §9.2)을 읽고 쓴다. 앱이 쓰는 파일이라 손상은 .bak → 옆으로 옮기기로 복구하고, 상위 버전 ·
- * 다른 인스턴스(state.lock)면 읽기 전용으로 연다. .bak 으로 복구하면 state.json 도 .bak 내용으로 되돌려 쓴다 — 저장 없이 끝나도 다음 실행이
- * 이력을 잃지 않게. 저장할 때 load 때 읽은 다른 최상위 키(workspace · window …)와 항목별 sources 를 그대로
+ * 다른 인스턴스(state.lock)면 읽기 전용으로 연다. .bak 으로 복구하면 손상 원본을 복사해 두고 state.json 을 .bak 내용으로 원자적으로 바꾼다 —
+ * 저장 없이 끝나도 다음 실행이 이력을 잃지 않게. 저장할 때 load 때 읽은 다른 최상위 키(workspace · window …)와 항목별 sources 를 그대로
  * 다시 쓴다(디스크를 다시 읽지 않는다). .bak 은 인스턴스(실행)마다 첫 저장 직전에 한 번 만든다.
  */
 public final class JsonStateRepository implements HistoryRepository, AutoCloseable {
@@ -75,6 +75,7 @@ public final class JsonStateRepository implements HistoryRepository, AutoCloseab
     private final HistoryPolicy policy;
     private final InstantSource clock;
     private final Mover mover;
+    private final Copier copier;
 
     private Optional<FileChannel> lockChannel = Optional.empty();
     private Optional<FileLock> lock = Optional.empty();
@@ -85,23 +86,30 @@ public final class JsonStateRepository implements HistoryRepository, AutoCloseab
 
     /** {@code file} 은 보통 {@code PlatformDirs.appData()/state.json}. 만들 때 파일을 건드리지 않는다. */
     public JsonStateRepository(Path file, HistoryPolicy policy, InstantSource clock) {
-        this(file, policy, clock, (from, to) -> Files.move(from, to));
+        this(file, policy, clock, (from, to) -> Files.move(from, to), (from, to) -> Files.copy(from, to));
     }
 
-    // 테스트가 손상 파일 옮기기 실패를 재현하려고 쓴다
-    JsonStateRepository(Path file, HistoryPolicy policy, InstantSource clock, Mover mover) {
+    // 테스트가 손상 파일 옮기기 · 복사 실패를 재현하려고 쓴다
+    JsonStateRepository(Path file, HistoryPolicy policy, InstantSource clock, Mover mover, Copier copier) {
         this.file = Objects.requireNonNull(file, "file");
         this.policy = Objects.requireNonNull(policy, "policy");
         this.clock = Objects.requireNonNull(clock, "clock");
         this.mover = Objects.requireNonNull(mover, "mover");
+        this.copier = Objects.requireNonNull(copier, "copier");
         this.backup = file.resolveSibling(file.getFileName() + ".bak");
         this.lockFile = file.resolveSibling("state.lock");
     }
 
-    /** 손상 파일을 옆으로 옮긴다. 대상이 이미 있으면 실패해야 한다. */
+    /** 손상 파일을 옆으로 옮긴다(.bak 도 못 쓸 때). 대상이 이미 있으면 실패해야 한다. */
     @FunctionalInterface
     interface Mover {
         void move(Path from, Path to) throws IOException;
+    }
+
+    /** 손상 파일을 옆에 복사한다(.bak 으로 복구할 때). 대상이 이미 있으면 실패해야 한다. */
+    @FunctionalInterface
+    interface Copier {
+        void copy(Path from, Path to) throws IOException;
     }
 
     private sealed interface Mode {
@@ -335,10 +343,11 @@ public final class JsonStateRepository implements HistoryRepository, AutoCloseab
         return Optional.empty();
     }
 
-    // .bak 이 정상이면 손상 원본을 옆으로 옮기고 state.json 을 .bak 내용으로 되돌려 쓴다 — 첫 저장이 원본을 덮어쓰지 않고, 저장 없이 끝나도
-    // 다음 실행이 "파일 없음"으로 빈 이력을 열지 않게. .bak 도 못 쓰면 원본만 옮긴다. .bak 을 읽다 입출력 오류가 나면 정상인지 알 수 없으니
-    // 아무것도 건드리지 않고 Io 다. 잠금을 쥐지 않았으면(다른 인스턴스 · 잠금 파일 열기 실패) 아무것도 옮기지 않는다.
-    // backupTaken 은 원본을 옮겼거나 .bak 으로 복구했을 때만 세운다 — 이번 실행의 .bak 은 이미 정해졌다.
+    // .bak 이 정상이면 손상 원본을 옆에 복사한 뒤 state.json 을 .bak 내용으로 원자적으로 바꾼다. 어느 단계에서 멈춰도(전원 차단 포함)
+    // state.json 은 손상 원본이거나 복구한 내용이다 — "state.json 없음 + 정상 .bak" 이면 다음 실행이 빈 이력을 열고, 그 다음 실행의 첫
+    // 저장이 좋은 .bak 을 덮어쓴다. .bak 도 못 쓰면 원본을 옮긴다. .bak 을 읽다 입출력 오류가 나면 정상인지 알 수 없으니 아무것도 건드리지
+    // 않고 Io 다. 잠금을 쥐지 않았으면(다른 인스턴스 · 잠금 파일 열기 실패) 아무것도 바꾸지 않는다.
+    // backupTaken 은 원본을 옆에 두었거나 .bak 으로 복구했을 때만 세운다 — 이번 실행의 .bak 은 이미 정해졌다.
     private Result<Optional<ObjectNode>, HistoryStoreError> recover(
             Disk.Corrupt corrupt, LockState lockState, List<HistoryLoadNotice> notices) {
         LOG.log(System.Logger.Level.WARNING, "이력 파일이 손상됐다: {0} ({1})", file, corrupt.detail());
@@ -348,62 +357,61 @@ public final class JsonStateRepository implements HistoryRepository, AutoCloseab
         } catch (IOException e) {
             return Result.err(new HistoryStoreError.Io(".bak 을 읽지 못했다 " + backup + ": " + e));
         }
-        if (!(lockState instanceof LockState.Held)) {
-            if (fallback instanceof Disk.Parsed parsed) {
-                backupTaken = true;
-                notices.add(new HistoryLoadNotice.RecoveredFromBackup(Optional.empty()));
-                return Result.ok(Optional.of(parsed.root()));
+        boolean held = lockState instanceof LockState.Held;
+        if (fallback instanceof Disk.Parsed parsed) {
+            Optional<String> keptAs = Optional.empty();
+            if (held) {
+                Result<Path, HistoryStoreError> restored = restoreFromBackup(parsed.bytes());
+                if (restored instanceof Result.Err<Path, HistoryStoreError>(var error)) {
+                    return Result.err(error);
+                }
+                keptAs =
+                        Optional.of(restored.value().orElseThrow().getFileName().toString());
             }
+            backupTaken = true;
+            notices.add(new HistoryLoadNotice.RecoveredFromBackup(keptAs));
+            return Result.ok(Optional.of(parsed.root()));
+        }
+        if (!held) {
             return Result.ok(Optional.empty());
         }
         Path aside;
         try {
-            aside = moveAside();
+            aside = asideName();
+            mover.move(file, aside);
         } catch (IOException e) {
             return Result.err(new HistoryStoreError.Io("손상된 이력 파일을 옮기지 못했다 " + file + ": " + e));
         }
-        String movedTo = aside.getFileName().toString();
-        if (fallback instanceof Disk.Parsed parsed) {
-            Optional<HistoryStoreError> failed = restoreFromBackup(parsed.bytes(), aside);
-            if (failed.isPresent()) {
-                return Result.err(failed.get());
-            }
-            backupTaken = true;
-            notices.add(new HistoryLoadNotice.RecoveredFromBackup(Optional.of(movedTo)));
-            return Result.ok(Optional.of(parsed.root()));
-        }
         backupTaken = true;
-        notices.add(new HistoryLoadNotice.CorruptMovedAside(movedTo));
+        notices.add(new HistoryLoadNotice.CorruptMovedAside(aside.getFileName().toString()));
         return Result.ok(Optional.empty());
     }
 
-    // 되돌려 쓰지 못하면 손상 원본을 제자리로 돌려 놓는다 — "state.json 없음 + 정상 .bak" 을 남기면 다음 실행이 빈 이력을 열고, 그 다음 실행의
-    // 첫 저장이 좋은 .bak 을 덮어쓴다. 돌려 놓기도 실패하면 .bak 과 옮긴 원본이 남아 있음을 알린다.
-    private Optional<HistoryStoreError> restoreFromBackup(byte[] bytes, Path aside) {
-        IOException cause;
+    // 성공하면 손상 원본을 복사해 둔 경로.
+    private Result<Path, HistoryStoreError> restoreFromBackup(byte[] bytes) {
+        Path aside;
+        try {
+            aside = asideName();
+            copier.copy(file, aside);
+        } catch (IOException e) {
+            return Result.err(new HistoryStoreError.Io("손상된 이력 파일을 복사해 두지 못했다 " + file + ": " + e));
+        }
         try {
             JsonFiles.writeAtomically(file, bytes);
-            return Optional.empty();
         } catch (IOException e) {
-            cause = e;
+            return Result.err(new HistoryStoreError.Io(
+                    "백업으로 되돌려 쓰지 못했다. 손상된 이력 파일은 제자리에 그대로 있다 " + file + "(복사본 " + aside.getFileName() + "): " + e));
         }
-        try {
-            mover.move(aside, file);
-            return Optional.of(new HistoryStoreError.Io("백업으로 되돌려 쓰지 못해 손상된 이력 파일을 제자리에 두었다 " + file + ": " + cause));
-        } catch (IOException e) {
-            return Optional.of(new HistoryStoreError.Io("백업으로 되돌려 쓰지 못했다. 손상 파일은 " + aside.getFileName() + ", 백업은 "
-                    + backup.getFileName() + " 에 그대로 있다: " + cause + " / " + e));
-        }
+        return Result.ok(aside);
     }
 
-    // 같은 초에 이미 옮긴 파일이 있으면 -1, -2 … 를 붙인다. 이름을 고른 뒤 생긴 파일은 mover 가 실패시킨다.
-    private Path moveAside() throws IOException {
+    // 같은 초에 이미 옆에 둔 파일이 있으면 -1, -2 … 를 붙인다. 이름을 고른 뒤 생긴 파일은 mover · copier 가 실패시킨다.
+    private Path asideName() {
         String base = file.getFileName() + ".corrupt-" + CORRUPT_SUFFIX.format(clock.instant());
         Path aside = file.resolveSibling(base);
         for (int n = 1; Files.exists(aside, LinkOption.NOFOLLOW_LINKS); n++) {
             aside = file.resolveSibling(base + "-" + n);
         }
-        mover.move(file, aside);
         return aside;
     }
 
