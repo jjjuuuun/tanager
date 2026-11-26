@@ -104,8 +104,8 @@ class SessionStarterTest {
     // ---- 인수 시나리오 ----
 
     @Test
-    @DisplayName("설정이 없으면 첫 WSL 프로파일을 홈에서 띄우고 알림이 없다")
-    void startsFirstWslAtHomeWithoutConfig() {
+    @DisplayName("설정이 없어도 고른 셸은 홈에서 띄우고 알림이 없다")
+    void startsChosenShellAtHomeWithoutConfig() {
         // when
         StartedSession session = started(starter.start(requestFor("wsl:A")));
 

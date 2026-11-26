@@ -255,6 +255,7 @@ public final class PaneController {
         widgetConnected = true;
         // setTtyConnector 가 현재 위젯 크기로 PTY 크기를 한 번 맞춘다(TerminalPanel.setTerminalStarter → postResize)
         widget.setTtyConnector(connector);
+        widget.getTerminalPanel().setFocusable(true);
         widget.start();
         session.stream().start();
         session.exited().whenComplete((exited, error) -> {
@@ -293,8 +294,13 @@ public final class PaneController {
                 picker.render(PickerView.of(picking));
                 body.add(picker, BorderLayout.CENTER);
             }
-            case PaneState.Launching _, PaneState.Running _, PaneState.Closed _ ->
+            case PaneState.Launching _ -> {
+                // 연결 전에는 포커스를 받지 않는다 — 선택 화면에서 누른 키(숫자 · Enter)의 글자가 새 터미널로 새지 않게.
+                // connect 에서 다시 켠다
+                widget.getTerminalPanel().setFocusable(false);
                 body.add(widget, BorderLayout.CENTER);
+            }
+            case PaneState.Running _, PaneState.Closed _ -> body.add(widget, BorderLayout.CENTER);
         }
         body.revalidate();
         body.repaint();

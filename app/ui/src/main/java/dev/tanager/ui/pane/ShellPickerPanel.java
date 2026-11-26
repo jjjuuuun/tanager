@@ -29,6 +29,7 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.KeyStroke;
+import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import javax.swing.border.EmptyBorder;
 
@@ -83,7 +84,8 @@ final class ShellPickerPanel extends JPanel {
         hint.setText(view.hint());
         revalidate();
         repaint();
-        scrollToSelected(view);
+        // 새 행이 배치된 뒤에 스크롤한다 — 지금은 bounds 가 0 이다
+        SwingUtilities.invokeLater(() -> scrollToSelected(view));
     }
 
     private JPanel column() {

@@ -254,6 +254,24 @@ class PaneControllerTest {
     }
 
     @Test
+    @DisplayName("선택 화면에서 고른 뒤 셸이 연결되기 전까지 터미널은 포커스를 받지 않는다 — 누른 키의 글자가 새 셸로 새지 않는다")
+    void terminalIsNotFocusableUntilConnected() {
+        // given
+        startPicking();
+
+        // when
+        pressPicker("2");
+
+        // then
+        assertThat(onEdt(controller::state)).isInstanceOf(PaneState.Launching.class);
+        assertThat(onEdt(() -> controller.widget().getTerminalPanel().isFocusable()))
+                .isFalse();
+        drain();
+        assertThat(onEdt(() -> controller.widget().getTerminalPanel().isFocusable()))
+                .isTrue();
+    }
+
+    @Test
     @DisplayName("선택 화면에서 키패드 2 도 바로 둘째 셸을 띄운다")
     void numpadKeyStartsSecondShell() {
         // given
@@ -383,17 +401,20 @@ class PaneControllerTest {
     }
 
     @Test
-    @DisplayName("실행 중에는 창 루트에 Tab 바인딩이 없어 셸이 Tab 을 받는다")
-    void runningHasNoTabBindingOnRoot() {
+    @DisplayName("실행 중에는 창 루트에 Tab · 숫자 · 화살표 · Space 바인딩이 없어 셸이 그 키를 받는다")
+    void runningHasNoPickerKeysOnRoot() {
         // given
         startAndConnect();
 
         // then
-        assertThat(onEdt(() -> controller
-                        .component()
-                        .getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
-                        .get(KeyStroke.getKeyStroke("TAB"))))
-                .isNull();
+        for (String key : List.of("TAB", "1", "NUMPAD1", "UP", "DOWN", "SPACE")) {
+            assertThat(onEdt(() -> controller
+                            .component()
+                            .getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
+                            .get(KeyStroke.getKeyStroke(key))))
+                    .as(key)
+                    .isNull();
+        }
     }
 
     @Test
