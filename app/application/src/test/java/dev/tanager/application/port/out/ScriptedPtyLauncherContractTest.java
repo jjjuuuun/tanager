@@ -12,7 +12,8 @@ import org.junit.jupiter.api.Test;
 
 /** Fake 가 계약을 지키는지(= 다른 테스트가 Fake 를 믿어도 되는지) 확인한다. */
 class ScriptedPtyLauncherContractTest extends PtyLauncherContract {
-    private static final LaunchCommand COMMAND = new LaunchCommand(List.of("fake-shell"), Optional.empty(), Map.of());
+    private static final LaunchCommand COMMAND =
+            new LaunchCommand(List.of("fake-shell"), Optional.empty(), Map.of(), LaunchCommand.EnvNames.CASE_SENSITIVE);
 
     private final ScriptedPtyLauncher launcher = new ScriptedPtyLauncher();
 

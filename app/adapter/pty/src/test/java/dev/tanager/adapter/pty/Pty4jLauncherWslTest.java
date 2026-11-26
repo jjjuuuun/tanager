@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 import dev.tanager.application.port.out.LaunchCommand;
+import dev.tanager.application.port.out.LaunchCommand.EnvNames;
 import dev.tanager.application.port.out.LaunchError;
 import dev.tanager.application.port.out.OutputCollector;
 import dev.tanager.application.port.out.TerminalSize;
@@ -101,7 +102,8 @@ class Pty4jLauncherWslTest {
         LaunchCommand command = new LaunchCommand(
                 List.of(WindowsShells.WSL, "-d", distro, "--cd", cdPath, "--", "bash", "-c", script),
                 Optional.empty(),
-                Map.of());
+                Map.of(),
+                EnvNames.CASE_INSENSITIVE);
         Result<TerminalStream, LaunchError> result = launcher.launch(command, TerminalSize.DEFAULT);
         assertThat(result.isOk()).as("기동 결과 %s", result).isTrue();
         TerminalStream stream = result.value().orElseThrow();

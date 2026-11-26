@@ -73,6 +73,16 @@ class WindowsLaunchCommandsTest {
     }
 
     @Test
+    @DisplayName("P1b 어떤 셸이든 환경 변수 이름은 대소문자를 무시한다(Windows 호스트)")
+    void environmentNamesAreCaseInsensitive() {
+        assertThat(of(WSL, path(new ShellEnvironment.Wsl("Ubuntu"), "/home/me/p"))
+                        .envNames())
+                .isEqualTo(LaunchCommand.EnvNames.CASE_INSENSITIVE);
+        assertThat(of(POWERSHELL, new WorkingDir.Home()).envNames()).isEqualTo(LaunchCommand.EnvNames.CASE_INSENSITIVE);
+        assertThat(of(CMD, new WorkingDir.Home()).envNames()).isEqualTo(LaunchCommand.EnvNames.CASE_INSENSITIVE);
+    }
+
+    @Test
     @DisplayName("P2 PowerShell 은 템플릿 그대로 띄우고 작업 디렉터리를 Windows 경로로 준다")
     void powershellUsesWorkingDirectory() {
         LaunchCommand command = of(POWERSHELL, path(new ShellEnvironment.Windows(), "C:\\work"));

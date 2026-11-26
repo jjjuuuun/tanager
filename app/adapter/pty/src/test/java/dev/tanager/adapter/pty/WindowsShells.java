@@ -1,6 +1,7 @@
 package dev.tanager.adapter.pty;
 
 import dev.tanager.application.port.out.LaunchCommand;
+import dev.tanager.application.port.out.LaunchCommand.EnvNames;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -18,15 +19,17 @@ final class WindowsShells {
     }
 
     static LaunchCommand cmd() {
-        return new LaunchCommand(List.of(cmdExe()), Optional.empty(), Map.of());
+        return new LaunchCommand(List.of(cmdExe()), Optional.empty(), Map.of(), EnvNames.CASE_INSENSITIVE);
     }
 
     static LaunchCommand cmdRunning(String commandLine) {
-        return new LaunchCommand(List.of(cmdExe(), "/c", commandLine), Optional.empty(), Map.of());
+        return new LaunchCommand(
+                List.of(cmdExe(), "/c", commandLine), Optional.empty(), Map.of(), EnvNames.CASE_INSENSITIVE);
     }
 
     static LaunchCommand powershell() {
-        return new LaunchCommand(List.of(POWERSHELL, "-NoLogo", "-NoProfile"), Optional.empty(), Map.of());
+        return new LaunchCommand(
+                List.of(POWERSHELL, "-NoLogo", "-NoProfile"), Optional.empty(), Map.of(), EnvNames.CASE_INSENSITIVE);
     }
 
     static byte[] line(String text) {

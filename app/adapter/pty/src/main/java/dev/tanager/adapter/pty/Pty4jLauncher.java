@@ -14,8 +14,6 @@ import java.lang.System.Logger.Level;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Optional;
 
 /** pty4j 로 PTY 프로세스를 띄운다. Windows 에서는 ConPTY, 그 밖에서는 Unix PTY(ADR-0001 · 0007). */
@@ -32,7 +30,7 @@ public final class Pty4jLauncher implements PtyLauncher {
         try {
             process = new PtyProcessBuilder(command.argv().toArray(String[]::new))
                     .setDirectory(command.workingDirectory().orElse(null))
-                    .setEnvironment(environment(command))
+                    .setEnvironment(command.environmentOver(System.getenv()))
                     .setInitialColumns(initialSize.columns())
                     .setInitialRows(initialSize.rows())
                     .setUseWinConPty(true)
@@ -79,13 +77,6 @@ public final class Pty4jLauncher implements PtyLauncher {
         } catch (InvalidPathException e) {
             return Optional.empty();
         }
-    }
-
-    private static Map<String, String> environment(LaunchCommand command) {
-        Map<String, String> env = new HashMap<>(System.getenv());
-        env.put("TERM", "xterm-256color");
-        env.putAll(command.environment());
-        return env;
     }
 
     private static String detail(Throwable e) {
