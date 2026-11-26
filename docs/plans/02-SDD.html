@@ -246,7 +246,7 @@ PS C:\work\infra&gt; ▌</div></foreignObject><rect x="620" y="46" width="250" h
 /** 불변식: 절대 경로, 정규화됨(중복 구분자·&#x27;.&#x27;·&#x27;..&#x27; 없음, 루트 외 끝 구분자 없음).
  *  Windows: 드라이브 대문자, &#x27;\&#x27; 구분자. Wsl/Posix: &#x27;/&#x27; 구분자. */
 public record WorkspacePath(ShellEnvironment env, String value) {
-    public static Result&lt;WorkspacePath, PathError&gt; parse(ShellEnvironment env, String raw) { ... }
+    public static Result&lt;WorkspacePath, PathError&gt; of(ShellEnvironment env, String raw) { ... }
     // equals · hashCode 가 환경별 비교 규칙(Windows 대소문자 무시)을 따른다 — 그대로 맵 키로 쓴다
     public List&lt;String&gt; segments() { ... }
     public Optional&lt;WorkspacePath&gt; parent() { ... }
