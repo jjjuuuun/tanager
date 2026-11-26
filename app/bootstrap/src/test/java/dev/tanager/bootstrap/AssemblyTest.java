@@ -8,6 +8,7 @@ import dev.tanager.application.port.in.StartNotice;
 import dev.tanager.application.port.in.StartRequest;
 import dev.tanager.application.port.in.StartedSession;
 import dev.tanager.application.port.out.FakePlatformModule;
+import dev.tanager.application.port.out.FakeShellIntegration;
 import dev.tanager.application.port.out.ScriptedPtyLauncher;
 import dev.tanager.application.port.out.TerminalSize;
 import dev.tanager.domain.history.ShellEnvironment;
@@ -116,6 +117,43 @@ class AssemblyTest {
         // then
         assertThat(started.notices()).anyMatch(StartNotice.DefaultNotSaved.class::isInstance);
         assertThat(Files.readAllBytes(file)).isEqualTo(before);
+        started.stream().close();
+    }
+
+    @Test
+    @DisplayName("조립하면 셸 통합 설치가 백그라운드에서 한 번 돈다")
+    void assembleInstallsShellIntegrationOnce() {
+        // given
+        FakeShellIntegration integration = FakeShellIntegration.installedAt(appData.resolve("shell-integration"));
+        FakePlatformModule platform =
+                new FakePlatformModule(List.of(CMD)).withAppData(appData).withIntegration(integration);
+
+        // when
+        Assembly.assemble(platform, new ScriptedPtyLauncher());
+
+        // then
+        await().atMost(Duration.ofSeconds(2)).until(() -> integration.installCalls() == 1);
+        assertThat(integration.installCalls()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("셸 통합 설치가 예외를 던져도 조립과 셸 시작은 된다")
+    void throwingShellIntegrationDoesNotBreakAssemblyOrStart() {
+        // given
+        FakeShellIntegration integration = FakeShellIntegration.throwing(new IllegalStateException("설치 고장"));
+        FakePlatformModule platform =
+                new FakePlatformModule(List.of(CMD)).withAppData(appData).withIntegration(integration);
+        ScriptedPtyLauncher launcher = new ScriptedPtyLauncher();
+
+        // when
+        Assembly assembly = Assembly.assemble(platform, launcher);
+        await().atMost(Duration.ofSeconds(2)).until(() -> integration.installCalls() == 1);
+        var result = assembly.sessions().start(StartRequest.chosen(CMD.id(), false, SIZE));
+
+        // then
+        StartedSession started = result.value().orElseThrow();
+        assertThat(started.session().profile()).isEqualTo(CMD);
+        assertThat(launcher.commands()).hasSize(1);
         started.stream().close();
     }
 }
