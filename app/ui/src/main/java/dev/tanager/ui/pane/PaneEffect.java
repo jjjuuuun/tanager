@@ -39,4 +39,7 @@ sealed interface PaneEffect {
 
     /** 창을 화면에서 뺀다(마지막 창이면 앱이 끝난다). */
     record RemovePane() implements PaneEffect {}
+
+    /** 백그라운드에서 셸 목록을 읽어 {@link PaneEvent.ShellsListed} 로 돌려준다(첫 호출은 블로킹이라 EDT 에서 부르지 않는다). */
+    record ListShells() implements PaneEffect {}
 }

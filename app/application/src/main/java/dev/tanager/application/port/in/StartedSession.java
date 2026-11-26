@@ -14,7 +14,7 @@ import java.util.concurrent.CompletionStage;
  * @param session {@code Running} 상태의 세션
  * @param stream 셸 입출력. 아직 {@link TerminalStream#start()} 하지 않았다 — 구독을 붙인 뒤 부른다
  * @param exited 셸이 끝나면 {@code Exited} 상태의 세션으로 완료된다
- * @param notices 사용자에게 알릴 것(설정 문제 · 대체한 프로파일 · 경로)
+ * @param notices 사용자에게 알릴 것(설정 문제 · 경로 · 기본 셸 저장 실패)
  */
 public record StartedSession(
         TerminalSession session,

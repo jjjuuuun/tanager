@@ -1,5 +1,7 @@
 package dev.tanager.ui.pane;
 
+import static dev.tanager.ui.pane.PaneFixtures.CMD;
+import static dev.tanager.ui.pane.PaneFixtures.UBUNTU;
 import static dev.tanager.ui.pane.PaneFixtures.exited;
 import static dev.tanager.ui.pane.PaneFixtures.launchFailed;
 import static dev.tanager.ui.pane.PaneFixtures.started;
@@ -9,11 +11,15 @@ import dev.tanager.application.port.in.StartFailure;
 import dev.tanager.application.port.in.StartedSession;
 import dev.tanager.application.port.out.ScriptedTerminalStream;
 import dev.tanager.domain.history.ShellEnvironment;
+import dev.tanager.domain.session.ProfileId;
+import dev.tanager.domain.session.ProfileResolution;
 import dev.tanager.domain.session.SessionError;
 import dev.tanager.domain.session.SessionState;
+import dev.tanager.domain.session.ShellProfile;
 import dev.tanager.domain.session.TerminalSession;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -21,7 +27,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
-/** 창 상태 기계의 전체 표: 상태 6 × 사건 7. 빈칸 없이 다음 상태와 효과를 적는다. */
+/** 창 상태 기계의 전체 표: 상태 7 × 사건 10. 빈칸 없이 다음 상태와 효과를 적는다. */
 class PaneStateTableTest {
     // 표의 값들(한 번 만들어 모든 칸이 같은 객체를 쓴다 — CloseStream 은 스트림 동일성으로 비교한다)
     private static final Attempt FRESH = new Attempt.Fresh();
@@ -37,6 +43,11 @@ class PaneStateTableTest {
     private static final PaneState CLOSED = new PaneState.Closed();
     private static final PaneState ERRORED = new PaneState.Errored("boom", FRESH);
 
+    private static final List<ShellProfile> SHELLS = List.of(CMD, UBUNTU);
+    private static final ShellPicker STARTUP_PICKER =
+            ShellPicker.atStartup(new ProfileResolution.Choose(SHELLS, Optional.empty()));
+    private static final PaneState PICKING = new PaneState.Picking(STARTUP_PICKER, new PickerExit.CloseWindow());
+
     private static final PaneEvent STARTED = new PaneEvent.Started(LATE);
     private static final PaneEvent START_FAILED = new PaneEvent.StartFailed(LAUNCH_FAILED);
     private static final PaneEvent SHELL_EXITED = new PaneEvent.ShellExited(EXITED);
@@ -44,6 +55,13 @@ class PaneStateTableTest {
     private static final PaneEvent ESC = new PaneEvent.EscPressed();
     private static final PaneEvent CLOSE = new PaneEvent.CloseRequested();
     private static final PaneEvent ERROR = new PaneEvent.StartErrored("kaboom");
+    private static final PaneEvent TAB = new PaneEvent.TabPressed();
+    private static final PaneEvent PICKER = new PaneEvent.PickerInput(new PickerKey.Move(1));
+    private static final PaneEvent LISTED = new PaneEvent.ShellsListed(SHELLS);
+
+    private static PaneState reopened(Optional<ProfileId> current, PaneState previous) {
+        return new PaneState.Picking(ShellPicker.reopened(SHELLS, current), new PickerExit.ReturnTo(previous));
+    }
 
     private static final PaneEffect CLOSE_LATE = new PaneEffect.CloseStream(LATE.stream());
 
@@ -102,6 +120,35 @@ class PaneStateTableTest {
         rows.add(cell(ERRORED, ESC, CLOSED, new PaneEffect.RemovePane()));
         rows.add(cell(ERRORED, CLOSE, CLOSED));
         rows.add(cell(ERRORED, ERROR, ERRORED));
+        // 새 사건 TAB · PICKER · LISTED
+        for (PaneState quiet : List.of(LAUNCHING, RUNNING, CLOSED)) {
+            rows.add(cell(quiet, TAB, quiet));
+            rows.add(cell(quiet, PICKER, quiet));
+            rows.add(cell(quiet, LISTED, quiet));
+        }
+        rows.add(cell(EXITED_STATE, TAB, EXITED_STATE, new PaneEffect.ListShells()));
+        rows.add(cell(EXITED_STATE, PICKER, EXITED_STATE));
+        rows.add(cell(EXITED_STATE, LISTED, reopened(Optional.of(CMD.id()), EXITED_STATE)));
+        rows.add(cell(FAILED, TAB, FAILED, new PaneEffect.ListShells()));
+        rows.add(cell(FAILED, PICKER, FAILED));
+        rows.add(cell(FAILED, LISTED, reopened(Optional.of(CMD.id()), FAILED)));
+        rows.add(cell(ERRORED, TAB, ERRORED, new PaneEffect.ListShells()));
+        rows.add(cell(ERRORED, PICKER, ERRORED));
+        rows.add(cell(ERRORED, LISTED, reopened(Optional.empty(), ERRORED)));
+        // Picking(셸 선택 화면, 시작 때 연 것)
+        Attempt chosen = new Attempt.Chosen(CMD, true);
+        PaneState moved = new PaneState.Picking(
+                ((PickerStep.Stay) STARTUP_PICKER.on(new PickerKey.Move(1))).picker(), new PickerExit.CloseWindow());
+        rows.add(cell(PICKING, STARTED, PICKING, CLOSE_LATE));
+        rows.add(cell(PICKING, START_FAILED, PICKING));
+        rows.add(cell(PICKING, SHELL_EXITED, PICKING));
+        rows.add(cell(PICKING, ENTER, new PaneState.Launching(chosen), new PaneEffect.Launch(chosen)));
+        rows.add(cell(PICKING, ESC, CLOSED, new PaneEffect.RemovePane()));
+        rows.add(cell(PICKING, CLOSE, CLOSED));
+        rows.add(cell(PICKING, ERROR, PICKING));
+        rows.add(cell(PICKING, TAB, PICKING));
+        rows.add(cell(PICKING, PICKER, moved));
+        rows.add(cell(PICKING, LISTED, PICKING));
         return rows.stream();
     }
 
@@ -118,9 +165,9 @@ class PaneStateTableTest {
     }
 
     @Test
-    @DisplayName("표는 상태 6 × 사건 7 = 42칸을 빠짐없이 덮는다")
+    @DisplayName("표는 상태 7 × 사건 10 = 70칸을 빠짐없이 덮는다")
     void tableIsComplete() {
-        assertThat(table().count()).isEqualTo(42);
+        assertThat(table().count()).isEqualTo(70);
     }
 
     @Test

@@ -1,6 +1,7 @@
 package dev.tanager.ui.pane;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import dev.tanager.application.port.in.StartFailure;
 import dev.tanager.application.port.in.StartNotice;
@@ -11,11 +12,14 @@ import dev.tanager.domain.history.ShellEnvironment;
 import dev.tanager.domain.session.IntegrationMode;
 import dev.tanager.domain.session.LaunchTemplate;
 import dev.tanager.domain.session.ProfileId;
+import dev.tanager.domain.session.ProfileResolution;
+import dev.tanager.domain.session.SessionError;
 import dev.tanager.domain.session.ShellKind;
 import dev.tanager.domain.session.ShellProfile;
 import dev.tanager.domain.session.TerminalSession;
 import dev.tanager.domain.session.WorkingDir;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -86,7 +90,7 @@ class PaneStateTest {
         // then
         assertThat(t.next()).isEqualTo(new PaneState.Exited(exited));
         assertThat(view.overlay()).contains("종료 코드 2");
-        assertThat(view.hint()).contains("Enter 다시 시작 · Esc 닫기");
+        assertThat(view.hint()).contains("Enter 다시 시작 · Tab 다른 셸 · Esc 닫기");
     }
 
     @Test
@@ -185,6 +189,223 @@ class PaneStateTest {
 
         // then
         assertThat(t.next()).isEqualTo(failed);
+        assertThat(t.effects()).isEmpty();
+    }
+
+    // ---- 셸 선택 화면(#70) ----
+
+    private static final ShellProfile UBUNTU = PaneFixtures.UBUNTU;
+    private static final List<ShellProfile> SHELLS = List.of(PROFILE, UBUNTU);
+
+    private static StartFailure.ChoiceRequired choiceRequired(Optional<ProfileId> missing, List<StartNotice> notices) {
+        return new StartFailure.ChoiceRequired(new ProfileResolution.Choose(SHELLS, missing), notices);
+    }
+
+    private static PaneState startupPicking() {
+        return new PaneState.Picking(
+                ShellPicker.atStartup(new ProfileResolution.Choose(SHELLS, Optional.empty())),
+                new PickerExit.CloseWindow());
+    }
+
+    @Test
+    @DisplayName("선택이 필요하다는 결과를 받으면 선택 화면이 되고 알림만 효과로 나온다")
+    void choiceRequiredOpensPicker() {
+        // given
+        StartNotice notice = new StartNotice.StartDirInvalid("zzz");
+
+        // when
+        Transition t = new PaneState.Launching(new Attempt.Fresh())
+                .on(new PaneEvent.StartFailed(choiceRequired(Optional.empty(), List.of(notice))));
+        Transition quiet = new PaneState.Launching(new Attempt.Fresh())
+                .on(new PaneEvent.StartFailed(choiceRequired(Optional.empty(), List.of())));
+
+        // then
+        assertThat(t.next()).isEqualTo(startupPicking());
+        assertThat(t.effects()).containsExactly(new PaneEffect.ShowNotices(List.of(notice)));
+        assertThat(quiet.effects()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("기억한 셸이 사라졌다는 정보가 선택 화면에 담긴다")
+    void choiceRequiredKeepsMissingId() {
+        // when
+        Transition t = new PaneState.Launching(new Attempt.Fresh())
+                .on(new PaneEvent.StartFailed(choiceRequired(Optional.of(new ProfileId("wsl:Gone")), List.of())));
+
+        // then
+        assertThat(t.next())
+                .isInstanceOfSatisfying(
+                        PaneState.Picking.class,
+                        picking -> assertThat(picking.picker().missing()).contains(new ProfileId("wsl:Gone")));
+    }
+
+    @Test
+    @DisplayName("선택 화면에서 숫자를 누르면 그 셸을 기억 켜짐으로 띄운다")
+    void digitLaunchesChosenShell() {
+        // when
+        Transition t = startupPicking().on(new PaneEvent.PickerInput(new PickerKey.Digit(2)));
+
+        // then
+        Attempt chosen = new Attempt.Chosen(UBUNTU, true);
+        assertThat(t.next()).isEqualTo(new PaneState.Launching(chosen));
+        assertThat(t.effects()).containsExactly(new PaneEffect.Launch(chosen));
+    }
+
+    @Test
+    @DisplayName("선택 화면에서 행을 클릭하면 그 셸을 띄운다")
+    void clickLaunchesChosenShell() {
+        // when
+        Transition t = startupPicking().on(new PaneEvent.PickerInput(new PickerKey.Click(0)));
+
+        // then
+        assertThat(t.next()).isEqualTo(new PaneState.Launching(new Attempt.Chosen(PROFILE, true)));
+    }
+
+    @Test
+    @DisplayName("기억을 끄고 Enter 를 누르면 기억 없이 띄운다")
+    void toggleRememberThenEnter() {
+        // when
+        Transition toggled = startupPicking().on(new PaneEvent.PickerInput(new PickerKey.ToggleRemember()));
+        Transition entered = toggled.next().on(new PaneEvent.EnterPressed());
+
+        // then
+        Attempt chosen = new Attempt.Chosen(PROFILE, false);
+        assertThat(entered.next()).isEqualTo(new PaneState.Launching(chosen));
+        assertThat(entered.effects()).containsExactly(new PaneEffect.Launch(chosen));
+    }
+
+    @Test
+    @DisplayName("종료 띠에서 Tab → 목록 도착 → Esc 하면 선택 화면을 거쳐 같은 종료 상태로 돌아온다")
+    void tabOpensPickerAndEscReturns() {
+        // given
+        PaneState exited = new PaneState.Exited(exited(0));
+
+        // when
+        Transition tab = exited.on(new PaneEvent.TabPressed());
+        Transition listed = tab.next().on(new PaneEvent.ShellsListed(SHELLS));
+        Transition esc = listed.next().on(new PaneEvent.EscPressed());
+
+        // then
+        assertThat(tab.next()).isEqualTo(exited);
+        assertThat(tab.effects()).containsExactly(new PaneEffect.ListShells());
+        assertThat(listed.next())
+                .isEqualTo(new PaneState.Picking(
+                        ShellPicker.reopened(SHELLS, Optional.of(PROFILE.id())), new PickerExit.ReturnTo(exited)));
+        assertThat(listed.next()).isInstanceOfSatisfying(PaneState.Picking.class, p -> {
+            assertThat(p.picker().remember()).isFalse();
+            assertThat(p.picker().selected()).isZero();
+        });
+        assertThat(esc.next()).isSameAs(exited);
+        assertThat(esc.effects()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("시작 때 연 선택 화면에서 Esc 는 창을 닫는다")
+    void escInStartupPickerClosesWindow() {
+        // when
+        Transition t = startupPicking().on(new PaneEvent.EscPressed());
+
+        // then
+        assertThat(t.next()).isEqualTo(new PaneState.Closed());
+        assertThat(t.effects()).containsExactly(new PaneEffect.RemovePane());
+    }
+
+    @Test
+    @DisplayName("셸이 없음 · 요청 거부 화면에서 Tab 은 아무 일도 하지 않는다")
+    void tabIgnoredWhenNotRetryable() {
+        // given
+        PaneState noShell = new PaneState.Failed(new StartFailure.NoShellAvailable(), new Attempt.Fresh());
+        PaneState rejected = new PaneState.Failed(
+                new StartFailure.Rejected(new SessionError.EnvironmentMismatch(
+                        new ShellEnvironment.Windows(), new ShellEnvironment.Wsl("U"))),
+                new Attempt.Fresh());
+
+        // then
+        for (PaneState state : List.of(noShell, rejected)) {
+            Transition t = state.on(new PaneEvent.TabPressed());
+            assertThat(t.next()).isEqualTo(state);
+            assertThat(t.effects()).isEmpty();
+        }
+    }
+
+    @Test
+    @DisplayName("빈 셸 목록이 도착하면 선택 화면을 열지 않는다")
+    void emptyListIsIgnored() {
+        // given
+        PaneState exited = new PaneState.Exited(exited(0));
+
+        // when
+        Transition t = exited.on(new PaneEvent.ShellsListed(List.of()));
+
+        // then
+        assertThat(t.next()).isEqualTo(exited);
+        assertThat(t.effects()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("고른 셸의 기동이 실패하면 같은 선택으로 다시 시도할 수 있다")
+    void chosenAttemptIsRetried() {
+        // given
+        Attempt chosen = new Attempt.Chosen(PROFILE, true);
+        StartFailure.LaunchFailed failure = launchFailed();
+
+        // when
+        Transition failed = new PaneState.Launching(chosen).on(new PaneEvent.StartFailed(failure));
+        Transition retry = failed.next().on(new PaneEvent.EnterPressed());
+
+        // then
+        assertThat(failed.next()).isEqualTo(new PaneState.Failed(failure, chosen));
+        assertThat(retry.next()).isEqualTo(new PaneState.Launching(chosen));
+        assertThat(retry.effects()).containsExactly(new PaneEffect.Launch(chosen));
+    }
+
+    @Test
+    @DisplayName("고른 셸을 띄우다 기억한 셸이 사라졌다는 결과를 받아도 선택 화면이 된다")
+    void choiceRequiredWhileLaunchingChosen() {
+        // when
+        Transition t = new PaneState.Launching(new Attempt.Chosen(UBUNTU, false))
+                .on(new PaneEvent.StartFailed(choiceRequired(Optional.of(new ProfileId("wsl:Gone")), List.of())));
+
+        // then
+        assertThat(t.next()).isInstanceOf(PaneState.Picking.class);
+    }
+
+    @Test
+    @DisplayName("선택이 필요하다는 실패는 Failed 상태에 담을 수 없다")
+    void failedRejectsChoiceRequired() {
+        assertThatThrownBy(() -> new PaneState.Failed(choiceRequired(Optional.empty(), List.of()), new Attempt.Fresh()))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("ReturnTo 는 종료 · 실패 · 오류 상태만 받는다")
+    void returnToAcceptsOnlyTerminalStates() {
+        // given
+        List<PaneState> invalid = List.of(
+                new PaneState.Running(started(new ScriptedTerminalStream(1), List.of())),
+                new PaneState.Launching(new Attempt.Fresh()),
+                startupPicking(),
+                new PaneState.Closed());
+
+        // then
+        for (PaneState state : invalid) {
+            assertThatThrownBy(() -> new PickerExit.ReturnTo(state)).isInstanceOf(IllegalArgumentException.class);
+        }
+    }
+
+    @Test
+    @DisplayName("Tab 으로 연 선택 화면도 닫기 요청을 받으면 닫힌다")
+    void closeRequestedWhileReturnablePicker() {
+        // given
+        PaneState exited = new PaneState.Exited(exited(0));
+        PaneState picking =
+                new PaneState.Picking(ShellPicker.reopened(SHELLS, Optional.empty()), new PickerExit.ReturnTo(exited));
+
+        // when
+        Transition t = picking.on(new PaneEvent.CloseRequested());
+
+        // then
+        assertThat(t.next()).isEqualTo(new PaneState.Closed());
         assertThat(t.effects()).isEmpty();
     }
 }

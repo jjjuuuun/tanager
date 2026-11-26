@@ -1,6 +1,7 @@
 package dev.tanager.ui;
 
 import com.formdev.flatlaf.FlatLaf;
+import dev.tanager.application.port.in.ListProfilesUseCase;
 import dev.tanager.application.port.in.StartSessionUseCase;
 import dev.tanager.ui.font.TerminalFontSet;
 import dev.tanager.ui.font.TerminalFonts;
@@ -21,8 +22,8 @@ public final class SwingUi {
 
     private SwingUi() {}
 
-    /** EDT 에서 메인 창을 띄우고 기본 셸 하나를 연다. */
-    public static void showMainWindow(StartSessionUseCase sessions) {
+    /** EDT 에서 메인 창을 띄우고 기억한 셸 하나를 연다(없으면 셸 선택 화면). */
+    public static void showMainWindow(StartSessionUseCase sessions, ListProfilesUseCase profiles) {
         SwingUtilities.invokeLater(() -> {
             List<String> warnings = new ArrayList<>();
             // 글꼴이 없어도 창은 띄운다 — 논리 글꼴 Monospaced 로 대신하고 상태줄에 알린다
@@ -37,7 +38,7 @@ public final class SwingUi {
             TerminalSettings settings = new TerminalSettings(fonts, JediTermColors.current());
             Executor background =
                     task -> Thread.ofVirtual().name("tanager-session-start").start(task);
-            new MainWindow(sessions, settings, background).show(warnings);
+            new MainWindow(sessions, profiles, settings, background).show(warnings);
         });
     }
 

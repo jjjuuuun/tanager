@@ -36,8 +36,8 @@ public final class TanagerApp {
         switch (selection) {
             case Result.Ok<PlatformModule, PlatformSelectionError>(PlatformModule platform) -> {
                 LOG.log(System.Logger.Level.INFO, "플랫폼: {0} ({1})", platform.id(), os.describe());
-                SwingUi.showMainWindow(
-                        Assembly.assemble(platform, new Pty4jLauncher()).sessions());
+                Assembly assembly = Assembly.assemble(platform, new Pty4jLauncher());
+                SwingUi.showMainWindow(assembly.sessions(), assembly.profiles());
             }
             case Result.Err<PlatformModule, PlatformSelectionError>(PlatformSelectionError error) -> {
                 LOG.log(System.Logger.Level.ERROR, error.describe());

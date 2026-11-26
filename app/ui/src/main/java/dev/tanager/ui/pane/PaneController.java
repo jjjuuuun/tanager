@@ -1,5 +1,6 @@
 package dev.tanager.ui.pane;
 
+import dev.tanager.application.port.in.ListProfilesUseCase;
 import dev.tanager.application.port.in.StartFailure;
 import dev.tanager.application.port.in.StartNotice;
 import dev.tanager.application.port.in.StartRequest;
@@ -7,6 +8,7 @@ import dev.tanager.application.port.in.StartSessionUseCase;
 import dev.tanager.application.port.in.StartedSession;
 import dev.tanager.application.port.out.TerminalSize;
 import dev.tanager.application.port.out.TerminalStream;
+import dev.tanager.domain.session.ShellProfile;
 import dev.tanager.domain.shared.Result;
 import dev.tanager.ui.terminal.StreamTtyConnector;
 import dev.tanager.ui.terminal.TanagerTermWidget;
@@ -53,6 +55,7 @@ public final class PaneController {
     private static final int BAND_HEIGHT = 28;
     private static final String ENTER = "tanager.pane.enter";
     private static final String ESCAPE = "tanager.pane.escape";
+    private static final String TAB = "tanager.pane.tab";
 
     /** 창을 품은 쪽(메인 창). */
     public interface Host {
@@ -70,6 +73,7 @@ public final class PaneController {
     private final Executor ui;
     private final Executor background;
     private final StartSessionUseCase sessions;
+    private final ListProfilesUseCase profiles;
     private final TerminalSettings settings;
     private final Host host;
 
@@ -77,6 +81,7 @@ public final class PaneController {
     private final RoundedPane root = new RoundedPane(header);
     private final JPanel body = new JPanel(new BorderLayout());
     private final Notice notice = new Notice();
+    private final ShellPickerPanel picker = new ShellPickerPanel(this::dispatch);
     private final PropertyChangeListener focusListener = event -> updateFocus();
 
     private PaneState state = new PaneState.Launching(new Attempt.Fresh());
@@ -87,10 +92,16 @@ public final class PaneController {
     private CompletableFuture<Optional<TerminalStream>> launching = CompletableFuture.completedFuture(Optional.empty());
 
     public PaneController(
-            Executor ui, Executor background, StartSessionUseCase sessions, TerminalSettings settings, Host host) {
+            Executor ui,
+            Executor background,
+            StartSessionUseCase sessions,
+            ListProfilesUseCase profiles,
+            TerminalSettings settings,
+            Host host) {
         this.ui = Objects.requireNonNull(ui, "ui");
         this.background = Objects.requireNonNull(background, "background");
         this.sessions = Objects.requireNonNull(sessions, "sessions");
+        this.profiles = Objects.requireNonNull(profiles, "profiles");
         this.settings = Objects.requireNonNull(settings, "settings");
         this.host = Objects.requireNonNull(host, "host");
         this.widget = new TanagerTermWidget(settings);
@@ -117,7 +128,7 @@ public final class PaneController {
         CompletionStage<?> exited = switch (state) {
             case PaneState.Running running -> running.session().stream().onExit();
             case PaneState.Launching _ -> launching.thenCompose(PaneController::closeAndAwait);
-            case PaneState.Exited _, PaneState.Failed _, PaneState.Errored _, PaneState.Closed _ ->
+            case PaneState.Exited _, PaneState.Failed _, PaneState.Errored _, PaneState.Picking _, PaneState.Closed _ ->
                 CompletableFuture.completedFuture(0);
         };
         dispatch(new PaneEvent.CloseRequested());
@@ -133,6 +144,16 @@ public final class PaneController {
     /** 지금 놓인 위젯(테스트용). */
     TanagerTermWidget widget() {
         return widget;
+    }
+
+    /** 셸 선택 화면(테스트용 — 키 바인딩을 실행하려고). */
+    JComponent picker() {
+        return picker;
+    }
+
+    /** 종료 띠 · 실패 화면(테스트용 — 키 바인딩을 실행하려고). */
+    JComponent notice() {
+        return notice;
     }
 
     private static CompletionStage<Integer> closeAndAwait(Optional<TerminalStream> started) {
@@ -162,7 +183,20 @@ public final class PaneController {
                 dispose();
                 host.removed();
             }
+            case PaneEffect.ListShells _ -> listShells();
         }
+    }
+
+    private void listShells() {
+        background.execute(() -> {
+            try {
+                List<ShellProfile> shells = profiles.list();
+                ui.execute(() -> dispatch(new PaneEvent.ShellsListed(shells)));
+            } catch (RuntimeException e) {
+                // 목록을 못 읽으면 선택 화면을 열지 않는다 — 지금 화면에서 Enter · Esc 는 그대로 쓸 수 있다
+                LOG.log(System.Logger.Level.WARNING, "셸 목록을 읽지 못했다", e);
+            }
+        });
     }
 
     private void launch(Attempt attempt) {
@@ -208,8 +242,10 @@ public final class PaneController {
 
     private Result<StartedSession, StartFailure> start(Attempt attempt, TerminalSize size) {
         return switch (attempt) {
-            case Attempt.Fresh _ -> sessions.start(new StartRequest(Optional.empty(), Optional.empty(), size));
+            case Attempt.Fresh _ -> sessions.start(StartRequest.remembered(size));
             case Attempt.Restart(var exited) -> sessions.restart(exited, size);
+            case Attempt.Chosen(ShellProfile profile, boolean remember) ->
+                sessions.start(StartRequest.chosen(profile.id(), remember, size));
         };
     }
 
@@ -219,6 +255,7 @@ public final class PaneController {
         widgetConnected = true;
         // setTtyConnector 가 현재 위젯 크기로 PTY 크기를 한 번 맞춘다(TerminalPanel.setTerminalStarter → postResize)
         widget.setTtyConnector(connector);
+        widget.getTerminalPanel().setFocusable(true);
         widget.start();
         session.stream().start();
         session.exited().whenComplete((exited, error) -> {
@@ -252,16 +289,27 @@ public final class PaneController {
                 notice.screen(view.overlay().orElse(""), view.hint().orElse(""));
                 body.add(notice, BorderLayout.CENTER);
             }
-            case PaneState.Launching _, PaneState.Running _, PaneState.Closed _ ->
+            case PaneState.Picking picking -> {
+                // 위젯은 빼기만 하고 닫지 않는다 — Esc 로 돌아오면 끝난 출력과 함께 다시 놓는다
+                picker.render(PickerView.of(picking));
+                body.add(picker, BorderLayout.CENTER);
+            }
+            case PaneState.Launching _ -> {
+                // 연결 전에는 포커스를 받지 않는다 — 선택 화면에서 누른 키(숫자 · Enter)의 글자가 새 터미널로 새지 않게.
+                // connect 에서 다시 켠다
+                widget.getTerminalPanel().setFocusable(false);
                 body.add(widget, BorderLayout.CENTER);
+            }
+            case PaneState.Running _, PaneState.Closed _ -> body.add(widget, BorderLayout.CENTER);
         }
         body.revalidate();
         body.repaint();
-        if (state instanceof PaneState.Exited
-                || state instanceof PaneState.Failed
-                || state instanceof PaneState.Errored) {
-            // 배치가 끝난 뒤에 포커스를 옮긴다
-            ui.execute(notice::requestFocusInWindow);
+        // 배치가 끝난 뒤에 포커스를 옮긴다
+        switch (state) {
+            case PaneState.Exited _, PaneState.Failed _, PaneState.Errored _ ->
+                ui.execute(notice::requestFocusInWindow);
+            case PaneState.Picking _ -> ui.execute(picker::requestFocusInWindow);
+            case PaneState.Launching _, PaneState.Running _, PaneState.Closed _ -> {}
         }
     }
 
@@ -275,6 +323,14 @@ public final class PaneController {
 
         bind(KeyStroke.getKeyStroke("ENTER"), ENTER, () -> dispatch(new PaneEvent.EnterPressed()));
         bind(KeyStroke.getKeyStroke("ESCAPE"), ESCAPE, () -> dispatch(new PaneEvent.EscPressed()));
+        // Tab 은 포커스를 가진 띠에만 묶는다 — 실행 중 셸의 Tab(자동 완성)을 가로채지 않는다
+        notice.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke("TAB"), TAB);
+        notice.getActionMap().put(TAB, new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                dispatch(new PaneEvent.TabPressed());
+            }
+        });
         notice.addMouseListener(new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
@@ -320,7 +376,7 @@ public final class PaneController {
         return messages;
     }
 
-    /** 종료 띠(터미널 아래 한 줄) 또는 실패 화면(본문 전체). Enter · Esc 를 받으려고 포커스를 가진다. */
+    /** 종료 띠(터미널 아래 한 줄) 또는 실패 화면(본문 전체). Enter · Tab · Esc 를 받으려고 포커스를 가진다. */
     private static final class Notice extends JPanel {
         private final JTextArea message = new JTextArea();
         private final JLabel hint = new JLabel();
@@ -328,6 +384,8 @@ public final class PaneController {
         Notice() {
             super(new BorderLayout(0, 8));
             setFocusable(true);
+            // Tab 이 포커스 이동으로 먹히지 않고 키 바인딩에 오게 한다
+            setFocusTraversalKeysEnabled(false);
             setBackground(ThemeColors.get(ColorToken.HEADER));
             message.setEditable(false);
             message.setFocusable(false);

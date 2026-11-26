@@ -5,6 +5,7 @@ import dev.tanager.application.port.in.ListProfilesUseCase;
 import dev.tanager.application.port.in.StartSessionUseCase;
 import dev.tanager.application.port.out.PlatformModule;
 import dev.tanager.application.port.out.PtyLauncher;
+import dev.tanager.application.service.DefaultProfileMemory;
 import dev.tanager.application.service.ProfileCatalog;
 import dev.tanager.application.service.SessionStarter;
 import java.util.Objects;
@@ -34,6 +35,7 @@ record Assembly(ListProfilesUseCase profiles, StartSessionUseCase sessions) {
         });
         JsonConfigRepository config =
                 new JsonConfigRepository(platform.dirs().appData().resolve(CONFIG_FILE));
-        return new Assembly(catalog, new SessionStarter(catalog, config, platform, launcher));
+        return new Assembly(
+                catalog, new SessionStarter(catalog, config, platform, launcher, new DefaultProfileMemory(config)));
     }
 }

@@ -58,3 +58,22 @@ JediTerm 3.76 소스에서 확인한 사실:
   - `setTtyConnector` 가 초기 크기 동기화를 한 번 하므로, Connect 뒤 따로 resize 하지 않는다.
   - 백그라운드 `start` 가 계약을 어기고 예외를 던지면 ui 쪽 사건(`StartErrored`)으로 바꿔 "Enter 다시 시도" 화면을 띄운다(application 포트는 그대로).
   - 앱 종료 대기는 4초다. pty 어댑터의 close 유예(3초 뒤 남은 자손 강제 종료)보다 길게 잡아 강제 종료 경로까지 덮는다. 루트가 유예 안에 끝나면 어댑터의 자손 정리(가상 스레드)가 `System.exit` 와 경합할 수 있다 — 포트에 "정리 끝" 신호가 없어 남은 한계로 둔다.
+
+## 개정 (#70, 2026-11-26) — 셸 선택 화면과 Tab
+
+- 창 상태 기계에 `Picking(ShellPicker, PickerExit)` 를 더한다. 선택은 순수 값 `ShellPicker` 가 계산한다.
+  - 입력: ↑↓ · 1~9 · Enter · 클릭 · Space(기억 토글)
+  - 결과: `Attempt.Chosen(profile, remember)` 으로 Launching
+  - Swing 쪽 `ShellPickerPanel` 은 그리기와 입력 전달만 한다.
+- 사건 `TabPressed` · `PickerInput(PickerKey)` · `ShellsListed`, 효과 `ListShells` 를 더한다.
+  셸 목록(`ListProfilesUseCase.list`)은 첫 호출이 블로킹이라 EDT 에서 부르지 않는다. 효과 → 백그라운드 → 사건으로 받는다.
+- 종료 띠: "종료 코드 N · Enter 다시 시작 · **Tab 다른 셸** · Esc 닫기". 다시 시도할 수 있는 실패 화면(기동 실패 · 예외)에도 Tab 을 둔다.
+  기억한 셸이 계속 실패해도 config 를 고치지 않고 빠져나올 수 있게 하려는 것이다. 셸이 없음 · 요청 거부 화면에는 Tab 이 없다.
+- Esc
+  - 시작 때 연 선택 화면: 창 닫기. 마지막 창이면 확인 없이 앱을 끝낸다(띄운 셸이 없어 잃을 것이 없다).
+  - Tab 으로 연 선택 화면: 이전 상태(종료 띠 · 실패 화면)로 돌아간다. 끝난 위젯과 출력도 그대로 보인다.
+- 고른 셸은 그 셸의 시작 경로에서 새 위젯으로 띄운다. 마지막 경로에서 다시 띄우는 것은 Enter(restart)뿐이다.
+- 키 바인딩
+  - 새 키(Tab, 선택 화면 키)는 포커스를 가진 안내 띠 · 선택 화면 컴포넌트에 WHEN_FOCUSED 로 묶는다. 실행 중 셸의 Tab · 숫자 · 화살표를 가로채지 않게 하려는 것이다.
+  - 두 컴포넌트는 `setFocusTraversalKeysEnabled(false)` 로 Swing 포커스 이동이 Tab 을 먹지 않게 한다.
+- 고른 뒤 `start` 가 config 를 다시 읽어 같은 설정 경고가 두 번 올 수 있다. 상태줄은 같은 문장을 한 번만 쌓는다.

@@ -3,11 +3,14 @@ package dev.tanager.ui.pane;
 import dev.tanager.application.port.in.StartFailure;
 import dev.tanager.application.port.in.StartNotice;
 import dev.tanager.application.port.in.StartedSession;
+import dev.tanager.domain.session.ProfileId;
 import dev.tanager.domain.session.SessionState;
+import dev.tanager.domain.session.ShellProfile;
 import dev.tanager.domain.session.TerminalSession;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * 터미널 창 하나의 화면 상태(Swing 없는 순수 상태 기계, ADR-0011). 해당 없는 사건은 상태 그대로 · 효과 없음이다. 단 기동 중이 아닐 때
@@ -29,7 +32,7 @@ sealed interface PaneState {
         }
     }
 
-    /** 셸이 끝났다. Enter 로 다시 띄우고 Esc 로 닫는다. */
+    /** 셸이 끝났다. Enter 로 다시 띄우고 Tab 으로 다른 셸을 고르고 Esc 로 닫는다. */
     record Exited(TerminalSession session) implements PaneState {
         public Exited {
             Objects.requireNonNull(session, "session");
@@ -39,18 +42,21 @@ sealed interface PaneState {
         }
     }
 
-    /** 띄우지 못했다. 다시 시도할 수 있으면 {@code retry} 로 띄운다. */
+    /** 띄우지 못했다. 다시 시도할 수 있으면 {@code retry} 로 띄운다. 선택이 필요하다는 결과는 {@link Picking} 이 된다. */
     record Failed(StartFailure failure, Attempt retry) implements PaneState {
         public Failed {
             Objects.requireNonNull(failure, "failure");
             Objects.requireNonNull(retry, "retry");
+            if (failure instanceof StartFailure.ChoiceRequired) {
+                throw new IllegalArgumentException("선택이 필요하다는 결과는 선택 화면이 된다");
+            }
         }
 
         /** 셸이 하나도 없거나 요청이 규칙에 맞지 않으면 다시 해도 같다. */
         boolean retryable() {
             return switch (failure) {
                 case StartFailure.LaunchFailed _ -> true;
-                case StartFailure.NoShellAvailable _, StartFailure.Rejected _ -> false;
+                case StartFailure.NoShellAvailable _, StartFailure.Rejected _, StartFailure.ChoiceRequired _ -> false;
             };
         }
     }
@@ -60,6 +66,14 @@ sealed interface PaneState {
         public Errored {
             Objects.requireNonNull(detail, "detail");
             Objects.requireNonNull(retry, "retry");
+        }
+    }
+
+    /** 셸 선택 화면. 고르면 그 셸을 띄우고 Esc 는 {@code exit} 를 따른다. */
+    record Picking(ShellPicker picker, PickerExit exit) implements PaneState {
+        public Picking {
+            Objects.requireNonNull(picker, "picker");
+            Objects.requireNonNull(exit, "exit");
         }
     }
 
@@ -77,6 +91,7 @@ sealed interface PaneState {
             case Exited exited -> exited(exited, event);
             case Failed failed -> failed(failed, event);
             case Errored errored -> errored(errored, event);
+            case Picking picking -> picking(picking, event);
             case Closed closed -> Transition.stay(closed);
         };
     }
@@ -89,6 +104,12 @@ sealed interface PaneState {
                 addNotices(effects, session.notices());
                 yield new Transition(new Running(session), effects);
             }
+            case PaneEvent.StartFailed(StartFailure.ChoiceRequired required) -> {
+                List<PaneEffect> effects = new ArrayList<>();
+                addNotices(effects, required.notices());
+                Picking picking = new Picking(ShellPicker.atStartup(required.choice()), new PickerExit.CloseWindow());
+                yield new Transition(picking, effects);
+            }
             case PaneEvent.StartFailed(StartFailure failure) -> {
                 List<PaneEffect> effects = new ArrayList<>();
                 if (failure instanceof StartFailure.LaunchFailed launchFailed) {
@@ -98,7 +119,12 @@ sealed interface PaneState {
             }
             case PaneEvent.StartErrored(String detail) -> Transition.stay(new Errored(detail, state.attempt()));
             case PaneEvent.CloseRequested _ -> Transition.stay(new Closed());
-            case PaneEvent.ShellExited _, PaneEvent.EnterPressed _, PaneEvent.EscPressed _ -> Transition.stay(state);
+            case PaneEvent.ShellExited _,
+                    PaneEvent.EnterPressed _,
+                    PaneEvent.EscPressed _,
+                    PaneEvent.TabPressed _,
+                    PaneEvent.PickerInput _,
+                    PaneEvent.ShellsListed _ -> Transition.stay(state);
         };
     }
 
@@ -113,7 +139,10 @@ sealed interface PaneState {
                     PaneEvent.StartFailed _,
                     PaneEvent.StartErrored _,
                     PaneEvent.EnterPressed _,
-                    PaneEvent.EscPressed _ -> Transition.stay(state);
+                    PaneEvent.EscPressed _,
+                    PaneEvent.TabPressed _,
+                    PaneEvent.PickerInput _,
+                    PaneEvent.ShellsListed _ -> Transition.stay(state);
         };
     }
 
@@ -125,8 +154,14 @@ sealed interface PaneState {
             }
             case PaneEvent.EscPressed _ -> new Transition(new Closed(), List.of(new PaneEffect.RemovePane()));
             case PaneEvent.CloseRequested _ -> Transition.stay(new Closed());
-            case PaneEvent.Started _, PaneEvent.StartFailed _, PaneEvent.StartErrored _, PaneEvent.ShellExited _ ->
-                Transition.stay(state);
+            case PaneEvent.TabPressed _ -> listShells(state);
+            case PaneEvent.ShellsListed(List<ShellProfile> shells) ->
+                reopen(state, shells, Optional.of(state.session().profile().id()));
+            case PaneEvent.Started _,
+                    PaneEvent.StartFailed _,
+                    PaneEvent.StartErrored _,
+                    PaneEvent.ShellExited _,
+                    PaneEvent.PickerInput _ -> Transition.stay(state);
         };
     }
 
@@ -138,8 +173,15 @@ sealed interface PaneState {
                         : Transition.stay(state);
             case PaneEvent.EscPressed _ -> new Transition(new Closed(), List.of(new PaneEffect.RemovePane()));
             case PaneEvent.CloseRequested _ -> Transition.stay(new Closed());
-            case PaneEvent.Started _, PaneEvent.StartFailed _, PaneEvent.StartErrored _, PaneEvent.ShellExited _ ->
-                Transition.stay(state);
+            // 셸이 없음 · 요청 거부는 다른 셸을 골라도 나아지지 않는다
+            case PaneEvent.TabPressed _ -> state.retryable() ? listShells(state) : Transition.stay(state);
+            case PaneEvent.ShellsListed(List<ShellProfile> shells) ->
+                state.retryable() ? reopen(state, shells, failedProfile(state)) : Transition.stay(state);
+            case PaneEvent.Started _,
+                    PaneEvent.StartFailed _,
+                    PaneEvent.StartErrored _,
+                    PaneEvent.ShellExited _,
+                    PaneEvent.PickerInput _ -> Transition.stay(state);
         };
     }
 
@@ -149,9 +191,60 @@ sealed interface PaneState {
                 new Transition(new Launching(state.retry()), List.of(new PaneEffect.Launch(state.retry())));
             case PaneEvent.EscPressed _ -> new Transition(new Closed(), List.of(new PaneEffect.RemovePane()));
             case PaneEvent.CloseRequested _ -> Transition.stay(new Closed());
-            case PaneEvent.Started _, PaneEvent.StartFailed _, PaneEvent.StartErrored _, PaneEvent.ShellExited _ ->
-                Transition.stay(state);
+            case PaneEvent.TabPressed _ -> listShells(state);
+            case PaneEvent.ShellsListed(List<ShellProfile> shells) ->
+                reopen(state, shells, state.retry().knownProfile().map(ShellProfile::id));
+            case PaneEvent.Started _,
+                    PaneEvent.StartFailed _,
+                    PaneEvent.StartErrored _,
+                    PaneEvent.ShellExited _,
+                    PaneEvent.PickerInput _ -> Transition.stay(state);
         };
+    }
+
+    private static Transition picking(Picking state, PaneEvent event) {
+        return switch (event) {
+            case PaneEvent.EnterPressed _ -> launch(state.picker().pickSelected());
+            case PaneEvent.PickerInput(PickerKey key) ->
+                switch (state.picker().on(key)) {
+                    case PickerStep.Stay(ShellPicker next) -> Transition.stay(new Picking(next, state.exit()));
+                    case PickerStep.Picked(Attempt.Chosen chosen) -> launch(chosen);
+                };
+            case PaneEvent.EscPressed _ ->
+                switch (state.exit()) {
+                    case PickerExit.CloseWindow _ -> new Transition(new Closed(), List.of(new PaneEffect.RemovePane()));
+                    case PickerExit.ReturnTo(PaneState previous) -> Transition.stay(previous);
+                };
+            case PaneEvent.CloseRequested _ -> Transition.stay(new Closed());
+            case PaneEvent.Started _,
+                    PaneEvent.StartFailed _,
+                    PaneEvent.StartErrored _,
+                    PaneEvent.ShellExited _,
+                    PaneEvent.TabPressed _,
+                    PaneEvent.ShellsListed _ -> Transition.stay(state);
+        };
+    }
+
+    private static Transition launch(Attempt attempt) {
+        return new Transition(new Launching(attempt), List.of(new PaneEffect.Launch(attempt)));
+    }
+
+    private static Transition listShells(PaneState state) {
+        return new Transition(state, List.of(new PaneEffect.ListShells()));
+    }
+
+    // 목록은 Tab 을 누른 상태에 그대로 있을 때만 쓴다. 그사이 다른 상태가 됐으면 그 상태가 무시한다
+    private static Transition reopen(PaneState previous, List<ShellProfile> shells, Optional<ProfileId> current) {
+        if (shells.isEmpty()) {
+            return Transition.stay(previous);
+        }
+        return Transition.stay(new Picking(ShellPicker.reopened(shells, current), new PickerExit.ReturnTo(previous)));
+    }
+
+    private static Optional<ProfileId> failedProfile(Failed state) {
+        return state.failure() instanceof StartFailure.LaunchFailed launch
+                ? Optional.of(launch.failed().profile().id())
+                : Optional.empty();
     }
 
     private static void addNotices(List<PaneEffect> effects, List<StartNotice> notices) {

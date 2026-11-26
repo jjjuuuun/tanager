@@ -1,6 +1,7 @@
 package dev.tanager.application.port.in;
 
 import dev.tanager.application.port.out.LaunchError;
+import dev.tanager.domain.session.ProfileResolution;
 import dev.tanager.domain.session.SessionError;
 import dev.tanager.domain.session.SessionState;
 import dev.tanager.domain.session.TerminalSession;
@@ -34,6 +35,19 @@ public sealed interface StartFailure {
             if (!(failed.state() instanceof SessionState.Failed)) {
                 throw new IllegalArgumentException("기동 실패 세션은 Failed 여야 한다: " + failed.state());
             }
+            notices = List.copyOf(notices);
+        }
+    }
+
+    /**
+     * 띄울 셸을 정하지 못해 아무것도 띄우지 않았다 — 사용자가 {@code choice.choices()} 에서 골라야 한다(FR-SES-02).
+     *
+     * @param choice 고를 목록과 사라진 기본 id
+     * @param notices 그때까지 모인 알림(설정을 읽지 못함 · 설정 경고)
+     */
+    record ChoiceRequired(ProfileResolution.Choose choice, List<StartNotice> notices) implements StartFailure {
+        public ChoiceRequired {
+            Objects.requireNonNull(choice, "choice");
             notices = List.copyOf(notices);
         }
     }
