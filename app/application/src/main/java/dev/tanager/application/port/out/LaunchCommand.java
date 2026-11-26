@@ -4,7 +4,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -74,20 +73,33 @@ public record LaunchCommand(
         return Collections.unmodifiableMap(merged);
     }
 
+    // merged 는 environmentOver 안에서만 쓰는 지역 맵이다
     private void override(Map<String, String> merged, String name, String value) {
-        switch (envNames) {
+        boolean ignoreCase = switch (envNames) {
+            case CASE_INSENSITIVE -> true;
+            case CASE_SENSITIVE -> false;
+        };
+        if (ignoreCase) {
             // 대소문자만 다른 이름이 둘 남으면 자식 프로세스가 어느 쪽을 볼지 알 수 없다 — 덮는 이름 하나만 남긴다
-            case CASE_INSENSITIVE -> merged.keySet().removeIf(name::equalsIgnoreCase);
-            case CASE_SENSITIVE -> {}
+            String key = nameKey(name);
+            merged.keySet().removeIf(existing -> nameKey(existing).equals(key));
         }
         merged.put(name, value);
+    }
+
+    // Windows 는 환경 변수 이름을 글자마다 단순 대문자 표로 비교한다(RtlUpcaseUnicodeChar). 로캘 · 특수 대소문자(ß → SS,
+    // İ → i̇)를 쓰지 않으려고 코드 포인트마다 Character.toUpperCase 를 쓴다 — 생성 검사와 병합이 같은 키를 쓴다.
+    private static String nameKey(String name) {
+        StringBuilder key = new StringBuilder(name.length());
+        name.codePoints().map(Character::toUpperCase).forEach(key::appendCodePoint);
+        return key.toString();
     }
 
     // 대소문자를 무시하는 OS 에서 PATH 와 Path 를 함께 주면 어느 쪽이 이길지 정할 수 없다(Map.copyOf 순서는 정해져 있지 않다)
     private static void requireNoCaseCollision(Map<String, String> environment) {
         Set<String> seen = new HashSet<>();
         for (String name : environment.keySet()) {
-            if (!seen.add(name.toUpperCase(Locale.ROOT))) {
+            if (!seen.add(nameKey(name))) {
                 throw new IllegalArgumentException("대소문자만 다른 환경 변수 이름이 있다: " + name);
             }
         }

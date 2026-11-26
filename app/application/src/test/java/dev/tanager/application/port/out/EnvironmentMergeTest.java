@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import dev.tanager.application.port.out.LaunchCommand.EnvNames;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import net.jqwik.api.Arbitraries;
@@ -33,6 +34,33 @@ class EnvironmentMergeTest {
         assertThat(merged).containsEntry("PATH", "B").doesNotContainKey("Path");
         assertThat(merged.keySet().stream().filter(k -> k.equalsIgnoreCase("path")))
                 .hasSize(1);
+    }
+
+    @Test
+    @DisplayName("대소문자 무시: 상속에 Path 와 PATH 가 함께 있어도 path 로 덮으면 하나만 남는다")
+    void caseInsensitiveDropsEveryDifferentlyCasedInheritedKey() {
+        // given
+        Map<String, String> inherited = Map.of("Path", "A", "PATH", "B");
+        // when
+        Map<String, String> merged =
+                command(EnvNames.CASE_INSENSITIVE, Map.of("path", "C")).environmentOver(inherited);
+        // then
+        assertThat(merged.keySet().stream().filter(k -> k.equalsIgnoreCase("path")))
+                .containsExactly("path");
+        assertThat(merged).containsEntry("path", "C");
+    }
+
+    @Test
+    @DisplayName("대소문자 비교는 Windows 처럼 글자마다 단순 대문자로 한다 — İ/i · 켈빈 K/K · ß/SS 는 서로 다른 이름이고 검사와 병합이 같게 판정한다")
+    void caseFoldingIsPerCharacterSimpleUppercase() {
+        for (Map<String, String> pair : List.of(
+                Map.of("\u0130", "1", "i", "2"), Map.of("\u212A", "1", "K", "2"), Map.of("\u00DF", "1", "SS", "2"))) {
+            // when: 생성자가 받아 주고
+            LaunchCommand command = command(EnvNames.CASE_INSENSITIVE, pair);
+            // then: 병합도 둘 다 남긴다
+            Map<String, String> merged = command.environmentOver(Map.of());
+            pair.forEach((name, value) -> assertThat(merged).as(name).containsEntry(name, value));
+        }
     }
 
     @Test
@@ -133,19 +161,25 @@ class EnvironmentMergeTest {
     }
 
     @Property
-    @Label("대소문자 무시 병합 결과에는 대소문자만 다른 이름이 둘 이상 없고 덮어쓴 값이 항상 이긴다")
-    void caseInsensitiveResultHasNoDuplicateNames(
-            // 상속 환경에 이미 있는 대소문자 쌍은 덮지 않으면 그대로 둔다(검증하지 않는다) — 병합이 새로 만들지 않는지만 본다
-            @ForAll("caseDistinctVariables") Map<String, String> inherited,
+    @Label("대소문자 무시 병합: environment 의 이름마다 결과에 대소문자 무시로 맞는 키가 정확히 하나이고 그 값이며, 덮지 않은 상속 키는 그대로다")
+    void caseInsensitiveResultHasExactlyOneKeyPerOverride(
+            @ForAll("variables") Map<String, String> inherited,
             @ForAll("caseDistinctVariables") Map<String, String> environment) {
+        // when
         Map<String, String> merged =
                 command(EnvNames.CASE_INSENSITIVE, environment).environmentOver(inherited);
-
-        long distinct =
-                merged.keySet().stream().map(String::toUpperCase).distinct().count();
-        assertThat(distinct).isEqualTo(merged.size());
+        // then
         environment.forEach((name, value) -> {
-            if (!name.equalsIgnoreCase("TERM")) {
+            List<String> same = merged.keySet().stream()
+                    .filter(k -> k.toUpperCase(Locale.ROOT).equals(name.toUpperCase(Locale.ROOT)))
+                    .toList();
+            assertThat(same).as(name).containsExactly(name);
+            assertThat(merged).containsEntry(name, value);
+        });
+        inherited.forEach((name, value) -> {
+            boolean overridden = name.equalsIgnoreCase("TERM")
+                    || environment.keySet().stream().anyMatch(n -> n.equalsIgnoreCase(name));
+            if (!overridden) {
                 assertThat(merged).containsEntry(name, value);
             }
         });
