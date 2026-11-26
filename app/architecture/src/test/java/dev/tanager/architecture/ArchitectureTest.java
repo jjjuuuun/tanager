@@ -78,6 +78,20 @@ class ArchitectureTest {
     }
 
     @Test
+    @DisplayName("application 패키지 사이에 순환 의존이 없다(이미 있는 port.out → platform 간선 제외)")
+    void applicationPackagesAreFreeOfCycles() {
+        ArchitectureRules.applicationPackagesAreFreeOfCycles(BASE).check(production);
+    }
+
+    @Test
+    @DisplayName("ui 는 application.state 를 직접 쓰지 않고 포트만 쓴다")
+    void uiUsesOnlyApplicationPorts() {
+        ArchitectureRules.uiUsesOnlyApplicationPorts(BASE)
+                .allowEmptyShould(true)
+                .check(production);
+    }
+
+    @Test
     void platformsAreIndependent() {
         ArchitectureRules.platformsAreIndependent(BASE).allowEmptyShould(true).check(production);
     }

@@ -102,6 +102,32 @@ final class ArchitectureRules {
                 .because("컨텍스트 의존은 한 방향이다 — session → history, history 는 session 을 import 하지 않는다");
     }
 
+    /**
+     * application 의 패키지(port.in · port.out · state · service …, 하위 패키지마다 한 조각)끼리 순환 의존하지 않는다. 이미 있는
+     * port.out → platform 간선({@code PlatformModule} → {@code OperatingSystem}, platform 의 {@code PlatformSelection} 이
+     * port.out 을 쓴다)은 따로 정리할 때까지 뺀다.
+     */
+    static ArchRule applicationPackagesAreFreeOfCycles(String base) {
+        return slices().matching(base + ".application.(**)")
+                .should()
+                .beFreeOfCycles()
+                .ignoreDependency(
+                        resideInAPackage(base + ".application.port.out.."),
+                        resideInAPackage(base + ".application.platform.."))
+                .because("state 는 포트를 알고 포트는 state 를 모른다 — 의존은 한 방향(ADR-0012)");
+    }
+
+    /** ui 는 application 의 포트만 쓴다. StateActor 같은 구현은 bootstrap 이 조립해 포트로 넘긴다(ADR-0012). */
+    static ArchRule uiUsesOnlyApplicationPorts(String base) {
+        return noClasses()
+                .that()
+                .resideInAPackage(base + ".ui..")
+                .should()
+                .dependOnClassesThat()
+                .resideInAPackage(base + ".application.state..")
+                .because("ui 는 application.port 만 본다 — 상태 변경 경로는 포트 하나로 모은다");
+    }
+
     /** OS 별 플랫폼 모듈끼리는 서로 모른다(macOS 추가 시 다른 모듈을 바꾸지 않기 위해, NFR-04). */
     static ArchRule platformsAreIndependent(String base) {
         return slices().matching(base + ".platform.(*)..").should().notDependOnEachOther();

@@ -84,6 +84,44 @@ class ArchitectureRulesSelfTest {
     }
 
     @Test
+    void applicationCycleRuleCatchesPortAndStateDependingOnEachOther() {
+        // when
+        EvaluationResult result =
+                ArchitectureRules.applicationPackagesAreFreeOfCycles(FIXTURE).evaluate(fixtures);
+
+        // then
+        assertThat(result.hasViolation()).isTrue();
+        assertThat(result.getFailureReport().getDetails())
+                .anyMatch(d -> d.contains("EventsFromState") && d.contains("StateEvent"));
+    }
+
+    @Test
+    void applicationCycleRuleAllowsOneWayAndKnownPlatformEdge() {
+        // when
+        List<String> details = ArchitectureRules.applicationPackagesAreFreeOfCycles(FIXTURE)
+                .evaluate(fixtures)
+                .getFailureReport()
+                .getDetails();
+
+        // then
+        assertThat(details).as("service → port.in 한 방향").noneMatch(d -> d.contains("OneWayService"));
+        assertThat(details).as("뺀 간선 port.out → platform").noneMatch(d -> d.contains("FixtureOs"));
+    }
+
+    @Test
+    void uiStateRuleCatchesUiUsingStateButAllowsPorts() {
+        // when
+        EvaluationResult result =
+                ArchitectureRules.uiUsesOnlyApplicationPorts(FIXTURE).evaluate(fixtures);
+
+        // then
+        assertThat(result.hasViolation()).isTrue();
+        assertThat(result.getFailureReport().getDetails())
+                .anyMatch(d -> d.contains("TouchesState") && d.contains("StateEvent"))
+                .noneMatch(d -> d.contains("UsesPort"));
+    }
+
+    @Test
     void platformIndependenceCatchesCrossPlatformUse() {
         EvaluationResult result =
                 ArchitectureRules.platformsAreIndependent(FIXTURE).evaluate(fixtures);
