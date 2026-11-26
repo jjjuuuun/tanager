@@ -126,6 +126,13 @@ class JsonStateRepositoryTest {
                 + " \"sources\": [\"shell\"] }";
     }
 
+    private static String entryWithSources(String path, Optional<String> sources) {
+        return "{ \"env\": { \"kind\": \"windows\" }, \"path\": " + JSON.writeValueAsString(path)
+                + ", \"firstVisited\": \"2026-11-21T01:00:00Z\", \"lastVisited\": \"2026-11-23T08:30:00Z\","
+                + " \"visitCount\": 3, \"pinned\": false, \"alias\": null, \"hidden\": false"
+                + sources.map(json -> ", \"sources\": " + json).orElse("") + " }";
+    }
+
     private static String stateWith(String... entries) {
         return "{ \"schemaVersion\": 1, \"history\": { \"entries\": [" + String.join(",", entries) + "] } }";
     }
@@ -411,6 +418,152 @@ class JsonStateRepositoryTest {
                 .isEqualTo(fixture("v1-corrupt.json"));
     }
 
+    @Test
+    @DisplayName(".bak 으로 복구하면 state.json 을 .bak 내용으로 되돌려 써서, 저장 없이 닫아도 다음 실행이 같은 이력을 읽는다")
+    void recoveryRestoresStateFileSoNextRunWithoutSaveKeepsHistory() throws IOException {
+        // given
+        write(file(), fixture("v1-corrupt.json"));
+        write(dir.resolve("state.json.bak"), fixture("v1-history.json"));
+        JsonStateRepository run1 = repository();
+        loaded(run1.load());
+        run1.close();
+
+        // when
+        LoadedHistory run2 = loaded(repository().load());
+
+        // then
+        assertThat(run2.history().entries()).hasSize(2);
+        assertThat(run2.notices()).isEmpty();
+        assertThat(run2.access()).isEqualTo(StoreAccess.WRITABLE);
+    }
+
+    @Test
+    @DisplayName(".bak 으로 복구하고 저장한 뒤 다음 실행이 다시 저장해도 원래 이력은 state.json 과 .bak 에 남는다")
+    void recoveredHistorySurvivesSaveAndNextRunSave() throws IOException {
+        // given
+        write(file(), fixture("v1-corrupt.json"));
+        write(dir.resolve("state.json.bak"), fixture("v1-history.json"));
+        JsonStateRepository run1 = repository();
+        LoadedHistory recovered = loaded(run1.load());
+        run1.save(recovered.history().recordVisit(path(WINDOWS, "C:\\work\\first"), NOW));
+        run1.close();
+
+        // when
+        JsonStateRepository run2 = repository();
+        LoadedHistory second = loaded(run2.load());
+        run2.save(second.history().recordVisit(path(WINDOWS, "C:\\work\\second"), NOW));
+        run2.close();
+
+        // then
+        WorkspacePath tanager = path(UBUNTU, "/mnt/c/Users/user/Desktop/Tanager");
+        WorkspacePath infra = path(WINDOWS, "C:\\work\\infra");
+        WorkHistory inState = loaded(repository().load()).history();
+        Path copy = Files.createDirectories(dir.resolve("copy")).resolve("state.json");
+        Files.copy(dir.resolve("state.json.bak"), copy);
+        WorkHistory inBackup = loaded(repositoryAt(copy).load()).history();
+        assertThat(inState.entries()).containsKeys(tanager, infra);
+        assertThat(inBackup.entries()).containsKeys(tanager, infra);
+    }
+
+    @Test
+    @DisplayName(".bak 으로 복구하면서 state.json 을 되돌려 쓰지 못하면 Io 오류이고 손상 원본을 제자리로 돌려 놓는다")
+    void recoveryRestoreFailureMovesCorruptOriginalBack() throws IOException {
+        // given
+        write(file(), fixture("v1-corrupt.json"));
+        write(dir.resolve("state.json.bak"), fixture("v1-history.json"));
+        // state.json 의 임시 파일 자리를 비어 있지 않은 폴더로 막아 되돌려 쓰기를 실패시킨다
+        Path blocker = Files.createDirectories(dir.resolve("state.json.tmp"));
+        Files.writeString(blocker.resolve("keep"), "x");
+        JsonStateRepository repository = repository();
+
+        // when
+        Result<LoadedHistory, HistoryStoreError> result = repository.load();
+
+        // then
+        assertThat(result.error()).containsInstanceOf(HistoryStoreError.Io.class);
+        assertThat(Files.readString(file(), StandardCharsets.UTF_8)).isEqualTo(fixture("v1-corrupt.json"));
+        assertThat(Files.readString(dir.resolve("state.json.bak"), StandardCharsets.UTF_8))
+                .isEqualTo(fixture("v1-history.json"));
+        assertThat(corruptFiles()).isEmpty();
+        assertThat(repository.save(historyOf("C:\\new")).error()).containsInstanceOf(HistoryStoreError.ReadOnly.class);
+    }
+
+    @Test
+    @DisplayName("되돌려 쓰기도 손상 원본 돌려 놓기도 실패하면 Io 오류이고 .bak 과 옮긴 손상 원본은 그대로 남는다")
+    void recoveryRestoreAndMoveBackFailureKeepsBackupAndCorruptCopy() throws IOException {
+        // given
+        write(file(), fixture("v1-corrupt.json"));
+        write(dir.resolve("state.json.bak"), fixture("v1-history.json"));
+        Path blocker = Files.createDirectories(dir.resolve("state.json.tmp"));
+        Files.writeString(blocker.resolve("keep"), "x");
+        List<Path> moves = new ArrayList<>();
+        JsonStateRepository repository = repositoryMovingWith((from, to) -> {
+            moves.add(to);
+            if (moves.size() > 1) {
+                throw new IOException("돌려 놓기 거부");
+            }
+            Files.move(from, to);
+        });
+
+        // when
+        Result<LoadedHistory, HistoryStoreError> result = repository.load();
+
+        // then
+        assertThat(result.error()).containsInstanceOf(HistoryStoreError.Io.class);
+        assertThat(Files.readString(dir.resolve("state.json.bak"), StandardCharsets.UTF_8))
+                .isEqualTo(fixture("v1-history.json"));
+        assertThat(Files.readString(dir.resolve("state.json.corrupt-20261126T010203Z"), StandardCharsets.UTF_8))
+                .isEqualTo(fixture("v1-corrupt.json"));
+        assertThat(repository.save(historyOf("C:\\new")).error()).containsInstanceOf(HistoryStoreError.ReadOnly.class);
+    }
+
+    @Test
+    @DisplayName("손상이고 .bak 을 읽다 입출력 오류가 나면 아무것도 옮기지 않고 '.bak 을 읽지 못했다' Io 오류다")
+    void unreadableBackupIsIoAndTouchesNothing() throws IOException {
+        // given
+        write(file(), fixture("v1-corrupt.json"));
+        // .bak 자리를 폴더로 막아 읽기를 입출력 오류로 만든다
+        Files.createDirectories(dir.resolve("state.json.bak"));
+        JsonStateRepository repository = repository();
+
+        // when
+        Result<LoadedHistory, HistoryStoreError> result = repository.load();
+
+        // then
+        assertThat(result.error())
+                .get()
+                .isInstanceOfSatisfying(
+                        HistoryStoreError.Io.class,
+                        io -> assertThat(io.detail()).startsWith(".bak 을 읽지 못했다"));
+        assertThat(Files.readString(file(), StandardCharsets.UTF_8)).isEqualTo(fixture("v1-corrupt.json"));
+        assertThat(dir.resolve("state.json.bak")).isDirectory();
+        assertThat(corruptFiles()).isEmpty();
+        assertThat(repository.save(historyOf("C:\\new")).error()).containsInstanceOf(HistoryStoreError.ReadOnly.class);
+    }
+
+    @Test
+    @DisplayName("다른 인스턴스 때문에 손상 원본을 옮기지 못한 load 뒤, 쓰기 가능으로 다시 읽은 첫 저장은 .bak 을 만든다")
+    void corruptLoadWithoutMoveDoesNotSuppressLaterBackup() throws IOException {
+        // given
+        write(file(), fixture("v1-corrupt.json"));
+        JsonStateRepository repository = repository();
+        try (FileChannel other = FileChannel.open(
+                        dir.resolve("state.lock"), StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+                FileLock _ = other.lock()) {
+            assertThat(loaded(repository.load()).access()).isEqualTo(StoreAccess.READ_ONLY);
+        }
+        // 다른 인스턴스가 정상 파일을 남기고 끝났다
+        write(file(), fixture("v1-history.json"));
+        assertThat(loaded(repository.load()).access()).isEqualTo(StoreAccess.WRITABLE);
+
+        // when
+        repository.save(historyOf("C:\\new"));
+
+        // then
+        assertThat(Files.readString(dir.resolve("state.json.bak"), StandardCharsets.UTF_8))
+                .isEqualTo(fixture("v1-history.json"));
+    }
+
     // ---- 상위 버전 · 잠금 ----
 
     static Stream<Arguments> reshapedNewerFiles() {
@@ -492,6 +645,55 @@ class JsonStateRepositoryTest {
         assertThat(saved.error()).containsInstanceOf(HistoryStoreError.ReadOnly.class);
         assertThat(Files.readAllBytes(file())).isEqualTo(before);
         assertThat(dir.resolve("state.json.bak")).doesNotExist();
+    }
+
+    static Stream<Arguments> integralNewerVersions() {
+        return Stream.of(
+                Arguments.of("int 범위를 넘는 정수", "3000000000", 3_000_000_000L),
+                Arguments.of("정수 값인 소수", "2.0", 2L),
+                Arguments.of("long 범위를 넘는 정수", "100000000000000000000000000000", Long.MAX_VALUE),
+                Arguments.of("long 범위를 넘는 정수 값인 소수", "1e30", Long.MAX_VALUE));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("integralNewerVersions")
+    @DisplayName("정수 값인 schemaVersion 이 1 보다 크면 형식과 범위에 상관없이 상위 버전이다 — 읽기 전용 · 파일 그대로 · 옮기지 않음")
+    void integralVersionAboveOneIsNewerSchema(String caseName, String version, long expected) throws IOException {
+        // given
+        String content = "{ \"schemaVersion\": " + version + ", \"history\": { \"entries\": ["
+                + entryJson("{ \"kind\": \"windows\" }", "C:\\work\\infra", 5) + "] } }";
+        write(file(), content);
+        JsonStateRepository repository = repository();
+
+        // when
+        LoadedHistory result = loaded(repository.load());
+        Result<WorkHistory, HistoryStoreError> saved = repository.save(historyOf("C:\\other"));
+
+        // then
+        assertThat(result.access()).isEqualTo(StoreAccess.READ_ONLY);
+        assertThat(result.notices()).containsExactly(new HistoryLoadNotice.NewerSchema(expected));
+        assertThat(result.history().find(path(WINDOWS, "C:\\work\\infra"))).isPresent();
+        assertThat(saved.error()).containsInstanceOf(HistoryStoreError.ReadOnly.class);
+        assertThat(Files.readString(file(), StandardCharsets.UTF_8)).isEqualTo(content);
+        assertThat(corruptFiles()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("schemaVersion 1.0 은 1 로 읽고 쓰기 가능하다")
+    void integralFloatVersionOneIsCurrentSchema() throws IOException {
+        // given
+        write(
+                file(),
+                "{ \"schemaVersion\": 1.0, \"history\": { \"entries\": ["
+                        + entryJson("{ \"kind\": \"windows\" }", "C:\\work\\infra", 5) + "] } }");
+
+        // when
+        LoadedHistory result = loaded(repository().load());
+
+        // then
+        assertThat(result.access()).isEqualTo(StoreAccess.WRITABLE);
+        assertThat(result.notices()).isEmpty();
+        assertThat(result.history().entries()).hasSize(1);
     }
 
     @Test
@@ -728,6 +930,43 @@ class JsonStateRepositoryTest {
                 .isEqualTo(JSON.readTree("[\"shell\",\"claude-code\"]"));
         assertThat(entryAt(after, "C:\\work\\infra").get("sources")).isEqualTo(JSON.readTree("[\"shell\"]"));
         assertThat(entryAt(after, "C:\\work\\new").get("sources")).isEqualTo(JSON.readTree("[\"shell\"]"));
+    }
+
+    static Stream<Arguments> mergedSourcesWithMissingSide() {
+        return Stream.of(
+                Arguments.of(
+                        "앞 항목에 sources 없음",
+                        Optional.empty(),
+                        Optional.of("[\"claude-code\"]"),
+                        "[\"shell\",\"claude-code\"]"),
+                Arguments.of(
+                        "뒤 항목에 sources 없음",
+                        Optional.of("[\"claude-code\"]"),
+                        Optional.empty(),
+                        "[\"claude-code\",\"shell\"]"));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("mergedSourcesWithMissingSide")
+    @DisplayName("대소문자만 다른 항목을 합칠 때 sources 가 없는 쪽은 [shell] 로 보고 합친다")
+    void mergedSourcesTreatMissingSideAsShell(
+            String caseName, Optional<String> firstSources, Optional<String> laterSources, String expected)
+            throws IOException {
+        // given
+        write(
+                file(),
+                stateWith(entryWithSources("C:\\Work", firstSources), entryWithSources("c:\\work", laterSources)));
+        JsonStateRepository repository = repository();
+        LoadedHistory result = loaded(repository.load());
+
+        // when
+        repository.save(result.history());
+
+        // then
+        JsonNode entries =
+                JSON.readTree(Files.readAllBytes(file())).get("history").get("entries");
+        assertThat(entries).hasSize(1);
+        assertThat(entries.get(0).get("sources")).isEqualTo(JSON.readTree(expected));
     }
 
     @Test

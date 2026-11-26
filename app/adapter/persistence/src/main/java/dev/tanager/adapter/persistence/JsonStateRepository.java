@@ -42,12 +42,13 @@ import tools.jackson.databind.node.ObjectNode;
 
 /**
  * state.json 의 history 부분(ADR-0013, SDD §9.2)을 읽고 쓴다. 앱이 쓰는 파일이라 손상은 .bak → 옆으로 옮기기로 복구하고, 상위 버전 ·
- * 다른 인스턴스(state.lock)면 읽기 전용으로 연다. 저장할 때 load 때 읽은 다른 최상위 키(workspace · window …)와 항목별 sources 를 그대로
+ * 다른 인스턴스(state.lock)면 읽기 전용으로 연다. .bak 으로 복구하면 state.json 도 .bak 내용으로 되돌려 쓴다 — 저장 없이 끝나도 다음 실행이
+ * 이력을 잃지 않게. 저장할 때 load 때 읽은 다른 최상위 키(workspace · window …)와 항목별 sources 를 그대로
  * 다시 쓴다(디스크를 다시 읽지 않는다). .bak 은 인스턴스(실행)마다 첫 저장 직전에 한 번 만든다.
  */
 public final class JsonStateRepository implements HistoryRepository, AutoCloseable {
     private static final System.Logger LOG = System.getLogger(JsonStateRepository.class.getName());
-    private static final int SCHEMA_VERSION = 1;
+    private static final long SCHEMA_VERSION = 1;
 
     private static final String KEY_SCHEMA_VERSION = "schemaVersion";
     private static final String KEY_HISTORY = "history";
@@ -130,8 +131,6 @@ public final class JsonStateRepository implements HistoryRepository, AutoCloseab
             case Disk.Missing _ -> root = Optional.empty();
             case Disk.Parsed parsed -> root = Optional.of(parsed.root());
             case Disk.Corrupt corrupt -> {
-                // 손상된 파일을 .bak 으로 복사하면 좋은 백업을 잃는다
-                backupTaken = true;
                 Result<Optional<ObjectNode>, HistoryStoreError> recovered = recover(corrupt, lockState, notices);
                 if (recovered instanceof Result.Err<Optional<ObjectNode>, HistoryStoreError>(var error)) {
                     return Result.err(error);
@@ -268,7 +267,8 @@ public final class JsonStateRepository implements HistoryRepository, AutoCloseab
     private sealed interface Disk {
         record Missing() implements Disk {}
 
-        record Parsed(ObjectNode root) implements Disk {}
+        // bytes 는 .bak 으로 복구할 때 state.json 에 그대로 되돌려 쓴다
+        record Parsed(ObjectNode root, byte[] bytes) implements Disk {}
 
         record Corrupt(String detail) implements Disk {}
     }
@@ -292,22 +292,33 @@ public final class JsonStateRepository implements HistoryRepository, AutoCloseab
         }
         // 새 버전은 history 모양을 바꿀 수 있다 — 손상으로 보고 옮기면 새 버전의 파일을 망가뜨린다
         if (newerVersion(object).isPresent()) {
-            return new Disk.Parsed(object);
+            return new Disk.Parsed(object, bytes);
         }
-        return structureProblem(object).<Disk>map(Disk.Corrupt::new).orElseGet(() -> new Disk.Parsed(object));
+        return structureProblem(object).<Disk>map(Disk.Corrupt::new).orElseGet(() -> new Disk.Parsed(object, bytes));
     }
 
-    private static Optional<Integer> newerVersion(ObjectNode root) {
-        JsonNode version = root.get(KEY_SCHEMA_VERSION);
-        return version != null && version.isInt() && version.intValue() > SCHEMA_VERSION
-                ? Optional.of(version.intValue())
-                : Optional.empty();
+    private static Optional<Long> newerVersion(ObjectNode root) {
+        return Optional.ofNullable(root.get(KEY_SCHEMA_VERSION))
+                .flatMap(JsonStateRepository::integralVersion)
+                .filter(v -> v > SCHEMA_VERSION);
+    }
+
+    // 정수 값이면 형식(정수 · 2.0 같은 소수)과 범위에 상관없이 버전으로 본다 — int 만 보면 3000000000 · 2.0 인 새 버전 파일을 손상으로 옮긴다.
+    // long 을 넘는 값은 부호에 따라 Long.MAX_VALUE · MIN_VALUE 로 줄인다. 1 과 비교한 판정은 같다.
+    private static Optional<Long> integralVersion(JsonNode version) {
+        if (!version.canConvertToExactIntegral()) {
+            return Optional.empty();
+        }
+        if (version.canConvertToLong()) {
+            return Optional.of(version.longValue());
+        }
+        return Optional.of(version.bigIntegerValue().signum() > 0 ? Long.MAX_VALUE : Long.MIN_VALUE);
     }
 
     // 항목 하나가 틀린 것은 그 항목만 건너뛴다. 뼈대가 틀리면 파일 전체를 믿을 수 없다.
     private static Optional<String> structureProblem(ObjectNode root) {
         JsonNode version = root.get(KEY_SCHEMA_VERSION);
-        if (version != null && !(version.isInt() && version.intValue() >= 1)) {
+        if (version != null && integralVersion(version).filter(v -> v >= 1).isEmpty()) {
             return Optional.of("schemaVersion 이 1 이상의 정수가 아니다");
         }
         JsonNode history = root.get(KEY_HISTORY);
@@ -324,8 +335,10 @@ public final class JsonStateRepository implements HistoryRepository, AutoCloseab
         return Optional.empty();
     }
 
-    // .bak 이 정상이면 그것을 쓰고 손상 원본은 옆으로 옮긴다 — 첫 저장이 원본을 덮어쓰지 않게. .bak 도 못 쓰면 원본만 옮긴다.
-    // 잠금을 쥐지 않았으면(다른 인스턴스 · 잠금 파일 열기 실패) 아무것도 옮기지 않는다.
+    // .bak 이 정상이면 손상 원본을 옆으로 옮기고 state.json 을 .bak 내용으로 되돌려 쓴다 — 첫 저장이 원본을 덮어쓰지 않고, 저장 없이 끝나도
+    // 다음 실행이 "파일 없음"으로 빈 이력을 열지 않게. .bak 도 못 쓰면 원본만 옮긴다. .bak 을 읽다 입출력 오류가 나면 정상인지 알 수 없으니
+    // 아무것도 건드리지 않고 Io 다. 잠금을 쥐지 않았으면(다른 인스턴스 · 잠금 파일 열기 실패) 아무것도 옮기지 않는다.
+    // backupTaken 은 원본을 옮겼거나 .bak 으로 복구했을 때만 세운다 — 이번 실행의 .bak 은 이미 정해졌다.
     private Result<Optional<ObjectNode>, HistoryStoreError> recover(
             Disk.Corrupt corrupt, LockState lockState, List<HistoryLoadNotice> notices) {
         LOG.log(System.Logger.Level.WARNING, "이력 파일이 손상됐다: {0} ({1})", file, corrupt.detail());
@@ -333,42 +346,72 @@ public final class JsonStateRepository implements HistoryRepository, AutoCloseab
         try {
             fallback = read(backup);
         } catch (IOException e) {
-            LOG.log(System.Logger.Level.WARNING, "이력 백업을 읽지 못했다: {0}", backup);
-            fallback = new Disk.Missing();
+            return Result.err(new HistoryStoreError.Io(".bak 을 읽지 못했다 " + backup + ": " + e));
         }
-        boolean mayMove = lockState instanceof LockState.Held;
-        Optional<String> moved = Optional.empty();
-        if (mayMove) {
-            try {
-                moved = Optional.of(moveAside());
-            } catch (IOException e) {
-                return Result.err(new HistoryStoreError.Io("손상된 이력 파일을 옮기지 못했다 " + file + ": " + e));
+        if (!(lockState instanceof LockState.Held)) {
+            if (fallback instanceof Disk.Parsed parsed) {
+                backupTaken = true;
+                notices.add(new HistoryLoadNotice.RecoveredFromBackup(Optional.empty()));
+                return Result.ok(Optional.of(parsed.root()));
             }
+            return Result.ok(Optional.empty());
         }
-        if (fallback instanceof Disk.Parsed(ObjectNode root)) {
-            notices.add(new HistoryLoadNotice.RecoveredFromBackup(moved));
-            return Result.ok(Optional.of(root));
+        Path aside;
+        try {
+            aside = moveAside();
+        } catch (IOException e) {
+            return Result.err(new HistoryStoreError.Io("손상된 이력 파일을 옮기지 못했다 " + file + ": " + e));
         }
-        moved.ifPresent(name -> notices.add(new HistoryLoadNotice.CorruptMovedAside(name)));
+        String movedTo = aside.getFileName().toString();
+        if (fallback instanceof Disk.Parsed parsed) {
+            Optional<HistoryStoreError> failed = restoreFromBackup(parsed.bytes(), aside);
+            if (failed.isPresent()) {
+                return Result.err(failed.get());
+            }
+            backupTaken = true;
+            notices.add(new HistoryLoadNotice.RecoveredFromBackup(Optional.of(movedTo)));
+            return Result.ok(Optional.of(parsed.root()));
+        }
+        backupTaken = true;
+        notices.add(new HistoryLoadNotice.CorruptMovedAside(movedTo));
         return Result.ok(Optional.empty());
     }
 
+    // 되돌려 쓰지 못하면 손상 원본을 제자리로 돌려 놓는다 — "state.json 없음 + 정상 .bak" 을 남기면 다음 실행이 빈 이력을 열고, 그 다음 실행의
+    // 첫 저장이 좋은 .bak 을 덮어쓴다. 돌려 놓기도 실패하면 .bak 과 옮긴 원본이 남아 있음을 알린다.
+    private Optional<HistoryStoreError> restoreFromBackup(byte[] bytes, Path aside) {
+        IOException cause;
+        try {
+            JsonFiles.writeAtomically(file, bytes);
+            return Optional.empty();
+        } catch (IOException e) {
+            cause = e;
+        }
+        try {
+            mover.move(aside, file);
+            return Optional.of(new HistoryStoreError.Io("백업으로 되돌려 쓰지 못해 손상된 이력 파일을 제자리에 두었다 " + file + ": " + cause));
+        } catch (IOException e) {
+            return Optional.of(new HistoryStoreError.Io("백업으로 되돌려 쓰지 못했다. 손상 파일은 " + aside.getFileName() + ", 백업은 "
+                    + backup.getFileName() + " 에 그대로 있다: " + cause + " / " + e));
+        }
+    }
+
     // 같은 초에 이미 옮긴 파일이 있으면 -1, -2 … 를 붙인다. 이름을 고른 뒤 생긴 파일은 mover 가 실패시킨다.
-    private String moveAside() throws IOException {
+    private Path moveAside() throws IOException {
         String base = file.getFileName() + ".corrupt-" + CORRUPT_SUFFIX.format(clock.instant());
         Path aside = file.resolveSibling(base);
         for (int n = 1; Files.exists(aside, LinkOption.NOFOLLOW_LINKS); n++) {
             aside = file.resolveSibling(base + "-" + n);
         }
         mover.move(file, aside);
-        return aside.getFileName().toString();
+        return aside;
     }
 
     private record Contents(
             List<VisitedDirectory> entries,
             int skipped,
             int repaired,
-            int version,
+            long version,
             Map<WorkspacePath, ArrayNode> sources) {
         static Contents empty() {
             return new Contents(List.of(), 0, 0, SCHEMA_VERSION, Map.of());
@@ -378,7 +421,9 @@ public final class JsonStateRepository implements HistoryRepository, AutoCloseab
     // 상위 버전은 뼈대 검사를 건너뛰었으므로 history · entries 모양이 틀리면 항목 0개로 읽는다.
     private static Contents parse(ObjectNode root) {
         JsonNode versionNode = root.get(KEY_SCHEMA_VERSION);
-        int version = versionNode == null ? SCHEMA_VERSION : versionNode.intValue();
+        long version = Optional.ofNullable(versionNode)
+                .flatMap(JsonStateRepository::integralVersion)
+                .orElse(SCHEMA_VERSION);
         if (!(root.get(KEY_HISTORY) instanceof ObjectNode history)
                 || !(history.get(KEY_ENTRIES) instanceof ArrayNode entries)) {
             return new Contents(List.of(), 0, 0, version, Map.of());
@@ -398,12 +443,12 @@ public final class JsonStateRepository implements HistoryRepository, AutoCloseab
             if (read.repaired()) {
                 repaired++;
             }
-            read.sources().ifPresent(s -> sources.merge(read.directory().path(), s, JsonStateRepository::union));
+            sources.merge(read.directory().path(), read.sources(), JsonStateRepository::union);
         }
         return new Contents(out, skipped, repaired, version, Map.copyOf(sources));
     }
 
-    private record ReadEntry(VisitedDirectory directory, boolean repaired, Optional<ArrayNode> sources) {}
+    private record ReadEntry(VisitedDirectory directory, boolean repaired, ArrayNode sources) {}
 
     // 해석할 수 없는 값(경로 · 환경 · 시각 · 횟수 · 플래그)이 있으면 항목을 건너뛴다. 불변식 위반(처음 > 마지막, 고정이면서 숨김)과
     // 틀린 별칭은 고쳐서 읽는다 — 값 하나 때문에 경로를 잃지 않게. 항목 안의 모르는 필드는 보존하지 않는다(ADR-0013).
@@ -448,8 +493,8 @@ public final class JsonStateRepository implements HistoryRepository, AutoCloseab
                 alias.orElseGet(Optional::empty),
                 hidden.booleanValue() && !pinnedAndHidden);
         boolean repaired = firstAfterLast || pinnedAndHidden || alias.isEmpty();
-        Optional<ArrayNode> entrySources =
-                o.get(KEY_SOURCES) instanceof ArrayNode array ? Optional.of(array.deepCopy()) : Optional.empty();
+        // sources 가 없는 항목은 저장할 때 [shell] 이 된다. 합칠 때도 같게 봐야 shell 출처를 잃지 않는다.
+        ArrayNode entrySources = o.get(KEY_SOURCES) instanceof ArrayNode array ? array.deepCopy() : shellOnly();
         return Optional.of(new ReadEntry(directory, repaired, entrySources));
     }
 
@@ -556,11 +601,12 @@ public final class JsonStateRepository implements HistoryRepository, AutoCloseab
         v.alias().ifPresentOrElse(a -> node.put("alias", a.value()), () -> node.putNull("alias"));
         node.put("hidden", v.hidden());
         Optional<ArrayNode> known = Optional.ofNullable(sources.get(v.path()));
-        node.set(
-                KEY_SOURCES,
-                known.map(ArrayNode::deepCopy)
-                        .orElseGet(() -> MAPPER.createArrayNode().add(SOURCE_SHELL)));
+        node.set(KEY_SOURCES, known.map(ArrayNode::deepCopy).orElseGet(JsonStateRepository::shellOnly));
         return node;
+    }
+
+    private static ArrayNode shellOnly() {
+        return MAPPER.createArrayNode().add(SOURCE_SHELL);
     }
 
     private static String envOrderKey(ShellEnvironment env) {
