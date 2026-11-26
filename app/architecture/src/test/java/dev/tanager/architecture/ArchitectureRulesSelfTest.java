@@ -34,6 +34,15 @@ class ArchitectureRulesSelfTest {
     }
 
     @Test
+    void domainPurityAllowsOnlyStandardCharsetsFromJavaNio() {
+        EvaluationResult result = ArchitectureRules.domainIsPure(FIXTURE).evaluate(fixtures);
+
+        assertThat(result.getFailureReport().getDetails())
+                .anyMatch(d -> d.contains("NioFilesInDomain") && d.contains("java.nio.file"))
+                .noneMatch(d -> d.contains("StandardCharsetsInDomain"));
+    }
+
+    @Test
     void layerRuleCatchesApplicationUsingAdapter() {
         EvaluationResult result =
                 ArchitectureRules.layersRespectDirection(FIXTURE).evaluate(fixtures);
