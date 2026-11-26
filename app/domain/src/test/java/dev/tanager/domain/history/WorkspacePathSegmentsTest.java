@@ -23,6 +23,33 @@ class WorkspacePathSegmentsTest {
     }
 
     @Test
+    @DisplayName("끝 구분자는 세그먼트를 만들지 않는다")
+    void trailingSeparatorAddsNoSegment() {
+        // given / when / then
+        assertThat(path(WIN, "C:\\Work\\").segments()).containsExactly("Work");
+        assertThat(path(WSL, "/a/b/").segments()).containsExactly("a", "b");
+        assertThat(path(WIN, "\\\\h\\s\\").segments()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("Windows 의 parent 는 표기를 보존하고 대소문자만 다른 경로와 equals 다(드라이브 · UNC)")
+    void windowsParentKeepsSpellingAndIgnoresCase() {
+        // given
+        WorkspacePath drive = path(WIN, "c:\\WORK\\Src");
+        WorkspacePath unc = path(WIN, "\\\\HOST\\Share\\a");
+        // when
+        WorkspacePath driveParent = drive.parent().orElseThrow();
+        WorkspacePath uncParent = unc.parent().orElseThrow();
+        // then
+        assertThat(driveParent.path()).isEqualTo("C:\\WORK");
+        assertThat(driveParent).isEqualTo(path(WIN, "C:\\work"));
+        assertThat(unc).isEqualTo(path(WIN, "\\\\host\\share\\a"));
+        assertThat(uncParent)
+                .isEqualTo(path(WIN, "\\\\host\\share"))
+                .isEqualTo(unc.parent().orElseThrow());
+    }
+
+    @Test
     @DisplayName("WSL 경로의 루트는 '/' 이고 세그먼트는 루트 아래 이름들이다")
     void wslRootAndSegments() {
         // given

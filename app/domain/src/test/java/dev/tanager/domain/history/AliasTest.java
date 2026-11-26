@@ -27,6 +27,27 @@ class AliasTest {
     }
 
     @Test
+    @DisplayName("길이는 UTF-16 단위가 아니라 코드 포인트로 센다 — 보조 평면 문자 64개는 허용, 65개는 거부")
+    void countsSupplementaryCharactersAsOne() {
+        // given
+        String smile = "\uD83D\uDE00";
+        // when / then
+        assertThat(Alias.of(smile.repeat(64)).isOk()).isTrue();
+        assertThat(Alias.of(smile.repeat(65)).error()).isPresent();
+    }
+
+    @Test
+    @DisplayName("방향 제어 · 폭 없는 문자 · 줄 구분자 같은 서식 문자, NBSP 뿐인 값은 InvalidAlias 다 — 트리 표시가 비거나 뒤집히지 않게")
+    void rejectsFormatCharactersAndInvisibleOnly() {
+        // given / when / then
+        assertThat(Alias.of("a\u202Eb").error()).isPresent();
+        assertThat(Alias.of("a\u200Bb").error()).isPresent();
+        assertThat(Alias.of("a\u2028b").error()).isPresent();
+        assertThat(Alias.of("\u00A0\u00A0").error()).isPresent();
+        assertThat(Alias.of("a\u00A0b").isOk()).isTrue();
+    }
+
+    @Test
     @DisplayName("65 코드 포인트는 InvalidAlias 다")
     void rejects65CodePoints() {
         // given / when

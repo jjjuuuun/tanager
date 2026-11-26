@@ -63,12 +63,15 @@ public final class WorkspacePath {
         return path;
     }
 
-    /** 루트 부분. WSL 은 {@code /}, 드라이브는 {@code C:\}(대문자), UNC 는 {@code \\host\share}. */
+    /**
+     * 루트 부분. WSL 은 {@code /}, 드라이브는 {@code C:\}(대문자), UNC 는 {@code \\host\share}(입력 대소문자 보존). 표시용이다 —
+     * 비교 · 묶음 키로 쓰지 말고 {@link WorkspacePath} 자체(또는 {@link #parent()} 사슬)를 쓴다(Windows 는 대소문자를 무시한다).
+     */
     public String root() {
         return root;
     }
 
-    /** 루트 아래의 이름들(대소문자 보존). 수정할 수 없다. 루트 자체면 빈 리스트. */
+    /** 루트 아래의 이름들(대소문자 보존, 표시용 — 비교에는 쓰지 않는다). 수정할 수 없다. 루트 자체면 빈 리스트. */
     public List<String> segments() {
         return segments;
     }

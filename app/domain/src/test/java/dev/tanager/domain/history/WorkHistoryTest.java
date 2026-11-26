@@ -286,6 +286,90 @@ class WorkHistoryTest {
     // ---- restore ----
 
     @Test
+    @DisplayName("restore 도 한도를 적용해 고정 아닌 가장 오래된 항목부터 지운다")
+    void restoreAppliesLimit() {
+        // given: 한도 2, 일반 3 + 고정 1
+        List<VisitedDirectory> saved = List.of(
+                entry(path(WSL, "/old"), T1, T1, 1, false, Optional.empty()),
+                entry(path(WSL, "/mid"), T2, T2, 1, false, Optional.empty()),
+                entry(path(WSL, "/new"), T3, T3, 1, false, Optional.empty()),
+                entry(path(WSL, "/pin"), T1, T1, 1, true, Optional.empty()));
+        // when
+        WorkHistory h = WorkHistory.restore(saved, new HistoryPolicy(2));
+        // then
+        assertThat(h.entries().keySet()).containsExactlyInAnyOrder(path(WSL, "/new"), path(WSL, "/pin"));
+    }
+
+    @Test
+    @DisplayName("최근 방문이 같은 항목끼리는 먼저 방문한 쪽, 그다음 경로 순으로 지운다 — 결과가 순회 순서에 달리지 않는다")
+    void evictionTieBreakIsDeterministic() {
+        // given: 한도 1, lastVisited 가 같은 세 항목
+        List<VisitedDirectory> saved = List.of(
+                entry(path(WSL, "/b"), T1, T3, 1, false, Optional.empty()),
+                entry(path(WSL, "/a"), T1, T3, 1, false, Optional.empty()),
+                entry(path(WSL, "/c"), T2, T3, 1, false, Optional.empty()));
+        // when
+        WorkHistory h = WorkHistory.restore(saved, new HistoryPolicy(1));
+        // then: first 가 늦은 /c 가 남는다
+        assertThat(h.entries().keySet()).containsExactly(path(WSL, "/c"));
+    }
+
+    @Test
+    @DisplayName("큰 저장 파일(2만 항목)을 한도 2000 으로 불러와도 가장 최근 2000 개가 남는다")
+    void restoreLargeFileKeepsMostRecent() {
+        // given
+        List<VisitedDirectory> saved = new java.util.ArrayList<>();
+        for (int i = 0; i < 20_000; i++) {
+            Instant t = T1.plusSeconds(i);
+            saved.add(entry(path(WSL, "/d" + i), t, t, 1, false, Optional.empty()));
+        }
+        // when
+        WorkHistory h = WorkHistory.restore(saved, HistoryPolicy.DEFAULT);
+        // then
+        assertThat(h.entries()).hasSize(2000);
+        assertThat(h.find(path(WSL, "/d19999"))).isPresent();
+        assertThat(h.find(path(WSL, "/d18000"))).isPresent();
+        assertThat(h.find(path(WSL, "/d17999"))).isEmpty();
+    }
+
+    @Test
+    @DisplayName("restore 는 숨김을 OR 로 합친다(둘 다 고정이 아닐 때)")
+    void restoreMergesHiddenWithOr() {
+        // given
+        VisitedDirectory hidden = new VisitedDirectory(path(WIN, "C:\\Tmp"), T1, T1, 1, false, Optional.empty(), true);
+        VisitedDirectory plain = entry(path(WIN, "c:\\tmp"), T2, T2, 1, false, Optional.empty());
+        // when
+        WorkHistory h = WorkHistory.restore(List.of(plain, hidden), HistoryPolicy.DEFAULT);
+        // then
+        assertThat(h.find(path(WIN, "C:\\Tmp")).orElseThrow().hidden()).isTrue();
+    }
+
+    @Test
+    @DisplayName("방문 횟수는 int 최대값에서 멈추고 음수로 넘치지 않는다")
+    void visitCountSaturates() {
+        // given
+        WorkspacePath p = path(WSL, "/a");
+        VisitedDirectory big = entry(p, T1, T1, Integer.MAX_VALUE, false, Optional.empty());
+        // when
+        WorkHistory h = WorkHistory.restore(
+                        List.of(big, entry(p, T2, T2, 5, false, Optional.empty())), HistoryPolicy.DEFAULT)
+                .recordVisit(p, T3);
+        // then
+        assertThat(h.find(p).orElseThrow().visitCount()).isEqualTo(Integer.MAX_VALUE);
+    }
+
+    @Test
+    @DisplayName("키와 항목 경로가 다른 맵으로는 WorkHistory 를 만들 수 없다")
+    void constructorRejectsMismatchedKey() {
+        // given
+        VisitedDirectory v = entry(path(WSL, "/a"), T1, T1, 1, false, Optional.empty());
+        // when / then
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                        () -> new WorkHistory(java.util.Map.of(path(WSL, "/b"), v), HistoryPolicy.DEFAULT))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     @DisplayName("restore 는 대소문자만 다른 Windows 항목을 합친다(count 합, first 최소, last 최대, 고정 OR, 먼저 있는 별칭)")
     void restoreMergesDuplicates() {
         // given

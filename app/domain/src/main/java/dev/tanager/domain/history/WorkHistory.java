@@ -3,17 +3,21 @@ package dev.tanager.domain.history;
 import dev.tanager.domain.shared.Result;
 import java.time.Instant;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.UnaryOperator;
 
 /**
- * 작업 경로 이력 애그리거트. 키는 {@link WorkspacePath}(환경별 비교 규칙)이고 경로마다 항목 하나다.
- * 불변식: 항목 수 ≤ max(한도, 고정 수 + 1) — 고정 항목과 방금 방문한 항목은 한도를 넘어도 지우지 않는다.
- * 모든 연산은 새 {@code WorkHistory} 를 돌려준다.
+ * 작업 경로 이력 애그리거트. 키는 {@link WorkspacePath}(환경별 비교 규칙)이고 경로마다 항목 하나다. 모든 연산은 새 {@code
+ * WorkHistory} 를 돌려준다.
+ *
+ * <p>한도: {@link #recordVisit} · {@link #restore} 직후 항목 수 ≤ max(한도, 고정 수 + 1) — 고정 항목과 방금 방문한 항목은 한도를
+ * 넘어도 지우지 않는다. {@link #pin} · {@link #hide} 는 지우지 않는다(고정을 풀자마자 항목이 사라지지 않게). 다음 방문 때 다시 맞춘다.
  */
 public record WorkHistory(Map<WorkspacePath, VisitedDirectory> entries, HistoryPolicy policy) {
 
@@ -106,30 +110,28 @@ public record WorkHistory(Map<WorkspacePath, VisitedDirectory> entries, HistoryP
         return Result.ok(new WorkHistory(next, policy));
     }
 
+    // 지울 순서: 최근 방문이 이른 것 → 처음 방문이 이른 것 → 경로 문자열. 순회 순서와 무관하게 결정적이다.
+    private static final Comparator<VisitedDirectory> EVICTION_ORDER = Comparator.comparing(
+                    VisitedDirectory::lastVisited)
+            .thenComparing(VisitedDirectory::firstVisited)
+            .thenComparing(v -> v.path().path());
+
+    // 후보를 한 번 정렬해 앞에서부터 지운다 — 큰 저장 파일을 불러와도 O(n log n).
     private static Map<WorkspacePath, VisitedDirectory> evict(
             Map<WorkspacePath, VisitedDirectory> entries, HistoryPolicy policy, Optional<WorkspacePath> keep) {
+        int excess = entries.size() - policy.maxEntries();
+        if (excess <= 0) {
+            return entries;
+        }
+        List<VisitedDirectory> candidates = entries.values().stream()
+                .filter(v -> !v.pinned() && !keep.equals(Optional.of(v.path())))
+                .sorted(EVICTION_ORDER)
+                .limit(excess)
+                .toList();
         Map<WorkspacePath, VisitedDirectory> out = new HashMap<>(entries);
-        while (out.size() > policy.maxEntries()) {
-            Optional<WorkspacePath> oldest = oldestEvictable(out, keep);
-            if (oldest.isEmpty()) {
-                break;
-            }
-            out.remove(oldest.get());
+        for (VisitedDirectory v : candidates) {
+            out.remove(v.path());
         }
         return out;
-    }
-
-    private static Optional<WorkspacePath> oldestEvictable(
-            Map<WorkspacePath, VisitedDirectory> entries, Optional<WorkspacePath> keep) {
-        Optional<VisitedDirectory> oldest = Optional.empty();
-        for (VisitedDirectory v : entries.values()) {
-            boolean evictable = !v.pinned() && !keep.equals(Optional.of(v.path()));
-            if (evictable
-                    && (oldest.isEmpty()
-                            || v.lastVisited().isBefore(oldest.get().lastVisited()))) {
-                oldest = Optional.of(v);
-            }
-        }
-        return oldest.map(VisitedDirectory::path);
     }
 }

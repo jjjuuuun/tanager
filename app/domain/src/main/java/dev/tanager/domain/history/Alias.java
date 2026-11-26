@@ -4,7 +4,10 @@ import dev.tanager.domain.shared.Result;
 import java.util.Objects;
 import java.util.Optional;
 
-/** 사용자가 작업 경로에 붙인 이름. 불변식: 앞뒤 공백 없음 · 1~64 코드 포인트 · 제어 문자 없음. */
+/**
+ * 사용자가 작업 경로에 붙인 이름. 불변식: 앞뒤 공백 없음 · 1~64 코드 포인트 · 제어 · 서식(방향 제어, 폭 없는 문자) · 줄 구분 문자 없음 ·
+ * 공백류(NBSP 포함)만으로 이루어지지 않음 — 트리 표시가 비거나 뒤집히지 않게.
+ */
 public record Alias(String value) {
 
     /** 별칭의 최대 길이(코드 포인트). */
@@ -35,9 +38,20 @@ public record Alias(String value) {
         if (s.codePointCount(0, s.length()) > MAX_CODE_POINTS) {
             return Optional.of("별칭은 " + MAX_CODE_POINTS + " 글자를 넘을 수 없다");
         }
-        if (s.codePoints().anyMatch(Character::isISOControl)) {
-            return Optional.of("별칭에 제어 문자가 들어 있다");
+        if (s.codePoints().anyMatch(Alias::isInvisibleControl)) {
+            return Optional.of("별칭에 제어 · 서식 문자가 들어 있다");
+        }
+        if (s.codePoints().allMatch(cp -> Character.isWhitespace(cp) || Character.isSpaceChar(cp))) {
+            return Optional.of("별칭은 보이는 글자가 있어야 한다");
         }
         return Optional.empty();
+    }
+
+    private static boolean isInvisibleControl(int cp) {
+        int type = Character.getType(cp);
+        return Character.isISOControl(cp)
+                || type == Character.FORMAT
+                || type == Character.LINE_SEPARATOR
+                || type == Character.PARAGRAPH_SEPARATOR;
     }
 }
