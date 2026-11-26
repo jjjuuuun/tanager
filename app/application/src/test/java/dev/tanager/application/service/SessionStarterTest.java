@@ -68,6 +68,7 @@ class SessionStarterTest {
                 new ProfileCatalog(fakePlatform),
                 config,
                 fakePlatform,
+                new IntegrationStatus(fakePlatform),
                 launcher,
                 new DefaultProfileMemory(config),
                 state,

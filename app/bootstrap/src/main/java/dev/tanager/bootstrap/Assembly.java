@@ -7,6 +7,7 @@ import dev.tanager.application.port.out.Integration;
 import dev.tanager.application.port.out.PlatformModule;
 import dev.tanager.application.port.out.PtyLauncher;
 import dev.tanager.application.service.DefaultProfileMemory;
+import dev.tanager.application.service.IntegrationStatus;
 import dev.tanager.application.service.ProfileCatalog;
 import dev.tanager.application.service.SessionStarter;
 import dev.tanager.application.service.VisitRecorder;
@@ -29,7 +30,7 @@ record Assembly(ListProfilesUseCase profiles, StartSessionUseCase sessions) {
 
     /**
      * 셸 탐지는 수 초 걸릴 수 있어 창을 띄우는 동안 가상 스레드에서 미리 돌린다 — 첫 {@code start} 는 그 결과를 기다린다(탐지는
-     * 한 번뿐이다).
+     * 한 번뿐이다). 셸 통합 설치도 같은 방식이다(ADR-0014).
      */
     static Assembly assemble(PlatformModule platform, PtyLauncher launcher) {
         ProfileCatalog catalog = new ProfileCatalog(platform);
@@ -40,7 +41,8 @@ record Assembly(ListProfilesUseCase profiles, StartSessionUseCase sessions) {
                 LOG.log(System.Logger.Level.ERROR, "셸 탐지 실패", e);
             }
         });
-        installShellIntegration(platform);
+        IntegrationStatus integration = new IntegrationStatus(platform);
+        warmShellIntegration(integration);
         JsonConfigRepository config =
                 new JsonConfigRepository(platform.dirs().appData().resolve(CONFIG_FILE));
         // 이력은 아직 메모리에만 있다 — state.json 저장 · 불러오기는 #79 에서 잇는다
@@ -50,14 +52,21 @@ record Assembly(ListProfilesUseCase profiles, StartSessionUseCase sessions) {
         return new Assembly(
                 catalog,
                 new SessionStarter(
-                        catalog, config, platform, launcher, new DefaultProfileMemory(config), state, visits));
+                        catalog,
+                        config,
+                        platform,
+                        integration,
+                        launcher,
+                        new DefaultProfileMemory(config),
+                        state,
+                        visits));
     }
 
-    /** 파일 I/O 라 백그라운드에서 한 번 돌린다. 결과는 아직 로그에만 남긴다 — 셸에 주입하는 일은 #55 · #81. */
-    private static void installShellIntegration(PlatformModule platform) {
+    /** 파일 I/O 라 백그라운드에서 한 번 데운다. 셸에 주입하는 일은 #55 · #81. */
+    private static void warmShellIntegration(IntegrationStatus integration) {
         Thread.ofVirtual().name("tanager-shell-integration").start(() -> {
             try {
-                switch (platform.integration().install()) {
+                switch (integration.await()) {
                     case Integration.Installed(var directory) ->
                         LOG.log(System.Logger.Level.INFO, "셸 통합 스크립트: {0}", directory);
                     case Integration.Unavailable(var reason) ->

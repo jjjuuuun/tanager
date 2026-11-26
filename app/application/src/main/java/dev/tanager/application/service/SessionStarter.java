@@ -45,12 +45,12 @@ import java.util.concurrent.CompletionStage;
  * stream.start()} 하기 전이라 첫 바이트의 보고도 놓치지 않는다.
  */
 public final class SessionStarter implements StartSessionUseCase {
-    private static final System.Logger LOG = System.getLogger(SessionStarter.class.getName());
     private static final String HOME_SHORTHAND = "~";
 
     private final ListProfilesUseCase profiles;
     private final ConfigRepository config;
     private final PlatformModule platform;
+    private final IntegrationStatus integration;
     private final PtyLauncher launcher;
     private final RememberDefaultProfileUseCase memory;
     private final StateActor state;
@@ -60,6 +60,7 @@ public final class SessionStarter implements StartSessionUseCase {
             ListProfilesUseCase profiles,
             ConfigRepository config,
             PlatformModule platform,
+            IntegrationStatus integration,
             PtyLauncher launcher,
             RememberDefaultProfileUseCase memory,
             StateActor state,
@@ -67,6 +68,7 @@ public final class SessionStarter implements StartSessionUseCase {
         this.profiles = Objects.requireNonNull(profiles, "profiles");
         this.config = Objects.requireNonNull(config, "config");
         this.platform = Objects.requireNonNull(platform, "platform");
+        this.integration = Objects.requireNonNull(integration, "integration");
         this.launcher = Objects.requireNonNull(launcher, "launcher");
         this.memory = Objects.requireNonNull(memory, "memory");
         this.state = Objects.requireNonNull(state, "state");
@@ -148,22 +150,11 @@ public final class SessionStarter implements StartSessionUseCase {
         });
     }
 
-    // 설치 확인은 띄울 때마다 한 번(내용이 같으면 파일을 건드리지 않는다). 홈으로 다시 띄우는 재시도는 같은 결과를 쓴다
+    // 설치는 프로세스에서 한 번이다 — 처음이면 여기서 끝날 때까지 기다린다(start · restart 는 EDT 밖에서 불린다, ADR-0014)
     private Result<StartedSession, StartFailure> launchTracked(
             PaneId pane, TerminalSession starting, TerminalSize size, List<StartNotice> notices) {
-        Integration integration = installIntegration();
-        return launch(starting, size, notices).map(launched -> tracked(pane, launched, integration, notices));
-    }
-
-    // 포트 계약은 던지지 않는 것이지만, 어겨도 셸은 통합 없이 띄운다
-    private Integration installIntegration() {
-        try {
-            return platform.integration().install();
-        } catch (RuntimeException e) {
-            LOG.log(System.Logger.Level.ERROR, "셸 통합 설치가 예외로 끝났다", e);
-            return new Integration.Unavailable(
-                    "셸 통합 설치가 예외로 끝났다: " + e.getClass().getSimpleName());
-        }
+        Integration installed = integration.await();
+        return launch(starting, size, notices).map(launched -> tracked(pane, launched, installed, notices));
     }
 
     /** 돌려주기 전에 (1) 창의 세션 등록 (2) cwd 추적 (3) 종료 등록 순으로 붙인다. */

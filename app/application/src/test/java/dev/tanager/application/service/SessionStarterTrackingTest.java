@@ -62,6 +62,7 @@ class SessionStarterTrackingTest {
             new ProfileCatalog(platform),
             config,
             platform,
+            new IntegrationStatus(platform),
             launcher,
             new DefaultProfileMemory(config),
             state,
@@ -322,16 +323,38 @@ class SessionStarterTrackingTest {
     }
 
     @Test
-    @DisplayName("세션을 띄울 때마다 셸 통합 설치 확인을 한 번만 한다")
-    void installIsCalledOncePerStart() {
+    @DisplayName("여러 창을 띄우고 재시작해도 셸 통합 설치는 처음 한 번만 하고 결과를 같이 쓴다")
+    void installRunsOncePerProcess() {
         // given
         FakeShellIntegration integration = FakeShellIntegration.installedAt(Path.of("integration"));
         platform.withIntegration(integration);
+        StartedSession first = startAtHome(P1, BASH);
+        startAtHome(P2, BASH);
+        first.stream().start();
+        streamOf(0).exit(0);
+        TerminalSession exited = first.exited().toCompletableFuture().join();
 
         // when
-        startAtHome(P1, BASH);
+        starter.restart(P1, exited, SIZE).value().orElseThrow();
 
         // then
         assertThat(integration.installCalls()).isEqualTo(1);
+        assertThat(streamOf(2).subscriberCount()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("셸 통합 설치가 예외로 끝나면 통합 없음으로 보고 구독 없이 시작 경로를 한 번 기록한다")
+    void throwingInstallIsTreatedAsUnavailable() {
+        // given
+        platform.withIntegration(FakeShellIntegration.throwing(new IllegalStateException("설치 고장")));
+
+        // when
+        StartedSession session = start(P1, POWERSHELL, Optional.of(new WorkingDir.At(win("C:\\work"))));
+
+        // then
+        assertThat(session.notices()).hasOnlyElementsOfType(StartNotice.IntegrationUnavailable.class);
+        assertThat(session.notices()).hasSize(1);
+        assertThat(streamOf(0).subscriberCount()).isZero();
+        assertThat(count(win("C:\\work"))).isEqualTo(1);
     }
 }

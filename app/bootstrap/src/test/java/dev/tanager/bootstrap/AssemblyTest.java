@@ -140,6 +140,32 @@ class AssemblyTest {
     }
 
     @Test
+    @DisplayName("조립 때 데운 셸 통합 설치 결과를 셸 시작이 같이 써서 설치는 프로세스에서 한 번이다")
+    void startSharesInstallationWarmedByAssembly() {
+        // given
+        FakeShellIntegration integration = FakeShellIntegration.installedAt(appData.resolve("shell-integration"));
+        FakePlatformModule platform =
+                new FakePlatformModule(List.of(CMD)).withAppData(appData).withIntegration(integration);
+        Assembly assembly = Assembly.assemble(platform, new ScriptedPtyLauncher());
+        await().atMost(Duration.ofSeconds(2)).until(() -> integration.installCalls() == 1);
+
+        // when
+        StartedSession first = assembly.sessions()
+                .start(StartRequest.chosen(new PaneId("p1"), CMD.id(), false, SIZE))
+                .value()
+                .orElseThrow();
+        StartedSession second = assembly.sessions()
+                .start(StartRequest.chosen(new PaneId("p2"), CMD.id(), false, SIZE))
+                .value()
+                .orElseThrow();
+
+        // then
+        assertThat(integration.installCalls()).isEqualTo(1);
+        first.stream().close();
+        second.stream().close();
+    }
+
+    @Test
     @DisplayName("셸 통합 설치가 예외를 던져도 조립과 셸 시작은 된다")
     void throwingShellIntegrationDoesNotBreakAssemblyOrStart() {
         // given
