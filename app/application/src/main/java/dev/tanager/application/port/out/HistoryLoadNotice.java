@@ -10,8 +10,8 @@ public sealed interface HistoryLoadNotice {
     String describe();
 
     /**
-     * 저장 파일이 손상돼 백업(.bak)에서 읽었다. 손상 원본은 {@code corruptMovedTo}(파일 이름)로 옮겼다 — 다른 인스턴스가 쓰고 있어 옮기지
-     * 않았으면 empty.
+     * 저장 파일이 손상돼 백업(.bak)에서 읽었다. 손상 원본은 {@code corruptMovedTo}(파일 이름)에 복사해 두고 저장 파일을 백업 내용으로 바꿨다
+     * — 다른 인스턴스가 쓰고 있어 아무것도 바꾸지 않았으면 empty.
      */
     record RecoveredFromBackup(Optional<String> corruptMovedTo) implements HistoryLoadNotice {
         public RecoveredFromBackup {
