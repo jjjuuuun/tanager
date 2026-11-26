@@ -170,6 +170,56 @@ class DirectoryTreeSearchTest {
         }
 
         @Test
+        @DisplayName("Windows 경로는 슬래시 검색어로도 찾는다")
+        void windowsSlashSearch() {
+            // given
+            WorkspacePath infra = path(WIN, "C:\\work\\infra");
+            WorkHistory h = history(infra, path(WIN, "D:\\other"));
+
+            // when
+            HistoryTree byTail = project(h, List.of(), new TreeQuery("work/inf", false, List.of(WIN)));
+            HistoryTree byDrive = project(h, List.of(), new TreeQuery("c:/work", false, List.of(WIN)));
+
+            // then
+            assertThat(matchedPaths(byTail, WIN)).containsExactly(infra);
+            assertThat(matchedPaths(byDrive, WIN)).containsExactly(infra);
+        }
+
+        @Test
+        @DisplayName("WSL 경로는 역슬래시 검색어로 찾지 않는다")
+        void wslNotFoundByBackslash() {
+            // given
+            WorkHistory h = history(path(WSL_U, "/srv/web"));
+
+            // when
+            HistoryTree tree = project(h, List.of(), q("srv\\web"));
+
+            // then
+            assertThat(env(tree, WSL_U).children()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("검색 중 방문 없는 부모의 표기는 검색하지 않을 때의 트리와 같다")
+        void unvisitedParentKeepsUnfilteredSpelling() {
+            // given
+            WorkHistory h = history(path(WIN, "C:\\Work\\a"), path(WIN, "C:\\work\\b"), path(WIN, "C:\\work\\bb"));
+
+            // when
+            TreeNode.Folder unfiltered = folder(env(project(h, List.of(), new TreeQuery("", false, List.of(WIN))), WIN)
+                    .children()
+                    .get(0));
+            TreeNode.Folder searched = folder(env(project(h, List.of(), new TreeQuery("b", false, List.of(WIN))), WIN)
+                    .children()
+                    .get(0));
+
+            // then
+            assertThat(unfiltered.label()).isEqualTo("C:\\Work");
+            assertThat(searched.label()).isEqualTo(unfiltered.label());
+            assertThat(searched.path().path()).isEqualTo(unfiltered.path().path());
+            assertThat(labels(searched.children())).containsExactly("b", "bb");
+        }
+
+        @Test
         @DisplayName("검색어 앞뒤 공백은 무시한다")
         void surroundingWhitespaceIgnored() {
             // given

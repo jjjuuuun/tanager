@@ -8,6 +8,9 @@ import static dev.tanager.domain.history.DirectoryTreeTest.path;
 import static dev.tanager.domain.history.DirectoryTreeTest.project;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.text.Normalizer;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
@@ -117,6 +120,51 @@ class DirectoryTreePinnedTest {
         // then
         assertThat(forward.pinned()).extracting(p -> p.entry().path()).containsExactly(first, second);
         assertThat(backward.pinned()).isEqualTo(forward.pinned());
+    }
+
+    @Test
+    @DisplayName("여러 배포판이 같은 경로를 고정하면 환경 이름순이고 입력 순서와 상관없다")
+    void samePathInSeveralDistrosOrderedByEnvironment() {
+        // given — 이력 Map 의 순회 순서에 기대지 않게 배포판을 여럿 둔다
+        List<String> names = List.of("Ubuntu", "alpine", "Debian", "kali", "Fedora", "Arch", "openSUSE", "Mint");
+        List<WorkspacePath> forward = new ArrayList<>();
+        for (String name : names) {
+            forward.add(path(new ShellEnvironment.Wsl(name), "/home/me/proj"));
+        }
+        List<WorkspacePath> backward = new ArrayList<>(forward);
+        Collections.reverse(backward);
+
+        // when
+        HistoryTree a = project(pinAll(forward), List.of(), ALL);
+        HistoryTree b = project(pinAll(backward), List.of(), ALL);
+
+        // then
+        assertThat(a.pinned())
+                .extracting(p -> ((ShellEnvironment.Wsl) p.entry().path().env()).distro())
+                .containsExactly("alpine", "Arch", "Debian", "Fedora", "kali", "Mint", "openSUSE", "Ubuntu");
+        assertThat(b.pinned()).isEqualTo(a.pinned());
+    }
+
+    @Test
+    @DisplayName("NFD 라벨도 NFC 로 맞춰 정렬한다")
+    void nfdLabelSortedAsNfc() {
+        // given
+        WorkspacePath sky = path(WSL_U, "/x/" + Normalizer.normalize("하늘", Normalizer.Form.NFD));
+        WorkspacePath river = path(WSL_U, "/x/" + Normalizer.normalize("가람", Normalizer.Form.NFC));
+
+        // when
+        HistoryTree tree = project(pinAll(List.of(sky, river)), List.of(), ALL);
+
+        // then
+        assertThat(tree.pinned()).extracting(p -> p.entry().path()).containsExactly(river, sky);
+    }
+
+    private static WorkHistory pinAll(List<WorkspacePath> paths) {
+        WorkHistory h = history(paths.toArray(WorkspacePath[]::new));
+        for (WorkspacePath p : paths) {
+            h = pin(h, p);
+        }
+        return h;
     }
 
     @Test

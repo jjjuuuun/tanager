@@ -71,6 +71,7 @@ class DirectoryTreeSearchProperties {
     }
 
     // 계약의 오라클: 구분자가 없으면 폴더 이름(루트는 경로) · 별칭, 있으면 전체 경로 · 별칭.
+    // Windows 경로와 비교할 때만 검색어의 '/' 를 '\' 로 읽는다(별칭은 그대로).
     private static boolean matches(VisitedDirectory v, String text) {
         String needle = norm(text.strip());
         if (needle.isEmpty()) {
@@ -81,7 +82,8 @@ class DirectoryTreeSearchProperties {
         String target = hasSeparator || p.segments().isEmpty()
                 ? p.path()
                 : p.segments().get(p.segments().size() - 1);
-        return norm(target).contains(needle)
+        String pathNeedle = p.env() instanceof ShellEnvironment.Windows ? needle.replace('/', '\\') : needle;
+        return norm(target).contains(pathNeedle)
                 || v.alias().map(a -> norm(a.value()).contains(needle)).orElse(false);
     }
 

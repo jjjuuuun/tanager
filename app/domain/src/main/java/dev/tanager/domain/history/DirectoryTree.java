@@ -24,7 +24,9 @@ import java.util.Set;
  *
  * <p>검색어가 있으면 보이는 방문 중 검색어에 맞은 폴더({@code matched})와 그 조상만 남기고, 남은 폴더의 세션만 매단 뒤 압축을 다시 계산한다.
  * 검색어에 구분자({@code /} · {@code \})가 없으면 폴더 이름(루트는 경로) · 별칭에서, 있으면 전체 경로 · 별칭에서 찾는다 — 검색어
- * {@code home} 이 {@code /home} 아래 전부를 고르지 않게. 고정됨 섹션도 같은 규칙으로 거른다.
+ * {@code home} 이 {@code /home} 아래 전부를 고르지 않게. Windows 경로와 비교할 때만 검색어의 {@code /} 를 {@code \} 로 읽는다
+ * ({@code work/inf} 로 {@code C:\work\infra} 를 찾게). WSL 경로를 {@code \} 로 찾지는 않는다. 고정됨 섹션도 같은 규칙으로 거른다. 방문
+ * 기록이 없는 부모의 표기는 거르기 전에 보이는 방문으로 정해 검색 중에도 검색하지 않을 때와 같다.
  */
 public final class DirectoryTree {
 
@@ -33,20 +35,34 @@ public final class DirectoryTree {
     private static final Comparator<SessionLeaf> SESSION_ORDER = Comparator.comparingInt(SessionLeaf::number)
             .thenComparing(s -> s.pane().value());
 
-    // 대소문자 무시로 먼저 가르고, 같으면 자연 순서로 가려 항상 같은 순서가 되게 한다.
+    // NFC 로 맞춘 뒤 대소문자 무시 — NFD 로 들어온 한글(macOS 등)이 낱자 코드값 때문에 앞으로 몰리지 않게.
+    private static final Comparator<String> FOLDED_ORDER =
+            Comparator.comparing(DirectoryTree::nfc, String.CASE_INSENSITIVE_ORDER);
+
+    // 대소문자 무시로 먼저 가르고, 같으면 자연 순서(NFC → 원문)로 가려 항상 같은 순서가 되게 한다.
     private static final Comparator<String> NAME_ORDER =
-            String.CASE_INSENSITIVE_ORDER.thenComparing(Comparator.naturalOrder());
+            FOLDED_ORDER.thenComparing(DirectoryTree::nfc).thenComparing(Comparator.naturalOrder());
 
     // 라벨을 세그먼트 목록 단위로 비교한다 — 구분자가 순서에 끼지 않아 Windows 와 WSL 이 같은 순서를 낸다.
     private static final Comparator<List<String>> SEGMENTS_ORDER =
-            lexicographic(String.CASE_INSENSITIVE_ORDER).thenComparing(lexicographic(Comparator.naturalOrder()));
+            lexicographic(FOLDED_ORDER).thenComparing(lexicographic(NAME_ORDER));
+
+    // 이름순, 같은 이름이면 Windows 먼저.
+    private static final Comparator<ShellEnvironment> ENVIRONMENT_ORDER = Comparator.comparing(
+                    DirectoryTree::environmentName, NAME_ORDER)
+            .thenComparing(env -> env instanceof ShellEnvironment.Wsl);
+
+    // 경로 문자열이 같으면(배포판마다 같은 경로) 환경으로 가려 Map 순회 순서와 상관없게 한다.
+    private static final Comparator<VisitedDirectory> ENTRY_ORDER = Comparator.<VisitedDirectory, String>comparing(
+                    v -> v.path().path())
+            .thenComparing(v -> v.path().env(), ENVIRONMENT_ORDER);
 
     private static final Comparator<Built> FOLDER_ORDER =
             Comparator.comparing(Built::kind).thenComparing(Built::key, SEGMENTS_ORDER);
 
-    // 라벨이 같으면 경로 문자열로 가려 입력 순서와 상관없이 같은 순서가 되게 한다.
-    private static final Comparator<PinnedEntry> PINNED_ORDER = Comparator.comparing(PinnedEntry::label, NAME_ORDER)
-            .thenComparing(p -> p.entry().path().path());
+    // 라벨이 같으면 경로 문자열 → 환경으로 가려 입력 순서와 상관없이 같은 순서가 되게 한다.
+    private static final Comparator<PinnedEntry> PINNED_ORDER =
+            Comparator.comparing(PinnedEntry::label, NAME_ORDER).thenComparing(PinnedEntry::entry, ENTRY_ORDER);
 
     private DirectoryTree() {}
 
@@ -60,13 +76,14 @@ public final class DirectoryTree {
         Forest forest = new Forest();
         // 정렬해 넣어 방문 순서 · Map 순회 순서와 상관없이 같은 표기를 고른다.
         List<VisitedDirectory> entries = new ArrayList<>(history.entries().values());
-        entries.sort(Comparator.comparing(v -> v.path().path()));
+        entries.sort(ENTRY_ORDER);
         List<VisitedDirectory> visible = new ArrayList<>();
         for (VisitedDirectory v : entries) {
             // 검색 결과와 상관없이 환경을 등록해 검색어를 칠 때 환경 노드가 깜빡이지 않게 한다.
             forest.environment(v.path().env());
             if (query.showHidden() || !v.hidden()) {
                 visible.add(v);
+                forest.spell(v.path());
             }
         }
         Optional<Set<WorkspacePath>> kept = needle.map(n -> matchesAndAncestors(visible, n));
@@ -145,8 +162,7 @@ public final class DirectoryTree {
                 unlisted.add(env);
             }
         }
-        unlisted.sort(Comparator.comparing(DirectoryTree::environmentName, NAME_ORDER)
-                .thenComparing(env -> env instanceof ShellEnvironment.Wsl));
+        unlisted.sort(ENVIRONMENT_ORDER);
         result.addAll(unlisted);
         return List.copyOf(result);
     }
@@ -217,6 +233,10 @@ public final class DirectoryTree {
         return new Built(folder, kind, key);
     }
 
+    private static String nfc(String s) {
+        return Normalizer.normalize(s, Normalizer.Form.NFC);
+    }
+
     private static String separator(ShellEnvironment env) {
         return switch (env) {
             case ShellEnvironment.Wsl _ -> "/";
@@ -249,8 +269,9 @@ public final class DirectoryTree {
     private record Built(TreeNode.Folder folder, RootKind kind, List<String> key) {}
 
     /**
-     * 정규화한 검색어(NFC · {@code Locale.ROOT} 소문자). {@code spansSegments} 는 구분자가 들어 있어 전체 경로에서 찾는지다. 구분자는 서로
-     * 바꾸지 않는다 — WSL 경로를 {@code \} 로 찾지 않는다.
+     * 정규화한 검색어(NFC · {@code Locale.ROOT} 소문자). {@code spansSegments} 는 구분자가 들어 있어 전체 경로에서 찾는지다. Windows 경로와
+     * 비교할 때만 {@code /} 를 {@code \} 로 읽는다 — 사용자가 습관대로 {@code /} 를 쳐도 찾게. 반대로 WSL 경로를 {@code \} 로 찾지는 않고,
+     * 별칭은 검색어 그대로 비교한다.
      */
     private record Needle(String text, boolean spansSegments) {
 
@@ -264,11 +285,15 @@ public final class DirectoryTree {
 
         boolean matches(VisitedDirectory v) {
             String target = spansSegments ? v.path().path() : name(v.path());
-            return contains(target) || v.alias().map(a -> contains(a.value())).orElse(false);
+            return normalized(target).contains(pathText(v.path().env()))
+                    || v.alias().map(a -> normalized(a.value()).contains(text)).orElse(false);
         }
 
-        private boolean contains(String haystack) {
-            return normalized(haystack).contains(text);
+        private String pathText(ShellEnvironment env) {
+            return switch (env) {
+                case ShellEnvironment.Windows _ -> text.replace('/', '\\');
+                case ShellEnvironment.Wsl _ -> text;
+            };
         }
 
         private static String normalized(String s) {
@@ -280,6 +305,16 @@ public final class DirectoryTree {
     private static final class Forest {
         private final Map<ShellEnvironment, EnvBuilder> environments = new LinkedHashMap<>();
         private final Map<WorkspacePath, Node> nodes = new HashMap<>();
+        // 경로별 표기. 거르기 전에 보이는 방문을 정렬 순서로 넣어 검색 여부와 상관없이 같은 표기를 고른다.
+        private final Map<WorkspacePath, WorkspacePath> spellings = new HashMap<>();
+
+        // 경로와 조상의 표기를 처음 본 것으로 정한다. 이미 정한 조상에서 멈춘다 — 그 위도 이미 정해져 있다.
+        void spell(WorkspacePath path) {
+            Optional<WorkspacePath> p = Optional.of(path);
+            while (p.isPresent() && spellings.putIfAbsent(p.get(), p.get()) == null) {
+                p = p.get().parent();
+            }
+        }
 
         EnvBuilder environment(ShellEnvironment env) {
             return environments.computeIfAbsent(env, e -> new EnvBuilder());
@@ -291,7 +326,7 @@ public final class DirectoryTree {
             if (existing != null) {
                 return existing;
             }
-            Node created = new Node(path);
+            Node created = new Node(spellings.getOrDefault(path, path));
             nodes.put(path, created);
             Optional<WorkspacePath> parent = path.parent();
             if (parent.isPresent()) {
@@ -313,7 +348,7 @@ public final class DirectoryTree {
     }
 
     private static final class Node {
-        // 노드를 처음 만든 경로의 표기. 정렬해 넣으므로 그 아래 보이는 방문 중 문자열 순서로 가장 앞선 것(없으면 가장 앞선 세션 cwd)이다.
+        // 그 아래 보이는 방문(거르기 전) 중 정렬 순서로 가장 앞선 것의 표기. 없으면 노드를 처음 만든 세션 cwd 의 표기다.
         private final WorkspacePath path;
         private Optional<VisitedDirectory> visit = Optional.empty();
         private boolean matched;
