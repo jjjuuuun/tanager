@@ -5,6 +5,7 @@ import dev.tanager.application.port.out.LaunchCommand;
 import dev.tanager.application.port.out.LaunchCommand.EnvNames;
 import dev.tanager.domain.history.ShellEnvironment;
 import dev.tanager.domain.session.LaunchTemplate;
+import dev.tanager.domain.session.ShellKind;
 import dev.tanager.domain.session.ShellProfile;
 import dev.tanager.domain.session.WorkingDir;
 import java.util.ArrayList;
@@ -46,18 +47,50 @@ final class WindowsLaunchCommands {
     private static final String WSLENV_SEPARATOR = ":";
     // wsl.exe 옵션의 끝. 뒤는 리눅스 기본 셸의 -c 가 읽는 원시 명령줄이다
     private static final String WSL_SEPARATOR = "--";
+    private static final String PS_SCRIPT = "tanager.ps1";
+    private static final String PS_VARIABLE = "TANAGER_PS1";
+    // -Command 문자열은 고정이다. 스크립트 경로(사용자 이름이 든 앱 데이터 경로)는 환경 변수로만 넘겨 PowerShell 의 따옴표 ·
+    // 이스케이프 규칙(' 와 U+2018–U+201B)을 타지 않게 한다(#107, ADR-0014). 변수 값은 다시 단어로 갈리지 않는다.
+    // 파일이 아니라 문자열로 만든 스크립트 블록을 dot-source 한다 — 실행 정책은 스크립트 파일에만 적용되므로 -ExecutionPolicy
+    // Bypass 없이도 읽히고, 사용자의 정책(프로필 · 세션 · 자식 PowerShell)은 그대로 남는다. 파일이 없으면 조용히 건너뛴다
+    private static final String PS_LOAD_SCRIPT = "if (Test-Path -LiteralPath $env:" + PS_VARIABLE + ") "
+            + "{ . ([scriptblock]::Create([IO.File]::ReadAllText($env:" + PS_VARIABLE + "))) }";
+    private static final List<String> PS_INTEGRATION_ARGS = List.of("-NoExit", "-Command", PS_LOAD_SCRIPT);
+    private static final String PROMPT = "PROMPT";
+    // cmd 의 $e 는 ESC, $P 는 현재 경로. 따옴표는 붙이지 않는다 — OscScanner 가 따옴표 없는 OSC 9;9 도 읽는다
+    private static final String PROMPT_PREFIX = "$e]9;9;$P$e\\";
+    // PROMPT 가 없을 때 cmd 가 쓰는 기본값
+    private static final String DEFAULT_PROMPT = "$P$G";
 
     private WindowsLaunchCommands() {}
 
+    /** 상속한 {@code PROMPT} 가 없는 것으로 보고 {@link #of(ShellProfile, WorkingDir, String, Optional, Optional, Integration)}. */
+    static LaunchCommand of(
+            ShellProfile profile,
+            WorkingDir dir,
+            String userProfile,
+            Optional<String> wslenv,
+            Integration integration) {
+        return of(profile, dir, userProfile, wslenv, Optional.empty(), integration);
+    }
+
     /**
      * {@code dir} 이 {@link WorkingDir.Home} 이면 WSL 은 {@code ~}, Windows 셸은 {@code userProfile} 에서 띄운다. 셸 통합이
-     * 설치돼 있으면 WSL bash 에 rcfile 을 주입하고, 앱 환경의 {@code wslenv} 는 보존한 채 {@code TANAGER_RC/p} 를 붙인다.
+     * 설치돼 있으면 셸마다 이렇게 주입한다(ADR-0014).
+     *
+     * <ul>
+     *   <li>WSL bash: rcfile 을 주입하고, 앱 환경의 {@code wslenv} 는 보존한 채 {@code TANAGER_RC/p} 를 붙인다.
+     *   <li>PowerShell 5.1: 환경 변수 {@code TANAGER_PS1} 의 스크립트를 {@code -Command} 에서 스크립트 블록으로 dot-source 한다(실행
+     *       정책을 바꾸지 않는다).
+     *   <li>cmd: 상속한 {@code prompt}(없거나 공백이면 {@code $P$G}) 앞에 OSC 9;9 를 붙인 {@code PROMPT} 를 준다.
+     * </ul>
      */
     static LaunchCommand of(
             ShellProfile profile,
             WorkingDir dir,
             String userProfile,
             Optional<String> wslenv,
+            Optional<String> prompt,
             Integration integration) {
         if (dir instanceof WorkingDir.At at && !profile.env().equals(at.path().env())) {
             throw new IllegalArgumentException(
@@ -67,9 +100,9 @@ final class WindowsLaunchCommands {
         LaunchCommand command = switch (profile.env()) {
             // 리눅스 경로는 Windows 작업 디렉터리로 줄 수 없다 — wsl.exe 의 --cd 로 넘긴다(ADR-0007)
             case ShellEnvironment.Wsl _ -> wsl(template, pathOr(dir, WSL_HOME), wslenv, integration);
+            // 작업 디렉터리는 argv 가 아니라 lpCurrentDirectory 로 넘긴다 — 셸이 해석하는 문자열에 경로를 넣지 않는다(#107)
             case ShellEnvironment.Windows _ ->
-                new LaunchCommand(
-                        templateArgv(template), Optional.of(pathOr(dir, userProfile)), Map.of(), WINDOWS_NAMES);
+                windows(profile.kind(), template, pathOr(dir, userProfile), prompt, integration);
         };
         requireSafeArgv(profile.env(), command.argv());
         return command;
@@ -86,6 +119,7 @@ final class WindowsLaunchCommands {
      * 본다. {@code --} 뒤는 리눅스 셸이 읽는 원시 명령줄이라 {@code "$TANAGER_RC"} 는 그대로 둔다.
      *
      * <p>이 검사는 wsl.exe 인자 분리만 막는다. cmd {@code /c} · PowerShell {@code -Command} 문자열의 셸 해석은 막지 못한다(ADR-0014).
+     * 그래서 PowerShell 의 {@code -Command} 는 고정 문자열이고 경로는 환경 변수로만 넘긴다(공백이 있어 감싸이지만 {@code "} 가 없다).
      *
      * @throws IllegalArgumentException 안전하지 않은 원소가 있을 때. 정상 흐름에서는 일어나지 않는 버그다
      */
@@ -126,6 +160,36 @@ final class WindowsLaunchCommands {
                 yield new LaunchCommand(argv, Optional.empty(), Map.of(), WINDOWS_NAMES);
             }
         };
+    }
+
+    private static LaunchCommand windows(
+            ShellKind kind, LaunchTemplate template, String cwd, Optional<String> prompt, Integration integration) {
+        List<String> argv = templateArgv(template);
+        Map<String, String> environment = switch (integration) {
+            case Integration.Installed(var directory) ->
+                switch (kind) {
+                    case WINDOWS_POWERSHELL -> {
+                        argv.addAll(PS_INTEGRATION_ARGS);
+                        yield Map.of(PS_VARIABLE, directory.resolve(PS_SCRIPT).toString());
+                    }
+                    case CMD -> Map.of(PROMPT, mergedPrompt(prompt));
+                    case BASH, ZSH -> Map.of();
+                };
+            case Integration.Unavailable _ -> Map.of();
+        };
+        return new LaunchCommand(argv, Optional.of(cwd), environment, WINDOWS_NAMES);
+    }
+
+    /**
+     * 사용자 {@code PROMPT} 는 지우지 않고 앞에 OSC 9;9 만 붙인다. 없거나 공백뿐이면 cmd 기본값 {@code $P$G} 를 쓴다. Tanager 안에서
+     * Tanager 를 띄우면 상속값이 이미 접두로 시작한다 — cmd 의 {@code $} 코드처럼 대소문자를 무시하고 보고 다시 붙이지 않는다.
+     */
+    private static String mergedPrompt(Optional<String> prompt) {
+        String base = prompt.filter(value -> !value.isBlank()).orElse(DEFAULT_PROMPT);
+        if (base.regionMatches(true, 0, PROMPT_PREFIX, 0, PROMPT_PREFIX.length())) {
+            return base;
+        }
+        return PROMPT_PREFIX + base;
     }
 
     /**
