@@ -15,10 +15,8 @@ import java.awt.event.WindowEvent;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletionStage;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import javax.swing.BorderFactory;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
@@ -31,7 +29,8 @@ import javax.swing.border.EmptyBorder;
  * 메인 창(시안 D 의 M2 부분): 제목 표시줄 안 탭 · 터미널 창 하나 · 상태줄. EDT 에서만 만진다.
  *
  * <p>앱 종료 순서(ADR-0011): 셸 닫기(기동 중이면 기동이 끝난 뒤) → 창 dispose(바로 사라진다) → 비데몬 스레드에서 앱 종료 훅
- * (남은 명령 처리 · 미저장 이력 저장 최대 2초) → 셸 종료를 닫은 때부터 최대 4초까지 기다림 → {@code System.exit(0)}.
+ * (남은 명령 처리 · 미저장 이력 저장 최대 2초) → 셸 종료 대기 → {@code System.exit(0)}. 훅과 셸 대기는 닫은 때부터 4초 안에 끝내고, 훅이
+ * 멈추거나 Error 가 나도 끝낸다({@link ExitSequence}).
  */
 final class MainWindow implements PaneController.Host {
     private static final System.Logger LOG = System.getLogger(MainWindow.class.getName());
@@ -123,32 +122,10 @@ final class MainWindow implements PaneController.Host {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(EXIT_WAIT_SECONDS);
         frame.dispose();
         // 비데몬 스레드: 마지막 창이 사라져도 이 대기가 끝나기 전에 JVM 이 멈추지 않는다. 셸이 끝나는 동안 이력을 저장한다
-        Thread.ofPlatform().daemon(false).name("tanager-exit").start(() -> {
-            runQuietly(onShutdown);
-            awaitQuietly(exited, deadline);
-            System.exit(0);
-        });
-    }
-
-    private static void runQuietly(Runnable hook) {
-        try {
-            hook.run();
-        } catch (RuntimeException e) {
-            LOG.log(System.Logger.Level.ERROR, "앱 종료 훅이 실패했다", e);
-        }
-    }
-
-    private static void awaitQuietly(CompletionStage<?> exited, long deadline) {
-        try {
-            long left = Math.max(0, deadline - System.nanoTime());
-            exited.toCompletableFuture().get(left, TimeUnit.NANOSECONDS);
-        } catch (TimeoutException e) {
-            LOG.log(System.Logger.Level.WARNING, "셸이 {0}초 안에 끝나지 않아 그대로 종료한다", EXIT_WAIT_SECONDS);
-        } catch (ExecutionException e) {
-            LOG.log(System.Logger.Level.WARNING, "셸 종료를 기다리다 오류", e.getCause());
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
+        Thread.ofPlatform()
+                .daemon(false)
+                .name("tanager-exit")
+                .start(() -> ExitSequence.run(onShutdown, exited, deadline, () -> System.exit(0)));
     }
 
     // FlatLaf 창 장식이 메뉴 막대를 제목 표시줄 안에 끼운다. 탭은 누르는 기능이 없고 그 자리로 창을 끌 수 있다
