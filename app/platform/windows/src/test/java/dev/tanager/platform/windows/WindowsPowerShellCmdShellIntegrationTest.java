@@ -52,6 +52,10 @@ import org.junit.jupiter.api.io.TempDir;
  *       dot-source 하지 않는 것은 이 PC 의 실행 정책이 결과를 바꾸지 않게 하려고서다.
  *   <li>cmd 는 argv 1번 자리에 {@code /d} 를 끼운다. 이 PC 의 AutoRun(레지스트리 {@code Command Processor\AutoRun}, Clink 등)이
  *       PROMPT 를 바꾸거나 출력을 더해 결과를 흔들지 않게 하려고서다. 실제 기동 argv 는 {@code cmd.exe} 하나다.
+ *   <li>띄우는 셸(비교 기준 PowerShell 포함)의 환경에서 {@code PSModulePath} · {@code PSExecutionPolicyPreference} 를 지운다. 테스트
+ *       JVM 을 띄운 셸의 흔적이라서다 — GitHub 러너의 pwsh(7) 단계는 7 의 모듈 경로를 물려 5.1 이 {@code Microsoft.PowerShell.Security}
+ *       를 못 읽게 하고({@code Get-ExecutionPolicy} 가 없어진다), Bypass 로 띄운 셸은 정책 변수를 물린다. 운영 코드는 사용자가 물려준
+ *       값을 건드리지 않는다.
  *   <li>셸은 PTY 대신 파이프로 돌린다. 파이프 출력은 콘솔 코드 페이지(OEM)라 UTF-8 만 받는 {@link OscScanner} 에 넣기 전에 OEM 으로 읽어
  *       UTF-8 로 다시 인코딩한다(ConPTY 는 UTF-8 로 내보낸다). 한글을 OEM 이 표현하지 못하는 PC 에서는 한글 테스트를 건너뛴다.
  * </ul>
@@ -74,6 +78,10 @@ class WindowsPowerShellCmdShellIntegrationTest {
             + "{ [string]$_.Scope + ':' + [string]$_.ExecutionPolicy }) -join ',') + ';EFFECTIVE=' + (Get-ExecutionPolicy)"
             + " + ';CHILD=' + (powershell.exe -NoProfile -Command Get-ExecutionPolicy)";
     private static final Pattern POLICY_LINE = Pattern.compile("POLICY=([^\\r\\n]*)");
+    // 기본 프롬프트 "PS <경로>> " 의 경로. 8.3 짧은 이름(RUNNER~1)과 긴 이름 차이는 isSameFile 로 넘긴다
+    private static final Pattern DEFAULT_PROMPT_PATH = Pattern.compile("PS ([A-Za-z]:\\\\[^\\r\\n>]*)>");
+    // 테스트 JVM 을 띄운 셸에서 물려받은 값. 띄우는 셸에서 지워 PC · 러너와 무관하게 만든다(클래스 Javadoc)
+    private static final List<String> LAUNCHER_VARIABLES = List.of("PSModulePath", "PSExecutionPolicyPreference");
 
     private static final ShellProfile POWERSHELL = new ShellProfile(
             new ProfileId("powershell"),
@@ -200,8 +208,8 @@ class WindowsPowerShellCmdShellIntegrationTest {
     @Test
     @DisplayName("PowerShell: 레지스트리 드라이브에서는 OSC 를 내지 않는다")
     void powerShellSkipsOscOnRegistryDrive() throws Exception {
-        // given
-        Path elsewhere = Files.createDirectory(temp.resolve("다른 폴더"));
+        // given — 한글 이름은 OEM 이 한글을 못 쓰는 러너(437)에서 ? 로 바뀐다. 이 테스트의 관심은 공급자라 ASCII · 공백만 쓴다
+        Path elsewhere = Files.createDirectory(temp.resolve("other dir"));
 
         // when
         // 경로는 따옴표로 감싸 명령에 넣지 않고 환경 변수로 넘긴다(' 가 든 임시 폴더에서도 같다)
@@ -229,16 +237,14 @@ class WindowsPowerShellCmdShellIntegrationTest {
         Run run = powerShell(temp.resolve("app"), temp, Optional.empty(), POLICY_PROBE + "\nexit\n");
 
         // then
-        assertThat(run.reports()).as("통합은 동작한다").isNotEmpty();
-        assertThat(policyLine(run.text())).isEqualTo(expected);
+        assertThat(run.reports()).as("통합은 동작한다: %s", run.text()).isNotEmpty();
+        assertThat(policyLine(run.text())).as("세션 출력: %s", run.text()).isEqualTo(expected);
     }
 
     @Test
     @DisplayName("PowerShell: 세션 환경에 PSExecutionPolicyPreference 가 생기지 않는다(자식 PowerShell 로 새지 않는다)")
     void powerShellLeavesNoPolicyPreference() throws Exception {
-        // given
-        Assumptions.assumeTrue(
-                System.getenv("PSExecutionPolicyPreference") == null, "테스트 JVM 이 이미 PSExecutionPolicyPreference 를 가졌다");
+        // given — 하네스가 상속값을 지우므로 남아 있다면 Tanager 가 넣은 것이다
 
         // when
         Run run = powerShell(
@@ -248,7 +254,7 @@ class WindowsPowerShellCmdShellIntegrationTest {
                 "'PR' + 'EF=[' + $env:PSExecutionPolicyPreference + ']'\nexit\n");
 
         // then
-        assertThat(run.reports()).isNotEmpty();
+        assertThat(run.reports()).as("통합은 동작한다: %s", run.text()).isNotEmpty();
         assertThat(run.text()).contains("PREF=[]");
     }
 
@@ -262,8 +268,11 @@ class WindowsPowerShellCmdShellIntegrationTest {
         Run run = powerShell(missing, temp.resolve("app"), temp, Optional.empty(), Map.of(), "exit\n");
 
         // then
-        assertThat(run.reports()).isEmpty();
-        assertThat(run.text()).contains("PS " + temp + ">").doesNotContain("FullyQualifiedErrorId");
+        assertThat(run.reports()).as("OSC 없음: %s", run.text()).isEmpty();
+        assertThat(run.text()).doesNotContain("FullyQualifiedErrorId");
+        Matcher prompt = DEFAULT_PROMPT_PATH.matcher(run.text());
+        assertThat(prompt.find()).as("기본 프롬프트가 나온다: %s", run.text()).isTrue();
+        assertSameDirectory(prompt.group(1), temp);
     }
 
     // ---- cmd ----
@@ -368,9 +377,10 @@ class WindowsPowerShellCmdShellIntegrationTest {
 
     /** 비교 기준: 통합도 프로필도 없는 맨 PowerShell 에서 {@code expression} 을 평가한 출력(OEM 으로 읽음). */
     private static String plainPowerShell(String expression) throws Exception {
-        Process process = new ProcessBuilder(PS_EXE, "-NoLogo", "-NoProfile", "-Command", expression)
-                .redirectErrorStream(true)
-                .start();
+        ProcessBuilder builder =
+                new ProcessBuilder(PS_EXE, "-NoLogo", "-NoProfile", "-Command", expression).redirectErrorStream(true);
+        withoutLauncherVariables(builder.environment());
+        Process process = builder.start();
         process.getOutputStream().close();
         CompletableFuture<byte[]> output = CompletableFuture.supplyAsync(() -> readAll(process));
         if (!process.waitFor(SHELL_TIMEOUT.toSeconds(), TimeUnit.SECONDS)) {
@@ -378,6 +388,11 @@ class WindowsPowerShellCmdShellIntegrationTest {
             throw new AssertionError("기준 PowerShell 이 끝나지 않았다");
         }
         return new String(output.get(10, TimeUnit.SECONDS), oemCharset());
+    }
+
+    // ProcessBuilder 의 Windows 환경 맵은 이름을 대소문자 무시로 비교하지만, 맵 구현에 기대지 않고 직접 견준다
+    private static void withoutLauncherVariables(Map<String, String> environment) {
+        environment.keySet().removeIf(name -> LAUNCHER_VARIABLES.stream().anyMatch(name::equalsIgnoreCase));
     }
 
     private static String policyLine(String output) {
@@ -402,6 +417,7 @@ class WindowsPowerShellCmdShellIntegrationTest {
         command.workingDirectory().ifPresent(dir -> builder.directory(new File(dir)));
         builder.environment().clear();
         builder.environment().putAll(command.environmentOver(System.getenv()));
+        withoutLauncherVariables(builder.environment());
         builder.environment().putAll(extraEnv);
         Process process = builder.start();
         CompletableFuture<byte[]> output = CompletableFuture.supplyAsync(() -> readAll(process));
