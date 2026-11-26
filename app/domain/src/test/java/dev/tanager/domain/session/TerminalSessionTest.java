@@ -380,4 +380,24 @@ class TerminalSessionTest {
     void workingDirAtRejectsNull() {
         assertThatThrownBy(() -> new WorkingDir.At(null)).isInstanceOf(NullPointerException.class);
     }
+
+    @Test
+    @DisplayName("knownCwd: Starting 은 시작 경로, 홈에서 시작하면 비어 있다")
+    void knownCwdOfStartingIsStartDir() {
+        // given
+        TerminalSession atHome = TerminalSession.start(wslProfile(), new WorkingDir.Home())
+                .value()
+                .orElseThrow();
+
+        // when / then
+        assertThat(starting().knownCwd()).contains(wslPath("/home/me"));
+        assertThat(atHome.knownCwd()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("knownCwd: Failed 는 시작 경로가 있었어도 비어 있다")
+    void knownCwdOfFailedIsEmpty() {
+        // when / then
+        assertThat(failed().knownCwd()).isEmpty();
+    }
 }

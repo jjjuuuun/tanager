@@ -2,6 +2,7 @@ package dev.tanager.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import dev.tanager.application.port.in.RecordingVisits;
 import dev.tanager.application.port.in.StartFailure;
 import dev.tanager.application.port.in.StartNotice;
 import dev.tanager.application.port.in.StartRequest;
@@ -18,7 +19,11 @@ import dev.tanager.application.port.out.OutputCollector;
 import dev.tanager.application.port.out.ProfileSettings;
 import dev.tanager.application.port.out.ScriptedPtyLauncher;
 import dev.tanager.application.port.out.TerminalSize;
+import dev.tanager.application.state.AppState;
+import dev.tanager.application.state.StateActor;
+import dev.tanager.domain.history.HistoryPolicy;
 import dev.tanager.domain.history.ShellEnvironment;
+import dev.tanager.domain.history.WorkHistory;
 import dev.tanager.domain.history.WorkspacePath;
 import dev.tanager.domain.session.IntegrationMode;
 import dev.tanager.domain.session.LaunchTemplate;
@@ -30,6 +35,7 @@ import dev.tanager.domain.session.ShellKind;
 import dev.tanager.domain.session.ShellProfile;
 import dev.tanager.domain.session.TerminalSession;
 import dev.tanager.domain.session.WorkingDir;
+import dev.tanager.domain.shared.PaneId;
 import dev.tanager.domain.shared.Result;
 import java.util.HashMap;
 import java.util.List;
@@ -48,6 +54,7 @@ class SessionStarterTest {
     private static final ShellProfile POWERSHELL = profile("powershell", ShellKind.WINDOWS_POWERSHELL, WIN);
     private static final ShellProfile CMD = profile("cmd", ShellKind.CMD, WIN);
     private static final TerminalSize SIZE = new TerminalSize(100, 30);
+    private static final PaneId PANE = new PaneId("p1");
 
     private final FakePlatformModule platform = new FakePlatformModule(List.of(WSL_A, WSL_B, POWERSHELL, CMD));
     private final InMemoryConfigRepository config = new InMemoryConfigRepository();
@@ -55,8 +62,17 @@ class SessionStarterTest {
     private final SessionStarter starter = newStarter(platform);
 
     private SessionStarter newStarter(FakePlatformModule fakePlatform) {
+        // 상태 추적은 이 테스트의 관심사가 아니다 — 방문 기록은 버리는 Fake 로 받는다(추적은 SessionStarterTrackingTest)
+        StateActor state = new StateActor(AppState.initial(WorkHistory.empty(HistoryPolicy.DEFAULT)), Runnable::run);
         return new SessionStarter(
-                new ProfileCatalog(fakePlatform), config, fakePlatform, launcher, new DefaultProfileMemory(config));
+                new ProfileCatalog(fakePlatform),
+                config,
+                fakePlatform,
+                new IntegrationStatus(fakePlatform),
+                launcher,
+                new DefaultProfileMemory(config),
+                state,
+                new RecordingVisits());
     }
 
     private static ShellProfile profile(String id, ShellKind kind, ShellEnvironment env) {
@@ -65,15 +81,15 @@ class SessionStarterTest {
     }
 
     private static StartRequest request() {
-        return StartRequest.remembered(SIZE);
+        return StartRequest.remembered(PANE, SIZE);
     }
 
     private static StartRequest requestFor(String profileId) {
-        return StartRequest.chosen(new ProfileId(profileId), false, SIZE);
+        return StartRequest.chosen(PANE, new ProfileId(profileId), false, SIZE);
     }
 
     private static StartRequest chosen(String profileId, boolean remember) {
-        return StartRequest.chosen(new ProfileId(profileId), remember, SIZE);
+        return StartRequest.chosen(PANE, new ProfileId(profileId), remember, SIZE);
     }
 
     private static List<ShellProfile> detected() {
@@ -225,7 +241,7 @@ class SessionStarterTest {
 
         // when
         started(starter.start(
-                new StartRequest(Optional.of(new ProfileId("powershell")), false, Optional.of(dir), SIZE)));
+                new StartRequest(PANE, Optional.of(new ProfileId("powershell")), false, Optional.of(dir), SIZE)));
 
         // then
         assertThat(platform.launchRequests()).containsExactly(new LaunchRequest(POWERSHELL, dir));
@@ -238,8 +254,8 @@ class SessionStarterTest {
         WorkingDir dir = new WorkingDir.At(winPath("C:\\work"));
 
         // when
-        var result =
-                starter.start(new StartRequest(Optional.of(new ProfileId("wsl:A")), false, Optional.of(dir), SIZE));
+        var result = starter.start(
+                new StartRequest(PANE, Optional.of(new ProfileId("wsl:A")), false, Optional.of(dir), SIZE));
 
         // then
         assertThat(result.error())
@@ -334,14 +350,14 @@ class SessionStarterTest {
         // given
         WorkingDir work = new WorkingDir.At(winPath("C:\\work"));
         StartedSession first = started(starter.start(
-                new StartRequest(Optional.of(new ProfileId("powershell")), false, Optional.of(work), SIZE)));
+                new StartRequest(PANE, Optional.of(new ProfileId("powershell")), false, Optional.of(work), SIZE)));
         TerminalSession exited = first.session().exited(0).value().orElseThrow();
         launcher.willFailFor(
                 command -> command.workingDirectory().equals(Optional.of("C:\\work")),
                 new LaunchError.WorkingDirectoryNotFound("C:\\work"));
 
         // when
-        StartedSession second = started(starter.restart(exited, SIZE));
+        StartedSession second = started(starter.restart(PANE, exited, SIZE));
 
         // then
         assertThat(second.notices()).containsExactly(new StartNotice.StartDirMissing(winPath("C:\\work")));
@@ -444,7 +460,7 @@ class SessionStarterTest {
         int loadsBefore = config.loadCalls();
 
         // when
-        StartedSession second = started(starter.restart(exited, new TerminalSize(120, 40)));
+        StartedSession second = started(starter.restart(PANE, exited, new TerminalSize(120, 40)));
 
         // then
         assertThat(second.session().profile()).isEqualTo(WSL_A);
@@ -473,7 +489,7 @@ class SessionStarterTest {
                 .orElseThrow();
 
         // when
-        started(starter.restart(exited, SIZE));
+        started(starter.restart(PANE, exited, SIZE));
 
         // then
         assertThat(platform.launchRequests().getLast()).isEqualTo(new LaunchRequest(WSL_A, new WorkingDir.At(last)));
@@ -486,7 +502,7 @@ class SessionStarterTest {
         StartedSession first = started(starter.start(requestFor("wsl:A")));
 
         // when
-        var result = starter.restart(first.session(), SIZE);
+        var result = starter.restart(PANE, first.session(), SIZE);
 
         // then
         assertThat(result.error())

@@ -9,6 +9,7 @@ import dev.tanager.application.port.in.StartedSession;
 import dev.tanager.application.port.out.TerminalSize;
 import dev.tanager.application.port.out.TerminalStream;
 import dev.tanager.domain.session.ShellProfile;
+import dev.tanager.domain.shared.PaneId;
 import dev.tanager.domain.shared.Result;
 import dev.tanager.ui.terminal.StreamTtyConnector;
 import dev.tanager.ui.terminal.TanagerTermWidget;
@@ -70,6 +71,7 @@ public final class PaneController {
         void removed();
     }
 
+    private final PaneId id;
     private final Executor ui;
     private final Executor background;
     private final StartSessionUseCase sessions;
@@ -91,13 +93,16 @@ public final class PaneController {
     // 진행 중인 기동이 내놓을 스트림. 기동 중에 앱이 끝나도 그 스트림을 닫고 종료를 기다리려고 들고 있다
     private CompletableFuture<Optional<TerminalStream>> launching = CompletableFuture.completedFuture(Optional.empty());
 
+    /** @param id 이 창의 식별자. 트리의 세션 번호 · cwd 추적이 이 창에 매인다 */
     public PaneController(
+            PaneId id,
             Executor ui,
             Executor background,
             StartSessionUseCase sessions,
             ListProfilesUseCase profiles,
             TerminalSettings settings,
             Host host) {
+        this.id = Objects.requireNonNull(id, "id");
         this.ui = Objects.requireNonNull(ui, "ui");
         this.background = Objects.requireNonNull(background, "background");
         this.sessions = Objects.requireNonNull(sessions, "sessions");
@@ -242,10 +247,10 @@ public final class PaneController {
 
     private Result<StartedSession, StartFailure> start(Attempt attempt, TerminalSize size) {
         return switch (attempt) {
-            case Attempt.Fresh _ -> sessions.start(StartRequest.remembered(size));
-            case Attempt.Restart(var exited) -> sessions.restart(exited, size);
+            case Attempt.Fresh _ -> sessions.start(StartRequest.remembered(id, size));
+            case Attempt.Restart(var exited) -> sessions.restart(id, exited, size);
             case Attempt.Chosen(ShellProfile profile, boolean remember) ->
-                sessions.start(StartRequest.chosen(profile.id(), remember, size));
+                sessions.start(StartRequest.chosen(id, profile.id(), remember, size));
         };
     }
 

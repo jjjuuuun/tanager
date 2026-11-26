@@ -22,6 +22,14 @@ public record TerminalSession(ShellProfile profile, SessionState state) {
         });
     }
 
+    /**
+     * 상태가 가진 경로: 시작 경로(Starting) · 현재 경로(Running) · 마지막 경로(Exited). 홈은 아직 모르는 경로라, Failed 는 경로가 없어
+     * 빈 값이다.
+     */
+    public Optional<WorkspacePath> knownCwd() {
+        return pathOf(state);
+    }
+
     private static Optional<WorkspacePath> pathOf(SessionState state) {
         return switch (state) {
             case SessionState.Starting s -> pathOf(s.dir());

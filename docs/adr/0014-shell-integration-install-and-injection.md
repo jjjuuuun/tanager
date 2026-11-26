@@ -36,11 +36,12 @@ ADR-0003 은 셸 통합 스크립트가 프롬프트마다 OSC 7(bash) · OSC 9;
   - 예외를 던지지 않는다. `IOException` · `RuntimeException` 은 `Unavailable(이유)` 가 된다. 이유는 사용자에게 보일 짧은 문장(`셸 통합 스크립트를 설치하지 못했다: <경로> (<원인>)`)이고, 예외 전체는 `System.Logger` 에 남긴다.
 - 버전 파일은 두지 않는다. 바이트 비교는 사용자가 고친 파일까지 되돌린다.
 - macOS 의 `integration()` 은 M7 전까지 `Unavailable("M7")` 이다.
-- bootstrap 은 시작할 때 가상 스레드에서 `install()` 을 한 번 부르고 결과를 로그에 남긴다(`Unavailable` 은 WARNING). 셸 기동은 기다리지 않는다.
+- `install()` 은 프로세스에서 한 번만 돈다. application 의 `service.IntegrationStatus` 가 `FutureTask` 로 결과를 기억하고(`ProfileCatalog` 와 같은 방식), 모두가 그 결과를 같이 쓴다. 같은 프로세스에서 설치가 겹쳐 고정 tmp 이름 · `tanager.*.tmp` 정리와 부딪히지 않게 하기 위해서다. 포트 계약을 어겨 예외가 나면 `Unavailable` 로 기억하고 다시 설치하지 않는다.
+- bootstrap 은 시작할 때 가상 스레드에서 이 홀더를 한 번 데우고 결과를 로그에 남긴다(`Unavailable` 은 WARNING). 창을 띄우는 일은 기다리지 않는다.
 
 ### 기동 명령에 넘기기 (#55 · #81 에서 구현)
 - 설치 결과를 `launchCommand(profile, dir, integration)` 의 세 번째 인자로 넘긴다(ADR-0007 · 0009 개정). 기동 명령 계산은 계속 순수 함수다.
-- `SessionStarter` 는 셸 탐지와 같은 방식으로 설치 결과를 기다린다.
+- `SessionStarter` 는 셸 탐지와 같은 방식으로 `IntegrationStatus` 의 설치 결과를 기다린다(#77). start · restart 는 백그라운드 스레드에서 불리므로 EDT 를 막지 않는다.
 
 ### WSL (#55 에서 구현)
 - 환경 `TANAGER_RC=<Windows 경로>\tanager.bash` 와 `WSLENV=<기존>:TANAGER_RC/p`(기존이 없으면 `TANAGER_RC/p`)를 준다. argv 는 `wsl.exe -d <d> --cd <경로> -- bash --rcfile "$TANAGER_RC" -i` 다. `wsl.exe` 는 `--` 뒤 명령을 기본 셸로 실행하므로 변수가 펼쳐진다.

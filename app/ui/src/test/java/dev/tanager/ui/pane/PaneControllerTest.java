@@ -12,6 +12,7 @@ import dev.tanager.application.port.out.TerminalSize;
 import dev.tanager.domain.session.ProfileResolution;
 import dev.tanager.domain.session.ShellProfile;
 import dev.tanager.domain.session.TerminalSession;
+import dev.tanager.domain.shared.PaneId;
 import dev.tanager.domain.shared.Result;
 import dev.tanager.ui.font.TerminalFontSet;
 import dev.tanager.ui.terminal.TanagerTermWidget;
@@ -55,7 +56,7 @@ class PaneControllerTest {
             previous = UIManager.getLookAndFeel();
             UIManager.setLookAndFeel(new SoftDarkLaf());
             TerminalSettings settings = new TerminalSettings(TerminalFontSet.fallback(), JediTermColors.current());
-            controller = new PaneController(ui, background, sessions, profiles, settings, host);
+            controller = new PaneController(new PaneId("p1"), ui, background, sessions, profiles, settings, host);
             return null;
         });
     }
@@ -573,7 +574,7 @@ class PaneControllerTest {
         }
 
         @Override
-        public Result<StartedSession, StartFailure> restart(TerminalSession exited, TerminalSize size) {
+        public Result<StartedSession, StartFailure> restart(PaneId pane, TerminalSession exited, TerminalSize size) {
             restarts.add(exited);
             return Result.ok(launch());
         }

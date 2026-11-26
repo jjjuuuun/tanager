@@ -18,6 +18,7 @@ import dev.tanager.domain.session.ProfileId;
 import dev.tanager.domain.session.ProfileResolution;
 import dev.tanager.domain.session.ShellKind;
 import dev.tanager.domain.session.ShellProfile;
+import dev.tanager.domain.shared.PaneId;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -57,7 +58,7 @@ class AssemblyTest {
         await().atMost(Duration.ofSeconds(2)).until(() -> platform.shellsCalls() == 1);
 
         // when
-        var result = assembly.sessions().start(StartRequest.remembered(SIZE));
+        var result = assembly.sessions().start(StartRequest.remembered(new PaneId("p1"), SIZE));
 
         // then
         assertThat(result.error())
@@ -82,12 +83,14 @@ class AssemblyTest {
 
         // when
         StartedSession first = assembly.sessions()
-                .start(StartRequest.chosen(CMD.id(), true, SIZE))
+                .start(StartRequest.chosen(new PaneId("p1"), CMD.id(), true, SIZE))
                 .value()
                 .orElseThrow();
         first.stream().close();
-        StartedSession second =
-                assembly.sessions().start(StartRequest.remembered(SIZE)).value().orElseThrow();
+        StartedSession second = assembly.sessions()
+                .start(StartRequest.remembered(new PaneId("p1"), SIZE))
+                .value()
+                .orElseThrow();
 
         // then
         String text = Files.readString(file, StandardCharsets.UTF_8);
@@ -110,7 +113,7 @@ class AssemblyTest {
 
         // when
         StartedSession started = assembly.sessions()
-                .start(StartRequest.chosen(CMD.id(), true, SIZE))
+                .start(StartRequest.chosen(new PaneId("p1"), CMD.id(), true, SIZE))
                 .value()
                 .orElseThrow();
 
@@ -137,6 +140,32 @@ class AssemblyTest {
     }
 
     @Test
+    @DisplayName("조립 때 데운 셸 통합 설치 결과를 셸 시작이 같이 써서 설치는 프로세스에서 한 번이다")
+    void startSharesInstallationWarmedByAssembly() {
+        // given
+        FakeShellIntegration integration = FakeShellIntegration.installedAt(appData.resolve("shell-integration"));
+        FakePlatformModule platform =
+                new FakePlatformModule(List.of(CMD)).withAppData(appData).withIntegration(integration);
+        Assembly assembly = Assembly.assemble(platform, new ScriptedPtyLauncher());
+        await().atMost(Duration.ofSeconds(2)).until(() -> integration.installCalls() == 1);
+
+        // when
+        StartedSession first = assembly.sessions()
+                .start(StartRequest.chosen(new PaneId("p1"), CMD.id(), false, SIZE))
+                .value()
+                .orElseThrow();
+        StartedSession second = assembly.sessions()
+                .start(StartRequest.chosen(new PaneId("p2"), CMD.id(), false, SIZE))
+                .value()
+                .orElseThrow();
+
+        // then
+        assertThat(integration.installCalls()).isEqualTo(1);
+        first.stream().close();
+        second.stream().close();
+    }
+
+    @Test
     @DisplayName("셸 통합 설치가 예외를 던져도 조립과 셸 시작은 된다")
     void throwingShellIntegrationDoesNotBreakAssemblyOrStart() {
         // given
@@ -148,7 +177,7 @@ class AssemblyTest {
         // when
         Assembly assembly = Assembly.assemble(platform, launcher);
         await().atMost(Duration.ofSeconds(2)).until(() -> integration.installCalls() == 1);
-        var result = assembly.sessions().start(StartRequest.chosen(CMD.id(), false, SIZE));
+        var result = assembly.sessions().start(StartRequest.chosen(new PaneId("p1"), CMD.id(), false, SIZE));
 
         // then
         StartedSession started = result.value().orElseThrow();

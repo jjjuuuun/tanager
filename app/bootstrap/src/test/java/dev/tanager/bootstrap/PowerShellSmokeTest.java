@@ -14,6 +14,7 @@ import dev.tanager.domain.session.SessionState;
 import dev.tanager.domain.session.ShellKind;
 import dev.tanager.domain.session.ShellProfile;
 import dev.tanager.domain.session.TerminalSession;
+import dev.tanager.domain.shared.PaneId;
 import dev.tanager.ui.font.TerminalFontSet;
 import dev.tanager.ui.terminal.StreamTtyConnector;
 import dev.tanager.ui.terminal.TanagerTermWidget;
@@ -58,7 +59,7 @@ class PowerShellSmokeTest {
                 .findFirst()
                 .orElseThrow();
         StartedSession started = assembly.sessions()
-                .start(StartRequest.chosen(powershell.id(), false, new TerminalSize(120, 30)))
+                .start(StartRequest.chosen(new PaneId("p1"), powershell.id(), false, new TerminalSize(120, 30)))
                 .value()
                 .orElseThrow();
         StreamTtyConnector connector = StreamTtyConnector.attach(started.stream(), "powershell");

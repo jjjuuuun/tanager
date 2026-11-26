@@ -3,6 +3,7 @@ package dev.tanager.ui;
 import com.formdev.flatlaf.FlatClientProperties;
 import dev.tanager.application.port.in.ListProfilesUseCase;
 import dev.tanager.application.port.in.StartSessionUseCase;
+import dev.tanager.domain.shared.PaneId;
 import dev.tanager.ui.pane.PaneController;
 import dev.tanager.ui.terminal.TerminalSettings;
 import dev.tanager.ui.theme.ColorToken;
@@ -43,6 +44,8 @@ final class MainWindow implements PaneController.Host {
     // 기다려 강제 종료 경로까지 덮는다. 루트가 유예 안에 끝나면 자손 정리 스레드(어댑터의 가상 스레드)가 System.exit 와
     // 경합할 수 있다 — 포트에 "정리 끝" 신호가 없어서 남은 한계다(ADR-0011)
     private static final long EXIT_WAIT_SECONDS = 4;
+    // M3 는 창이 하나다. 분할(M4)부터는 레이아웃 트리의 Leaf 가 창 ID 를 준다
+    private static final PaneId ONLY_PANE = new PaneId("p1");
 
     private final JFrame frame = new JFrame("Tanager");
     private final JLabel tab = new JLabel("Tanager");
@@ -58,7 +61,7 @@ final class MainWindow implements PaneController.Host {
             TerminalSettings settings,
             Executor background) {
         Executor ui = SwingUtilities::invokeLater;
-        this.pane = new PaneController(ui, background, sessions, profiles, settings, this);
+        this.pane = new PaneController(ONLY_PANE, ui, background, sessions, profiles, settings, this);
         frame.setJMenuBar(titleBarTabs());
         frame.getContentPane().add(paneArea(), BorderLayout.CENTER);
         frame.getContentPane().add(statusBar(), BorderLayout.SOUTH);
