@@ -41,15 +41,23 @@ __tanager_prompt() {
 }
 
 # bash 5.1+ 의 배열 PROMPT_COMMAND 는 원소를 더하고, 문자열이면 앞에 붙인다. 이미 있으면 두 번 넣지 않는다.
+# 사용자가 PROMPT_COMMAND 를 export 해 두면 중첩 bash 가 훅 이름만 물려받는다 — 함수도 함께 export 해
+# 자식의 프롬프트마다 "__tanager_prompt: command not found" 가 뜨지 않게 한다(자식도 OSC 7 을 낸다).
 __tanager_install_hook() {
-  local entry
-  if [[ "$(declare -p PROMPT_COMMAND 2>/dev/null)" == "declare -a"* ]]; then
+  local entry decl flags
+  decl=$(declare -p PROMPT_COMMAND 2>/dev/null)
+  flags=${decl#declare -}
+  flags=${flags%% *}
+  if [[ $flags == *a* ]]; then
     for entry in "${PROMPT_COMMAND[@]}"; do
       [[ $entry == *__tanager_prompt* ]] && return 0
     done
     PROMPT_COMMAND+=(__tanager_prompt)
   elif [[ ${PROMPT_COMMAND-} != *__tanager_prompt* ]]; then
     PROMPT_COMMAND="__tanager_prompt${PROMPT_COMMAND:+;$PROMPT_COMMAND}"
+  fi
+  if [[ $flags == *x* ]]; then
+    export -f __tanager_prompt __tanager_osc7
   fi
 }
 __tanager_install_hook

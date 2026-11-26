@@ -9,7 +9,15 @@ if (-not (Test-Path -LiteralPath 'Variable:global:__TanagerOriginalPrompt')) {
     function global:prompt {
         # 가장 먼저 잡는다 — 다음 문장부터 $? 가 바뀐다
         $tanagerSucceeded = $global:?
-        $tanagerExitCode = $global:LASTEXITCODE
+        # 사용자가 Set-StrictMode -Version Latest 를 켜 두면 없는 $global:LASTEXITCODE 를 읽는 순간 예외가 나고
+        # 호스트가 기본 'PS>' 프롬프트로 물러선다. 있을 때만 읽는다(-ErrorAction Ignore 는 $Error 도 더럽히지 않는다).
+        $tanagerExitVar = Get-Variable -Name LASTEXITCODE -Scope Global -ErrorAction Ignore
+        $tanagerHadExitCode = $null -ne $tanagerExitVar
+        $tanagerExitCode = $null
+        if ($tanagerHadExitCode) {
+            # PSVariable 은 살아 있는 참조다 — 원래 prompt 가 바꾸기 전에 값을 떠 둔다
+            $tanagerExitCode = $tanagerExitVar.Value
+        }
 
         $tanagerOsc = ''
         $tanagerLocation = $executionContext.SessionState.Path.CurrentLocation
@@ -19,7 +27,9 @@ if (-not (Test-Path -LiteralPath 'Variable:global:__TanagerOriginalPrompt')) {
         }
 
         # 원래 prompt 가 직전 명령의 $? · $LASTEXITCODE 를 그대로 보게 한다($? 는 직접 대입할 수 없어 실패를 한 번 일으킨다)
-        $global:LASTEXITCODE = $tanagerExitCode
+        if ($tanagerHadExitCode) {
+            $global:LASTEXITCODE = $tanagerExitCode
+        }
         if ($null -eq $global:__TanagerOriginalPrompt) {
             $tanagerOut = "PS $($tanagerLocation)$('>' * ($nestedPromptLevel + 1)) "
         } elseif ($tanagerSucceeded) {
@@ -28,8 +38,12 @@ if (-not (Test-Path -LiteralPath 'Variable:global:__TanagerOriginalPrompt')) {
             Write-Error -Message 'tanager' -ErrorAction Ignore
             $tanagerOut = & $global:__TanagerOriginalPrompt
         }
-        # 원래 prompt 안의 외부 명령(git 등)이 바꾼 값을 사용자에게 되돌린다
-        $global:LASTEXITCODE = $tanagerExitCode
+        # 원래 prompt 안의 외부 명령(git 등)이 바꾼 값을 사용자에게 되돌린다. 원래 없던 변수는 만들지 않는다.
+        if ($tanagerHadExitCode) {
+            $global:LASTEXITCODE = $tanagerExitCode
+        } else {
+            Remove-Variable -Name LASTEXITCODE -Scope Global -ErrorAction Ignore
+        }
 
         return $tanagerOsc + ($tanagerOut -join '')
     }
