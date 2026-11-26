@@ -3,6 +3,7 @@ package dev.tanager.platform.windows;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import dev.tanager.application.platform.OperatingSystem;
+import dev.tanager.application.port.out.Integration;
 import dev.tanager.application.port.out.PlatformModule;
 import dev.tanager.domain.session.ShellProfile;
 import java.nio.file.Files;
@@ -16,6 +17,7 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledOnOs;
 import org.junit.jupiter.api.condition.OS;
+import org.junit.jupiter.api.io.TempDir;
 
 class WindowsPlatformModuleTest {
     private final WindowsPlatformModule module = new WindowsPlatformModule();
@@ -70,5 +72,26 @@ class WindowsPlatformModuleTest {
                 .forEach(p -> assertThat(Files.exists(Path.of(p.launch().executable())))
                         .as(p.launch().executable())
                         .isTrue());
+    }
+
+    @Test
+    @DisplayName("integration() 은 APPDATA 아래 Tanager/shell-integration 에 스크립트를 설치한다")
+    void integrationInstallsUnderAppData(@TempDir Path appdata) {
+        // given
+        WindowsShellCatalog catalog = new WindowsShellCatalog(
+                new FakeCommandRunner(new CommandOutcome.NotStarted("x")),
+                key -> Optional.empty(),
+                Duration.ofSeconds(1));
+        WindowsPlatformModule custom = new WindowsPlatformModule(
+                catalog, key -> "APPDATA".equals(key) ? Optional.of(appdata.toString()) : Optional.empty());
+
+        // when
+        Integration result = custom.integration().install();
+
+        // then
+        Path expected = appdata.resolve("Tanager").resolve("shell-integration");
+        assertThat(result).isEqualTo(new Integration.Installed(expected));
+        assertThat(expected.resolve("tanager.ps1")).isRegularFile();
+        assertThat(expected.resolve("tanager.bash")).isRegularFile();
     }
 }

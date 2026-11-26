@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import dev.tanager.application.port.out.LaunchCommand;
 import dev.tanager.application.port.out.PlatformDirs;
 import dev.tanager.application.port.out.PlatformModule;
+import dev.tanager.application.port.out.ShellIntegration;
 import dev.tanager.domain.session.ShellProfile;
 import dev.tanager.domain.session.WorkingDir;
 import dev.tanager.domain.shared.Result;
@@ -35,6 +36,11 @@ class PlatformSelectionTest {
 
         @Override
         public PlatformDirs dirs() {
+            throw new UnsupportedOperationException("선택 테스트에서는 쓰지 않는다");
+        }
+
+        @Override
+        public ShellIntegration integration() {
             throw new UnsupportedOperationException("선택 테스트에서는 쓰지 않는다");
         }
     }

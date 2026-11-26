@@ -4,6 +4,7 @@ import dev.tanager.application.platform.OperatingSystem;
 import dev.tanager.application.port.out.LaunchCommand;
 import dev.tanager.application.port.out.PlatformDirs;
 import dev.tanager.application.port.out.PlatformModule;
+import dev.tanager.application.port.out.ShellIntegration;
 import dev.tanager.domain.history.ShellEnvironment;
 import dev.tanager.domain.history.WorkspacePath;
 import dev.tanager.domain.session.ShellProfile;
@@ -88,5 +89,10 @@ public final class WindowsPlatformModule implements PlatformModule {
     public PlatformDirs dirs() {
         Path dir = appData;
         return () -> dir;
+    }
+
+    @Override
+    public ShellIntegration integration() {
+        return new WindowsShellIntegration(appData);
     }
 }

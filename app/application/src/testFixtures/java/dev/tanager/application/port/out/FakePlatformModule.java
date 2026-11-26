@@ -7,6 +7,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -23,6 +24,8 @@ public final class FakePlatformModule implements PlatformModule {
     private final AtomicInteger shellsCalls = new AtomicInteger();
     private final List<LaunchRequest> launchRequests = new ArrayList<>();
     private Path appData = Path.of("fake-appdata", "Tanager");
+    private ShellIntegration defaultIntegration = defaultIntegrationFor(appData);
+    private Optional<ShellIntegration> customIntegration = Optional.empty();
     private CountDownLatch shellsGate;
     private Optional<RuntimeException> shellsFailure = Optional.empty();
 
@@ -42,9 +45,24 @@ public final class FakePlatformModule implements PlatformModule {
         return this;
     }
 
+    /** 앱 데이터 폴더. {@link #withIntegration} 을 주지 않았다면 기본 {@code integration()} 도 이 아래를 가리킨다. */
     public synchronized FakePlatformModule withAppData(Path appData) {
         this.appData = appData;
+        this.defaultIntegration = defaultIntegrationFor(appData);
         return this;
+    }
+
+    /**
+     * {@code integration()} 이 돌려줄 셸 통합. 주지 않으면 {@code Installed(<appData>/shell-integration)} 을 돌려주는 Fake 다(기본
+     * appData 는 {@code fake-appdata/Tanager}).
+     */
+    public synchronized FakePlatformModule withIntegration(ShellIntegration integration) {
+        this.customIntegration = Optional.of(Objects.requireNonNull(integration, "integration"));
+        return this;
+    }
+
+    private static ShellIntegration defaultIntegrationFor(Path appData) {
+        return FakeShellIntegration.installedAt(appData.resolve("shell-integration"));
     }
 
     /** {@code launchCommand} 에 넘어온 인자 하나. */
@@ -115,5 +133,10 @@ public final class FakePlatformModule implements PlatformModule {
     /** {@code launchCommand} 호출 기록(불변 사본). */
     public synchronized List<LaunchRequest> launchRequests() {
         return List.copyOf(launchRequests);
+    }
+
+    @Override
+    public synchronized ShellIntegration integration() {
+        return customIntegration.orElse(defaultIntegration);
     }
 }

@@ -36,4 +36,7 @@ public interface PlatformModule {
 
     /** 앱 데이터 폴더 등 OS 별 위치. 계산만 하고 디렉터리를 만들지 않는다. */
     PlatformDirs dirs();
+
+    /** 이 OS 의 셸 통합 스크립트 설치기(ADR-0014). 돌려주는 것만으로는 아무것도 쓰지 않는다 — {@code install()} 이 쓴다. */
+    ShellIntegration integration();
 }

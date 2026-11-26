@@ -3,6 +3,7 @@ package dev.tanager.platform.macos;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import dev.tanager.application.platform.OperatingSystem;
+import dev.tanager.application.port.out.Integration;
 import dev.tanager.application.port.out.PlatformModule;
 import java.util.ServiceLoader;
 import org.junit.jupiter.api.DisplayName;
@@ -39,5 +40,15 @@ class MacPlatformModuleTest {
     @DisplayName("shells() 는 M7 전까지 빈 목록이다")
     void shellsIsEmpty() {
         assertThat(module.shells()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("integration().install() 은 M7 전까지 예외 없이 Unavailable(M7) 이다")
+    void integrationIsUnavailable() {
+        // when
+        Integration result = module.integration().install();
+
+        // then
+        assertThat(result).isEqualTo(new Integration.Unavailable("M7"));
     }
 }
