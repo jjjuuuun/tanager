@@ -23,6 +23,8 @@ public final class WorkspacePath {
     private final ShellEnvironment env;
     private final String path;
     private final String key;
+    private final String root;
+    private final List<String> segments;
 
     private WorkspacePath(ShellEnvironment env, String path) {
         this.env = env;
@@ -31,6 +33,8 @@ public final class WorkspacePath {
             case ShellEnvironment.Windows _ -> path.toLowerCase(Locale.ROOT);
             case ShellEnvironment.Wsl _ -> path;
         };
+        this.root = rootOf(env, path);
+        this.segments = split(path.substring(root.length()), separator(env));
     }
 
     /** {@code raw} 를 {@code env} 의 규칙으로 정규화한다. 빈 값은 {@link PathError.Blank}, 상대 경로는 {@link PathError.NotAbsolute}. */
@@ -59,6 +63,28 @@ public final class WorkspacePath {
         return path;
     }
 
+    /**
+     * 루트 부분. WSL 은 {@code /}, 드라이브는 {@code C:\}(대문자), UNC 는 {@code \\host\share}(입력 대소문자 보존). 표시용이다 —
+     * 비교 · 묶음 키로 쓰지 말고 {@link WorkspacePath} 자체(또는 {@link #parent()} 사슬)를 쓴다(Windows 는 대소문자를 무시한다).
+     */
+    public String root() {
+        return root;
+    }
+
+    /** 루트 아래의 이름들(대소문자 보존, 표시용 — 비교에는 쓰지 않는다). 수정할 수 없다. 루트 자체면 빈 리스트. */
+    public List<String> segments() {
+        return segments;
+    }
+
+    /** 한 단계 위 경로(같은 환경). 루트면 empty. */
+    public Optional<WorkspacePath> parent() {
+        if (segments.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(new WorkspacePath(
+                env, join(root, segments.subList(0, segments.size() - 1), separator(env))));
+    }
+
     @Override
     public boolean equals(Object o) {
         return o instanceof WorkspacePath other && env.equals(other.env) && key.equals(other.key);
@@ -74,6 +100,36 @@ public final class WorkspacePath {
         return "WorkspacePath[" + env + " " + path + "]";
     }
 
+    private static String separator(ShellEnvironment env) {
+        return switch (env) {
+            case ShellEnvironment.Windows _ -> WIN_SEP;
+            case ShellEnvironment.Wsl _ -> WSL_SEP;
+        };
+    }
+
+    // path 는 이미 정규화돼 있다: "/…" · "C:\…" · "\\host\share…".
+    private static String rootOf(ShellEnvironment env, String path) {
+        return switch (env) {
+            case ShellEnvironment.Wsl _ -> WSL_SEP;
+            case ShellEnvironment.Windows _ -> {
+                if (!path.startsWith(WIN_SEP + WIN_SEP)) {
+                    yield path.substring(0, 3);
+                }
+                List<String> parts = split(path.substring(2), WIN_SEP);
+                yield WIN_SEP + WIN_SEP + parts.get(0) + WIN_SEP + parts.get(1);
+            }
+        };
+    }
+
+    // 드라이브 · WSL 루트는 구분자로 끝나고 UNC 루트는 끝나지 않는다.
+    private static String join(String root, List<String> segments, String separator) {
+        if (segments.isEmpty()) {
+            return root;
+        }
+        String glue = root.endsWith(separator) ? "" : separator;
+        return root + glue + String.join(separator, segments);
+    }
+
     private static Optional<String> normalizeWindows(String raw) {
         String s = raw.replace(WSL_SEP, WIN_SEP);
         if (s.startsWith(WIN_SEP + WIN_SEP)) {
@@ -81,7 +137,7 @@ public final class WorkspacePath {
         }
         if (isDriveAbsolute(s)) {
             String root = Character.toUpperCase(s.charAt(0)) + ":" + WIN_SEP;
-            return Optional.of(root + String.join(WIN_SEP, resolveDots(segments(s.substring(2), WIN_SEP))));
+            return Optional.of(root + String.join(WIN_SEP, resolveDots(split(s.substring(2), WIN_SEP))));
         }
         return Optional.empty();
     }
@@ -98,7 +154,7 @@ public final class WorkspacePath {
     // \\host\share 가 UNC 의 루트다. '..' 은 share 위로 올라가지 않는다.
     // 확장 길이 접두 \\?\ 와 장치 경로 \\.\ 는 작업 경로로 받지 않는다(셸이 알려 주는 경로에는 없다).
     private static Optional<String> normalizeUnc(String rest) {
-        List<String> parts = segments(rest, WIN_SEP);
+        List<String> parts = split(rest, WIN_SEP);
         if (parts.size() < 2 || isDot(parts.get(0)) || parts.get(0).equals("?") || isDot(parts.get(1))) {
             return Optional.empty();
         }
@@ -116,10 +172,10 @@ public final class WorkspacePath {
         if (!raw.startsWith(WSL_SEP)) {
             return Optional.empty();
         }
-        return Optional.of(WSL_SEP + String.join(WSL_SEP, resolveDots(segments(raw, WSL_SEP))));
+        return Optional.of(WSL_SEP + String.join(WSL_SEP, resolveDots(split(raw, WSL_SEP))));
     }
 
-    private static List<String> segments(String s, String separator) {
+    private static List<String> split(String s, String separator) {
         return Arrays.stream(s.split(Pattern.quote(separator)))
                 .filter(seg -> !seg.isEmpty())
                 .toList();
