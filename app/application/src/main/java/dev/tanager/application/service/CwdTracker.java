@@ -1,12 +1,15 @@
 package dev.tanager.application.service;
 
 import dev.tanager.application.port.in.RecordVisitUseCase;
+import dev.tanager.domain.history.PathError;
 import dev.tanager.domain.history.ShellEnvironment;
+import dev.tanager.domain.history.WorkspacePath;
 import dev.tanager.domain.session.CwdReport;
 import dev.tanager.domain.session.CwdReports;
 import dev.tanager.domain.session.IntegrationMode;
 import dev.tanager.domain.session.OscScanner;
 import dev.tanager.domain.shared.PaneId;
+import dev.tanager.domain.shared.Result;
 import java.lang.System.Logger.Level;
 import java.util.Objects;
 import java.util.Optional;
@@ -69,12 +72,27 @@ final class CwdTracker implements Consumer<byte[]> {
         if (!accepts(report)) {
             return;
         }
-        CwdReports.toPath(report, env).value().ifPresent(path -> {
+        Result<WorkspacePath, PathError> path = CwdReports.toPath(report, env);
+        path.error().ifPresent(this::rejected);
+        path.value().ifPresent(accepted -> {
             if (report instanceof CwdReport.FileUri uri && host.isEmpty()) {
                 host = Optional.of(uri.host());
             }
-            visits.record(pane, path);
+            visits.record(pane, accepted);
         });
+    }
+
+    // 버린 이유만 남긴다. 경로는 셸 출력이고 #107 처럼 공격 문자열일 수 있어 남기지 않는다(PathError 의 toString 에도 들어 있다)
+    private void rejected(PathError error) {
+        LOG.log(Level.DEBUG, () -> "창 " + pane.value() + " 의 cwd 보고를 버렸다 — 경로 거부(" + kind(error) + ")");
+    }
+
+    private static String kind(PathError error) {
+        return switch (error) {
+            case PathError.Blank _ -> "Blank";
+            case PathError.NotAbsolute _ -> "NotAbsolute";
+            case PathError.UnsafeCharacter _ -> "UnsafeCharacter";
+        };
     }
 
     private boolean accepts(CwdReport report) {

@@ -10,6 +10,12 @@ import dev.tanager.domain.history.WorkspacePath;
 import dev.tanager.domain.session.IntegrationMode;
 import dev.tanager.domain.shared.PaneId;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.logging.Handler;
+import java.util.logging.Level;
+import java.util.logging.LogRecord;
+import java.util.logging.Logger;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -185,5 +191,47 @@ class CwdTrackerTest {
 
         // then
         assertThat(visits.visits()).extracting(Visit::cwd).containsExactly(wsl("/a"), wsl("/b"), wsl("/d"));
+    }
+
+    @Test
+    @DisplayName("경로 거부로 버린 보고는 오류 종류만 DEBUG 로 남기고 경로 문자열은 남기지 않는다")
+    void rejectedReportIsLoggedWithoutPath() {
+        // given 큰따옴표는 OSC 7 에서 %22 로 온다(#107). 다른 환경의 보고는 NotAbsolute 로 거부된다
+        List<LogRecord> records = new ArrayList<>();
+        Logger logger = Logger.getLogger(CwdTracker.class.getName());
+        Level previous = logger.getLevel();
+        Handler handler = new Handler() {
+            @Override
+            public void publish(LogRecord record) {
+                records.add(record);
+            }
+
+            @Override
+            public void flush() {}
+
+            @Override
+            public void close() {}
+        };
+        handler.setLevel(Level.ALL);
+        logger.addHandler(handler);
+        logger.setLevel(Level.ALL);
+        try {
+            // when
+            bash().accept(osc7("PC", "/tmp/secret%22dir"));
+            powershell().accept(osc99("relative-secret"));
+        } finally {
+            logger.removeHandler(handler);
+            logger.setLevel(previous);
+        }
+
+        // then
+        assertThat(visits.visits()).isEmpty();
+        assertThat(records).hasSize(2).allSatisfy(record -> {
+            assertThat(record.getLevel()).isEqualTo(Level.FINE);
+            assertThat(record.getMessage()).doesNotContain("secret");
+            assertThat(record.getThrown()).isNull();
+        });
+        assertThat(records.get(0).getMessage()).contains("UnsafeCharacter");
+        assertThat(records.get(1).getMessage()).contains("NotAbsolute");
     }
 }
