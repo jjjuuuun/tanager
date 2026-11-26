@@ -1,5 +1,8 @@
 package dev.tanager.architecture;
 
+import static com.tngtech.archunit.base.DescribedPredicate.not;
+import static com.tngtech.archunit.core.domain.JavaClass.Predicates.resideInAPackage;
+import static com.tngtech.archunit.core.domain.properties.HasName.Predicates.name;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static com.tngtech.archunit.library.Architectures.layeredArchitecture;
@@ -13,6 +16,7 @@ import com.tngtech.archunit.lang.ArchCondition;
 import com.tngtech.archunit.lang.ArchRule;
 import com.tngtech.archunit.lang.ConditionEvents;
 import com.tngtech.archunit.lang.SimpleConditionEvent;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -24,16 +28,20 @@ import java.util.Set;
 final class ArchitectureRules {
     private ArchitectureRules() {}
 
-    /** domain 은 순수 Java: I/O · UI · 동시성 · 외부 라이브러리 금지. */
+    /**
+     * domain 은 순수 Java: I/O · UI · 동시성 · 외부 라이브러리 금지. {@code java.nio} 중 {@code StandardCharsets} 만 허용한다 — OSC 7
+     * 경로의 UTF-8 해석(ADR-0015).
+     */
     static ArchRule domainIsPure(String base) {
         return noClasses()
                 .that()
                 .resideInAPackage(base + ".domain..")
                 .should()
+                .dependOnClassesThat(resideInAPackage("java.nio..").and(not(name(StandardCharsets.class.getName()))))
+                .orShould()
                 .dependOnClassesThat()
                 .resideInAnyPackage(
                         "java.io..",
-                        "java.nio..",
                         "java.net..",
                         "java.sql..",
                         "java.awt..",
