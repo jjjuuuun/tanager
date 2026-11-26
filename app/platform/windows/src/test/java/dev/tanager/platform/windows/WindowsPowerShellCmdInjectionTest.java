@@ -17,6 +17,7 @@ import dev.tanager.domain.session.WorkingDir;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
@@ -274,9 +275,13 @@ class WindowsPowerShellCmdInjectionTest {
 
     @Provide
     Arbitrary<String> prompts() {
-        return Arbitraries.strings()
+        Arbitrary<String> random = Arbitraries.strings()
                 .withChars(' ', '$', 'P', 'G', 'p', 'e', 'E', '[', ']', '\\', '9', ';', '한', '#')
                 .ofMaxLength(24);
+        // 무작위 글자만으로는 접두로 시작하는 값이 거의 나오지 않는다 — 이미 접두가 붙은 값(대소문자를 섞어서)도 섞는다
+        Arbitrary<String> prefixed = random.map(rest -> PROMPT_PREFIX + rest);
+        Arbitrary<String> upperPrefixed = random.map(rest -> PROMPT_PREFIX.toUpperCase(Locale.ROOT) + rest);
+        return Arbitraries.oneOf(random, prefixed, upperPrefixed);
     }
 
     @Property

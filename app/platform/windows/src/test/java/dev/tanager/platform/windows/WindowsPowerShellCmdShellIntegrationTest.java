@@ -43,13 +43,15 @@ import org.junit.jupiter.api.io.TempDir;
  * 실제 powershell.exe(5.1) · cmd.exe 로 셸 통합 주입을 확인한다(#81, ADR-0014 · 0003). CI 에서는 {@code
  * -PexcludeTags=windows} 가 아닌 Windows 러너에서만 돈다.
  *
- * <p>기동 명령은 {@link WindowsPlatformModule#launchCommand} 가 만든 그대로 쓴다(argv · 작업 디렉터리 · 환경). 바꾸는 것은 둘뿐이다.
+ * <p>기동 명령은 {@link WindowsPlatformModule#launchCommand} 가 만든 그대로 쓴다(argv · 작업 디렉터리 · 환경). 바꾸는 것은 셋뿐이다.
  *
  * <ul>
  *   <li>PowerShell 은 앞에 {@code -NoProfile} 을 끼운다. {@code $PROFILE} 은 USERPROFILE · HOME 을 바꿔도 알려진 폴더(문서)에서 정해져서
  *       임시 홈으로 가릴 수 없다. 사용자 프로필(oh-my-posh · StrictMode 등)은 대신 테스트 스크립트로 흉내 낸다 — 아래 {@code userPrompt}
  *       테스트는 {@code -Command} 값 앞에 {@code TEST_USER_PS1} 을 스크립트 블록으로 읽는 문장을 붙인다(프로필 다음 우리 스크립트). 파일로
  *       dot-source 하지 않는 것은 이 PC 의 실행 정책이 결과를 바꾸지 않게 하려고서다.
+ *   <li>cmd 는 argv 1번 자리에 {@code /d} 를 끼운다. 이 PC 의 AutoRun(레지스트리 {@code Command Processor\AutoRun}, Clink 등)이
+ *       PROMPT 를 바꾸거나 출력을 더해 결과를 흔들지 않게 하려고서다. 실제 기동 argv 는 {@code cmd.exe} 하나다.
  *   <li>셸은 PTY 대신 파이프로 돌린다. 파이프 출력은 콘솔 코드 페이지(OEM)라 UTF-8 만 받는 {@link OscScanner} 에 넣기 전에 OEM 으로 읽어
  *       UTF-8 로 다시 인코딩한다(ConPTY 는 UTF-8 로 내보낸다). 한글을 OEM 이 표현하지 못하는 PC 에서는 한글 테스트를 건너뛴다.
  * </ul>
@@ -202,8 +204,14 @@ class WindowsPowerShellCmdShellIntegrationTest {
         Path elsewhere = Files.createDirectory(temp.resolve("다른 폴더"));
 
         // when
+        // 경로는 따옴표로 감싸 명령에 넣지 않고 환경 변수로 넘긴다(' 가 든 임시 폴더에서도 같다)
         Run run = powerShell(
-                temp.resolve("app"), temp, Optional.empty(), "cd HKCU:\\\ncd -LiteralPath '" + elsewhere + "'\nexit\n");
+                installIn(temp.resolve("app")),
+                temp.resolve("app"),
+                temp,
+                Optional.empty(),
+                Map.of("TEST_DIR", elsewhere.toString()),
+                "cd HKCU:\\\ncd -LiteralPath $env:TEST_DIR\nexit\n");
 
         // then — 시작 경로와 마지막 FileSystem 경로만, HKCU 프롬프트에서는 없다
         assertThat(run.reports()).hasSize(2);
@@ -328,7 +336,11 @@ class WindowsPowerShellCmdShellIntegrationTest {
     }
 
     private Run powerShell(Path appData, Path start, Optional<String> userScript, String stdin) throws Exception {
-        return powerShell(install(appData, Optional.empty()), appData, start, userScript, Map.of(), stdin);
+        return powerShell(installIn(appData), appData, start, userScript, Map.of(), stdin);
+    }
+
+    private static Integration installIn(Path appData) {
+        return install(appData, Optional.empty());
     }
 
     private Run powerShell(
@@ -378,7 +390,9 @@ class WindowsPowerShellCmdShellIntegrationTest {
         Integration integration = install(appData, userPrompt);
         WindowsPlatformModule module = moduleWith(appData, userPrompt);
         LaunchCommand command = module.launchCommand(CMD, new WorkingDir.At(windowsPath(start)), integration);
-        return run(command, command.argv(), Map.of(), stdin);
+        List<String> argv = new ArrayList<>(command.argv());
+        argv.add(1, "/d");
+        return run(command, argv, Map.of(), stdin);
     }
 
     private Run run(LaunchCommand command, List<String> argv, Map<String, String> extraEnv, String stdin)
