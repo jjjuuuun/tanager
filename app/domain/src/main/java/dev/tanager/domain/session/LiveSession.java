@@ -36,27 +36,15 @@ public record LiveSession(PaneId pane, int number, TerminalSession session, Opti
     /** 트리에 매달 값. 홈은 아직 모르는 경로라 비어 있고, 끝난 세션은 마지막 경로를 가진다. */
     public SessionLeaf leaf() {
         ShellProfile profile = session.profile();
-        return switch (session.state()) {
-            case SessionState.Running r ->
-                new SessionLeaf(
-                        pane, number, profile.name(), profile.env(), pathOf(r.cwd()), new SessionStatus.Running());
-            case SessionState.Exited e ->
-                new SessionLeaf(
-                        pane,
-                        number,
-                        profile.name(),
-                        profile.env(),
-                        pathOf(e.lastCwd()),
-                        new SessionStatus.Exited(e.exitCode()));
-            case SessionState.Starting _, SessionState.Failed _ ->
-                throw new IllegalStateException("불변식 위반: " + session.state());
-        };
+        return new SessionLeaf(pane, number, profile.name(), profile.env(), session.knownCwd(), status());
     }
 
-    private static Optional<WorkspacePath> pathOf(WorkingDir dir) {
-        return switch (dir) {
-            case WorkingDir.Home _ -> Optional.empty();
-            case WorkingDir.At at -> Optional.of(at.path());
+    private SessionStatus status() {
+        return switch (session.state()) {
+            case SessionState.Running _ -> new SessionStatus.Running();
+            case SessionState.Exited e -> new SessionStatus.Exited(e.exitCode());
+            case SessionState.Starting _, SessionState.Failed _ ->
+                throw new IllegalStateException("불변식 위반: " + session.state());
         };
     }
 }

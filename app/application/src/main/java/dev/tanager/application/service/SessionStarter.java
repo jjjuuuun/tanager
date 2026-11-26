@@ -166,31 +166,40 @@ public final class SessionStarter implements StartSessionUseCase {
         }
     }
 
-    /**
-     * 돌려주기 전에 (1) 창의 세션 등록 (2) cwd 추적 구독 (3) 종료 등록 순으로 붙인다. 통합을 쓸 수 없으면 구독 대신 시작 경로를 한 번
-     * 기록하고 알린다. 홈으로 대신 띄웠으면 시작 경로는 홈이라 기록하지 않는다.
-     */
+    /** 돌려주기 전에 (1) 창의 세션 등록 (2) cwd 추적 (3) 종료 등록 순으로 붙인다. */
     private StartedSession tracked(PaneId pane, Launched launched, Integration integration, List<StartNotice> notices) {
         TerminalSession running = launched.running();
         TerminalStream stream = launched.stream();
-        IntegrationMode mode = running.profile().integration();
         state.submit(current -> sessionsChanged(current, current.sessions().launched(pane, running)));
-        if (mode != IntegrationMode.NONE) {
-            switch (integration) {
-                case Integration.Installed _ ->
-                    stream.subscribe(new CwdTracker(pane, running.profile().env(), mode, visits));
-                case Integration.Unavailable(var reason) -> {
-                    notices.add(new StartNotice.IntegrationUnavailable(reason));
-                    if (runningDir(running) instanceof WorkingDir.At at) {
-                        visits.record(pane, at.path());
-                    }
-                }
-            }
-        }
+        followCwd(pane, running, stream, integration, notices);
         long pid = stream.pid();
         stream.onExit().thenAccept(code -> state.submit(current -> exited(current, pane, pid, code)));
         CompletionStage<TerminalSession> exited = stream.onExit().thenApply(code -> expect(running.exited(code)));
         return new StartedSession(running, stream, exited, notices);
+    }
+
+    /**
+     * 통합이 있으면 출력을 구독하고, 없으면 구독 대신 시작 경로를 한 번 기록하고 알린다. 홈으로 대신 띄웠으면 시작 경로를 모르니 기록하지
+     * 않는다. 통합 모드가 NONE 인 셸은 추적하지 않는다.
+     */
+    private void followCwd(
+            PaneId pane,
+            TerminalSession running,
+            TerminalStream stream,
+            Integration integration,
+            List<StartNotice> notices) {
+        IntegrationMode mode = running.profile().integration();
+        if (mode == IntegrationMode.NONE) {
+            return;
+        }
+        switch (integration) {
+            case Integration.Installed _ ->
+                stream.subscribe(new CwdTracker(pane, running.profile().env(), mode, visits));
+            case Integration.Unavailable(var reason) -> {
+                notices.add(new StartNotice.IntegrationUnavailable(reason));
+                running.knownCwd().ifPresent(start -> visits.record(pane, start));
+            }
+        }
     }
 
     // 재시작으로 같은 창에 새 셸이 먼저 등록됐으면 늦게 온 옛 셸의 종료는 버린다
@@ -205,14 +214,6 @@ public final class SessionStarter implements StartSessionUseCase {
 
     private static Transition<Boolean> sessionsChanged(AppState current, LiveSessions next) {
         return new Transition<>(current.withSessions(next), List.of(new AppEvent.SessionsChanged(next)), true);
-    }
-
-    private static WorkingDir runningDir(TerminalSession running) {
-        return switch (running.state()) {
-            case SessionState.Running r -> r.cwd();
-            case SessionState.Starting _, SessionState.Exited _, SessionState.Failed _ ->
-                throw new IllegalStateException("Running 이 아닌 세션을 추적하려 했다: " + running.state());
-        };
     }
 
     /** 떴지만 아직 추적을 붙이지 않은 셸. */
