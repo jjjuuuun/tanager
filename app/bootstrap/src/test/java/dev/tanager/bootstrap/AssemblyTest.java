@@ -234,7 +234,8 @@ class AssemblyTest {
     }
 
     private static void visit(Assembly assembly, WorkspacePath path) {
-        // VisitRecorder 와 같은 규칙: 불러오는 중이면 방문을 쌓아 두어 불러온 이력 위에 다시 적용되게 한다
+        // VisitRecorder 와 같은 규칙: 불러오는 중이면 방문을 쌓아 두어 불러온 이력 위에 다시 적용되게 한다.
+        // VisitRecorder 의 대기열 규칙과 같게 유지한다(바뀌면 여기도 바꾼다)
         assembly.state().submit(current -> {
             Instant at = Instant.parse("2026-11-27T00:00:00Z");
             var next = current.history().recordVisit(path, at);
@@ -308,7 +309,7 @@ class AssemblyTest {
     }
 
     @Test
-    @DisplayName("종료(shutdown)는 1초 안에 생긴 미저장 변경을 바로 state.json 에 저장하고 이후 명령은 거부된다")
+    @DisplayName("종료(shutdown)는 미저장 변경을 state.json 에 저장하고 이후 명령은 거부된다")
     void shutdownFlushesUnsavedChangesAndRejectsLaterCommands() throws Exception {
         // given
         Assembly assembly = assembleWithState(null);
