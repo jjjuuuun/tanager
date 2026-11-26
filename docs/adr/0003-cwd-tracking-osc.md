@@ -23,7 +23,7 @@
 ## M0 검증 결과 (2026-11-24, 이슈 #10)
 - bash(OSC 7) · Windows PowerShell 5.1(OSC 9;9) · cmd(`PROMPT` 의 OSC 9;9) 모두 첫 프롬프트와 `cd '<임시>\한글 폴더 #1'` 뒤 cwd 를 정확히 가로챘다. JediTerm 은 이 시퀀스를 화면에 그리지 않는다.
 - **`local LC_ALL=C` 는 필수**: 스파이크 구현에서 이 줄을 빠뜨리자 UTF-8 로캘에서 글자 단위로 돌아 한글이 `%D55C` 처럼 코드 포인트로 나갔다. SDD §10.2 스크립트에는 이미 있으며, 빼면 안 된다는 것을 확인했다.
-- PowerShell 5.1 스크립트는 UTF-8 **BOM** 으로 저장해야 한글 주석 · 문자열이 깨지지 않는다. `-ExecutionPolicy Bypass` 로 실행 정책(Restricted)을 프로세스 범위에서만 우회한다.
+- PowerShell 5.1 스크립트는 UTF-8 **BOM** 으로 저장해야 한글 주석 · 문자열이 깨지지 않는다. M0 은 `-ExecutionPolicy Bypass` 로 실행 정책을 우회했다. 그러나 Bypass 는 프로세스 범위에만 머물지 않는다 — `PSExecutionPolicyPreference` 로 세션 · 자식 PowerShell 에 새고 `$PROFILE` 도 Bypass 로 읽힌다. 그래서 #81 부터는 Bypass 없이 스크립트를 문자열 스크립트 블록으로 읽는다(실행 정책 검사 대상이 아님, ADR-0014 #81).
 - 스캐너는 read 경계를 넘는 시퀀스 · BEL/ST 두 종료자를 처리한다(스파이크 `OscScanner`). 큰 출력 중 지연은 M3 에서 측정.
 - 미확인(M3): oh-my-posh · starship 같은 프롬프트 테마와의 공존 — 이 PC 에 설치돼 있지 않았다.
 
