@@ -52,8 +52,11 @@ public sealed interface HistoryLoadNotice {
         }
     }
 
-    /** 이 앱보다 새 버전({@code version})이 쓴 파일이다. 읽을 수 있는 만큼 읽고 저장하지 않는다. */
-    record NewerSchema(int version) implements HistoryLoadNotice {
+    /**
+     * 이 앱보다 새 버전({@code version})이 쓴 파일이다. 읽을 수 있는 만큼 읽고 저장하지 않는다. 버전은 int 범위를 넘을 수 있어 long 이다(long 도
+     * 넘으면 {@link Long#MAX_VALUE}).
+     */
+    record NewerSchema(long version) implements HistoryLoadNotice {
         @Override
         public String describe() {
             return "새 버전(schemaVersion " + version + ")이 쓴 이력 파일이라 읽기만 한다";
