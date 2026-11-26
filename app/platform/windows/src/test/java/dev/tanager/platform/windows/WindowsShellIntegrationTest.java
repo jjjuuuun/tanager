@@ -13,6 +13,7 @@ import java.nio.file.attribute.FileTime;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import net.jqwik.api.ForAll;
 import net.jqwik.api.Label;
@@ -80,8 +81,10 @@ class WindowsShellIntegrationTest {
     @Test
     @DisplayName("빈 앱 데이터에서 설치하면 두 스크립트가 리소스와 같은 바이트로 생기고 Installed 를 돌려준다")
     void installsIntoEmptyAppData() throws IOException {
+        // when
         Integration result = new WindowsShellIntegration(appData).install();
 
+        // then
         assertThat(result).isEqualTo(new Integration.Installed(dir()));
         for (String name : FILES) {
             assertThat(Files.readAllBytes(dir().resolve(name))).isEqualTo(resource(name));
@@ -91,24 +94,27 @@ class WindowsShellIntegrationTest {
     @Test
     @DisplayName("설치 후 임시 파일이 남지 않는다")
     void leavesNoTempFiles() throws IOException {
+        // when
         new WindowsShellIntegration(appData).install();
 
-        try (var names = Files.list(dir())) {
-            assertThat(names.map(p -> p.getFileName().toString())).containsExactlyInAnyOrder(FILES);
-        }
+        // then
+        assertThat(names()).containsExactlyInAnyOrder(FILES);
     }
 
     @Test
     @DisplayName("내용이 같으면 다시 설치해도 수정 시각이 바뀌지 않는다")
     void sameContentKeepsModifiedTime() throws IOException {
+        // given
         WindowsShellIntegration installer = new WindowsShellIntegration(appData);
         installer.install();
         for (String name : FILES) {
             Files.setLastModifiedTime(dir().resolve(name), LONG_AGO);
         }
 
+        // when
         Integration result = installer.install();
 
+        // then
         assertThat(result).isEqualTo(new Integration.Installed(dir()));
         for (String name : FILES) {
             assertThat(Files.getLastModifiedTime(dir().resolve(name))).isEqualTo(LONG_AGO);
@@ -118,13 +124,16 @@ class WindowsShellIntegrationTest {
     @Test
     @DisplayName("내용이 다른 이전 판이 있으면 새 내용으로 바뀐다")
     void staleContentIsReplaced() throws IOException {
+        // given
         Files.createDirectories(dir());
         for (String name : FILES) {
             Files.writeString(dir().resolve(name), "# 이전 판\n");
         }
 
+        // when
         Integration result = new WindowsShellIntegration(appData).install();
 
+        // then
         assertThat(result).isEqualTo(new Integration.Installed(dir()));
         for (String name : FILES) {
             assertThat(Files.readAllBytes(dir().resolve(name))).isEqualTo(resource(name));
@@ -134,13 +143,16 @@ class WindowsShellIntegrationTest {
     @Test
     @DisplayName("한 파일만 이전 판이면 그 파일만 바뀌고 다른 파일의 수정 시각은 그대로다")
     void onlyStaleFileIsRewritten() throws IOException {
+        // given
         WindowsShellIntegration installer = new WindowsShellIntegration(appData);
         installer.install();
         Files.setLastModifiedTime(dir().resolve("tanager.bash"), LONG_AGO);
         Files.writeString(dir().resolve("tanager.ps1"), "old");
 
+        // when
         installer.install();
 
+        // then
         assertThat(Files.getLastModifiedTime(dir().resolve("tanager.bash"))).isEqualTo(LONG_AGO);
         assertThat(Files.readAllBytes(dir().resolve("tanager.ps1"))).isEqualTo(resource("tanager.ps1"));
     }
@@ -148,11 +160,14 @@ class WindowsShellIntegrationTest {
     @Test
     @DisplayName("앱 데이터가 파일이면 예외 없이 Unavailable 을 돌려준다")
     void appDataIsAFile() throws IOException {
+        // given
         Path blocked = appData.resolve("blocked");
         Files.writeString(blocked, "파일");
 
+        // when
         Integration result = new WindowsShellIntegration(blocked).install();
 
+        // then
         assertThat(result)
                 .isInstanceOfSatisfying(
                         Integration.Unavailable.class,
@@ -162,20 +177,26 @@ class WindowsShellIntegrationTest {
     @Test
     @DisplayName("shell-integration 이 같은 이름의 파일이면 예외 없이 Unavailable 을 돌려준다")
     void integrationDirIsAFile() throws IOException {
+        // given
         Files.writeString(dir(), "파일");
 
+        // when
         Integration result = new WindowsShellIntegration(appData).install();
 
+        // then
         assertThat(result).isInstanceOf(Integration.Unavailable.class);
     }
 
     @Test
     @DisplayName("스크립트 이름 자리에 디렉터리가 있어 교체할 수 없어도 예외 없이 Unavailable 을 돌려준다")
     void scriptPathIsADirectory() throws IOException {
+        // given
         Files.createDirectories(dir().resolve("tanager.bash").resolve("sub"));
 
+        // when
         Integration result = new WindowsShellIntegration(appData).install();
 
+        // then
         assertThat(result).isInstanceOf(Integration.Unavailable.class);
         assertThat(names()).noneMatch(n -> n.endsWith(".tmp"));
     }
@@ -288,6 +309,7 @@ class WindowsShellIntegrationTest {
     @Property(tries = 20)
     @Label("이전 내용이 무엇이든 설치 후에는 리소스와 같고 두 번째 설치는 아무것도 바꾸지 않는다")
     void anyStaleContentConverges(@ForAll @Size(max = 64) byte[] stale) throws IOException {
+        // given
         Path root = Files.createTempDirectory("tanager-integration");
         try {
             Path target = root.resolve("shell-integration");
@@ -295,16 +317,17 @@ class WindowsShellIntegrationTest {
             Files.write(target.resolve("tanager.ps1"), stale);
             WindowsShellIntegration installer = new WindowsShellIntegration(root);
 
+            // when
             installer.install();
             Files.setLastModifiedTime(target.resolve("tanager.ps1"), LONG_AGO);
             installer.install();
 
+            // then
             assertThat(Files.readAllBytes(target.resolve("tanager.ps1"))).isEqualTo(resource("tanager.ps1"));
             assertThat(Files.getLastModifiedTime(target.resolve("tanager.ps1"))).isEqualTo(LONG_AGO);
         } finally {
             try (var walk = Files.walk(root)) {
-                walk.sorted(java.util.Comparator.reverseOrder())
-                        .forEach(p -> p.toFile().delete());
+                walk.sorted(Comparator.reverseOrder()).forEach(p -> p.toFile().delete());
             }
         }
     }
