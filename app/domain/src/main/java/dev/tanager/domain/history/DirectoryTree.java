@@ -72,7 +72,6 @@ public final class DirectoryTree {
         Objects.requireNonNull(sessions, "sessions");
         Objects.requireNonNull(query, "query");
 
-        Optional<Needle> needle = Needle.of(query.text());
         Forest forest = new Forest();
         // 정렬해 넣어 방문 순서 · Map 순회 순서와 상관없이 같은 표기를 고른다.
         List<VisitedDirectory> entries = new ArrayList<>(history.entries().values());
@@ -86,18 +85,18 @@ public final class DirectoryTree {
                 forest.spell(v.path());
             }
         }
-        Optional<Set<WorkspacePath>> kept = needle.map(n -> matchesAndAncestors(visible, n));
+        Optional<Filter> filter = Needle.of(query.text()).map(n -> Filter.of(visible, n));
         for (VisitedDirectory v : visible) {
-            if (kept.map(k -> k.contains(v.path())).orElse(true)) {
+            if (filter.map(f -> f.kept().contains(v.path())).orElse(true)) {
                 Node node = forest.node(v.path());
                 node.visit = Optional.of(v);
-                node.matched = needle.map(n -> n.matches(v)).orElse(false);
+                node.matched = filter.map(f -> f.matched().contains(v.path())).orElse(false);
             }
         }
         List<SessionLeaf> ordered = new ArrayList<>(sessions);
         ordered.sort(SESSION_ORDER);
         for (SessionLeaf s : ordered) {
-            if (needle.isPresent()) {
+            if (filter.isPresent()) {
                 // 거를지는 방문만으로 정했다 — 세션은 남은 폴더에만 매달고 새 폴더를 만들지 않는다.
                 forest.environment(s.env());
                 s.cwd().flatMap(forest::existing).ifPresent(n -> n.sessions.add(s));
@@ -113,30 +112,15 @@ public final class DirectoryTree {
             EnvBuilder e = forest.environments.getOrDefault(env, new EnvBuilder());
             environments.add(new EnvironmentNode(env, children(e.sessions, e.roots.values())));
         }
-        return new HistoryTree(pinned(entries, needle), environments);
+        return new HistoryTree(pinned(entries, filter), environments);
     }
 
-    // 맞은 방문 경로와 그 조상 전부. 이미 넣은 조상에서 멈춰 공통 조상을 다시 걷지 않는다.
-    private static Set<WorkspacePath> matchesAndAncestors(List<VisitedDirectory> visible, Needle needle) {
-        Set<WorkspacePath> kept = new HashSet<>();
-        for (VisitedDirectory v : visible) {
-            if (!needle.matches(v)) {
-                continue;
-            }
-            Optional<WorkspacePath> p = Optional.of(v.path());
-            while (p.isPresent() && kept.add(p.get())) {
-                p = p.get().parent();
-            }
-        }
-        return kept;
-    }
-
-    // 고정 항목은 숨길 수 없으므로 showHidden 과 상관없다.
-    private static List<PinnedEntry> pinned(List<VisitedDirectory> entries, Optional<Needle> needle) {
+    // 고정 항목은 숨길 수 없어 늘 보이는 방문이므로 showHidden 과 상관없고 filter 의 matched 로 가린다.
+    private static List<PinnedEntry> pinned(List<VisitedDirectory> entries, Optional<Filter> filter) {
         List<PinnedEntry> result = new ArrayList<>();
         for (VisitedDirectory v : entries) {
-            if (v.pinned() && needle.map(n -> n.matches(v)).orElse(true)) {
-                result.add(new PinnedEntry(v, pinnedLabel(v), needle.isPresent()));
+            if (v.pinned() && filter.map(f -> f.matched().contains(v.path())).orElse(true)) {
+                result.add(new PinnedEntry(v, pinnedLabel(v), filter.isPresent()));
             }
         }
         result.sort(PINNED_ORDER);
@@ -298,6 +282,32 @@ public final class DirectoryTree {
 
         private static String normalized(String s) {
             return Normalizer.normalize(s, Normalizer.Form.NFC).toLowerCase(Locale.ROOT);
+        }
+    }
+
+    /** 검색 결과. {@code matched} 는 검색어에 맞은 보이는 방문, {@code kept} 는 그것과 조상 전부다. 일치 판정은 방문마다 한 번만 한다. */
+    private record Filter(Set<WorkspacePath> kept, Set<WorkspacePath> matched) {
+
+        Filter {
+            kept = Set.copyOf(kept);
+            matched = Set.copyOf(matched);
+        }
+
+        // 이미 넣은 조상에서 멈춰 공통 조상을 다시 걷지 않는다.
+        static Filter of(List<VisitedDirectory> visible, Needle needle) {
+            Set<WorkspacePath> kept = new HashSet<>();
+            Set<WorkspacePath> matched = new HashSet<>();
+            for (VisitedDirectory v : visible) {
+                if (!needle.matches(v)) {
+                    continue;
+                }
+                matched.add(v.path());
+                Optional<WorkspacePath> p = Optional.of(v.path());
+                while (p.isPresent() && kept.add(p.get())) {
+                    p = p.get().parent();
+                }
+            }
+            return new Filter(kept, matched);
         }
     }
 
