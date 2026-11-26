@@ -1,5 +1,6 @@
 package dev.tanager.application.state;
 
+import dev.tanager.application.port.in.AppEvent;
 import dev.tanager.application.port.out.Subscription;
 import java.lang.System.Logger.Level;
 import java.util.List;

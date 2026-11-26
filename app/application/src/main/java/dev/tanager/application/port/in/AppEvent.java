@@ -1,4 +1,4 @@
-package dev.tanager.application.state;
+package dev.tanager.application.port.in;
 
 import dev.tanager.domain.history.WorkHistory;
 import java.util.Objects;

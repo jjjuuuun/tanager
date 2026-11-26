@@ -4,6 +4,7 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import dev.tanager.application.port.in.AppEvent;
 import dev.tanager.application.port.out.DirectUiDispatcher;
 import dev.tanager.application.port.out.Subscription;
 import dev.tanager.domain.history.HistoryPolicy;

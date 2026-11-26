@@ -1,5 +1,6 @@
 package dev.tanager.application.state;
 
+import dev.tanager.application.port.in.AppEvent;
 import java.util.List;
 import java.util.Objects;
 

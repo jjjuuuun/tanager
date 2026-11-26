@@ -3,6 +3,7 @@ package dev.tanager.application.state;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 
+import dev.tanager.application.port.in.AppEvent;
 import dev.tanager.application.port.out.QueuedUiDispatcher;
 import dev.tanager.application.port.out.Subscription;
 import dev.tanager.domain.history.HistoryPolicy;

@@ -3,6 +3,7 @@ package dev.tanager.application.state;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
+import dev.tanager.application.port.in.AppEvent;
 import dev.tanager.domain.history.HistoryPolicy;
 import dev.tanager.domain.history.ShellEnvironment;
 import dev.tanager.domain.history.WorkHistory;
