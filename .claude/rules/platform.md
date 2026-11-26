@@ -6,10 +6,10 @@ paths:
 # 플랫폼·PTY 주의사항
 
 - `wsl.exe --list --quiet` 출력은 **UTF-16LE** 이다. 환경변수 `WSL_UTF8=1` 을 주거나 UTF-16LE 로 디코딩한다.
-- WSL 세션 기동: `wsl.exe -d <배포판> --cd <경로|~> -- bash --rcfile "$TANAGER_RC" -i` (ADR-0014). 통합 스크립트는 Windows 쪽 `%APPDATA%\Tanager\shell-integration\` 에 풀고, 환경 `TANAGER_RC=<그 폴더>\tanager.bash`(Windows 경로) + `WSLENV=<기존>:TANAGER_RC/p` 로 넘긴다 — `/mnt/<드라이브>/` 를 직접 계산하지 않는다(automount 루트가 바뀐 배포판에서 틀림).
+- WSL 세션 기동: `wsl.exe -d <배포판> --cd <경로|~> -- [ -r "$TANAGER_RC" ] && exec bash --rcfile "$TANAGER_RC" -i || exec bash -i` (ADR-0014). `--` 뒤는 기본 로그인 셸(`/etc/passwd`)의 `-c` 가 해석하고, 원소마다 공백이 없어야 한다. rcfile 을 못 읽으면 M2 와 같은 `bash -i` 로 물러선다. 통합 스크립트는 Windows 쪽 `%APPDATA%\Tanager\shell-integration\` 에 풀고, 환경 `TANAGER_RC=<그 폴더>\tanager.bash`(Windows 경로) + `WSLENV=<기존>:TANAGER_RC/p` 로 넘긴다 — `/mnt/<드라이브>/` 를 직접 계산하지 않는다(automount 루트가 바뀐 배포판에서 틀림).
   - `"$TANAGER_RC"` 는 argv 원소에 큰따옴표까지 넣는다. `--` 뒤는 리눅스 기본 셸이 펼치므로 따옴표가 없으면 공백 경로(사용자 이름)에서 갈린다.
   - 기존 `WSLENV` 는 지우지 않고 보존한다(빈 항목 · 기존 `TANAGER_RC` 항목만 정리).
-  - `--rcfile` 은 `-l` 과 못 쓰므로 `tanager.bash` 가 로그인 셸 순서를 흉내 낸다. `/etc/profile` 을 읽는 동안 `PS1` 을 비워 Debian `/etc/bash.bashrc` 이중 실행을 막고, 그 때문에 빠진 bash-completion 은 다시 불러온다.
+  - `--rcfile` 은 `-l` 과 못 쓰므로 `tanager.bash` 가 로그인 셸 순서를 흉내 낸다. `/etc/bash.bashrc` 가 있는 배포판에서만 `/etc/profile` 을 읽는 동안 `PS1` 을 비워 이중 실행을 막고(Fedora 계열 `/etc/bashrc` 는 건드리지 않음), 그 때문에 빠진 bash-completion 은 다시 불러온다.
 - WSL 리소스 수집은 **실행 중인 WSL 세션이 있을 때만** `wsl.exe -d <배포판> -- sh -c 'cat /proc/meminfo; df -kP /'` 로, 5초 이상 간격. 세션이 없을 때 `wsl.exe` 를 부르면 VM 이 깨어난다.
 - 다크/라이트: `HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize\AppsUseLightTheme`(0 = 다크). 애니메이션 끄기: `SystemParametersInfo(SPI_GETCLIENTAREAANIMATION)`.
 - 지원 셸: WSL · **Windows PowerShell 5.1** · cmd. PowerShell 7(`pwsh`)은 범위 밖(사용자 결정) — 탐지·기동·셸 통합·테스트 대상 아님. 사용자 정의 프로파일도 없으므로 Tanager 가 띄우는 셸은 자동 탐지한 이 셋뿐이다.
