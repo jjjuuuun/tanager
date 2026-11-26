@@ -97,8 +97,8 @@ final class WindowsShellCatalog {
                 IntegrationMode.OSC9_9);
     }
 
-    // Docker Desktop · Rancher Desktop 이 만드는 배포판은 셸 용도가 아니다. 기본 프로파일이 "첫 WSL 배포판"이라
-    // 이것들이 앞에 오면 엉뚱한 곳이 열린다(#57). 배포판 이름은 대소문자를 구분하지 않고 비교한다.
+    // Docker Desktop · Rancher Desktop 이 만드는 배포판은 셸 용도가 아니다. 셸 선택 화면(#70)에 섞이면 고를 수 있는
+    // 셸처럼 보인다(#57). 배포판 이름은 대소문자를 구분하지 않고 비교한다.
     private static boolean isNonShellDistro(String name) {
         String lower = name.toLowerCase(Locale.ROOT);
         return lower.equals("docker-desktop")
