@@ -932,6 +932,28 @@ class JsonStateRepositoryTest {
         assertThat(entryAt(after, "C:\\work\\new").get("sources")).isEqualTo(JSON.readTree("[\"shell\"]"));
     }
 
+    @Test
+    @DisplayName("대소문자만 다른 항목의 sources 는 먼저 나온 순서대로 겹치지 않게 합쳐 저장한다")
+    void caseOnlyDuplicatesUnionSourcesInFirstSeenOrder() throws IOException {
+        // given
+        write(
+                file(),
+                stateWith(
+                        entryWithSources("C:\\Work", Optional.of("[\"shell\",\"claude-code\"]")),
+                        entryWithSources("c:\\work", Optional.of("[\"claude-code\",\"x\"]"))));
+        JsonStateRepository repository = repository();
+        LoadedHistory result = loaded(repository.load());
+
+        // when
+        repository.save(result.history());
+
+        // then
+        JsonNode entries =
+                JSON.readTree(Files.readAllBytes(file())).get("history").get("entries");
+        assertThat(entries).hasSize(1);
+        assertThat(entries.get(0).get("sources")).isEqualTo(JSON.readTree("[\"shell\",\"claude-code\",\"x\"]"));
+    }
+
     static Stream<Arguments> mergedSourcesWithMissingSide() {
         return Stream.of(
                 Arguments.of(
