@@ -4,7 +4,7 @@
 
 ## 계층과 의존 방향 (ArchUnit 이 `app/architecture` 에서 강제)
 ```
-app/domain           ← 순수 Java. 외부 라이브러리·I/O·Swing·스레드 금지
+app/domain           ← 순수 Java. 외부 라이브러리·I/O·Swing·스레드 금지. 단 `java.nio.charset.StandardCharsets` 는 허용(ADR-0015)
    ↑
 app/application      ← 유스케이스(port.in) + 출력 포트(port.out). domain 만 의존
    ↑
