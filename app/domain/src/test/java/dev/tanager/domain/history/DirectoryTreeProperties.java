@@ -3,15 +3,18 @@ package dev.tanager.domain.history;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import dev.tanager.domain.shared.PaneId;
+import java.text.Normalizer;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
+import java.util.regex.Pattern;
 import net.jqwik.api.Arbitraries;
 import net.jqwik.api.Arbitrary;
 import net.jqwik.api.Combinators;
@@ -46,7 +49,19 @@ class DirectoryTreeProperties {
     }
 
     private static Arbitrary<List<String>> segments() {
-        return Arbitraries.of("a", "B", "b", "src", "Src", "x y", "proj", "_archive", "a0")
+        // NFD 한글은 정렬 키를 NFC 로 맞추는지 보려고 넣는다.
+        return Arbitraries.of(
+                        "a",
+                        "B",
+                        "b",
+                        "src",
+                        "Src",
+                        "x y",
+                        "proj",
+                        "_archive",
+                        "a0",
+                        "가",
+                        Normalizer.normalize("하", Normalizer.Form.NFD))
                 .list()
                 .ofMaxSize(4);
     }
@@ -97,9 +112,20 @@ class DirectoryTreeProperties {
         return out;
     }
 
+    // 검색어가 있어도 #74 불변식이 그대로인지 보려고 빈 검색어 · 구분자 있는 · 없는 검색어를 섞는다.
+    @Provide
+    Arbitrary<String> queries() {
+        return Arbitraries.of(
+                "", "a", "B", "src", "x y", "proj", "_", "a0", "/", "\\", "a/b", "src\\a", "c:/", "srv", "zz");
+    }
+
     private static HistoryTree project(Input input, boolean showHidden) {
+        return project(input, showHidden, "");
+    }
+
+    private static HistoryTree project(Input input, boolean showHidden, String text) {
         WorkHistory h = WorkHistory.restore(input.entries(), HistoryPolicy.DEFAULT);
-        return DirectoryTree.project(h, input.sessions(), new TreeQuery("", showHidden, List.of(WSL, WIN)));
+        return DirectoryTree.project(h, input.sessions(), new TreeQuery(text, showHidden, List.of(WSL, WIN)));
     }
 
     private static void collect(List<TreeNode> nodes, List<TreeNode.Folder> out) {
@@ -177,9 +203,10 @@ class DirectoryTreeProperties {
 
     @Property
     @Label("라벨은 path().path() 의 끝부분과 글자까지 같다")
-    void labelIsExactSuffixOfPath(@ForAll("inputs") Input input, @ForAll boolean showHidden) {
+    void labelIsExactSuffixOfPath(
+            @ForAll("inputs") Input input, @ForAll boolean showHidden, @ForAll("queries") String text) {
         // when
-        List<TreeNode.Folder> all = folders(project(input, showHidden));
+        List<TreeNode.Folder> all = folders(project(input, showHidden, text));
 
         // then
         for (TreeNode.Folder f : all) {
@@ -230,7 +257,11 @@ class DirectoryTreeProperties {
 
     @Property
     @Label("대소문자 중복 없는 같은 입력의 투영은 항목 · 세션 순서와 상관없이 표기까지 같은 트리다")
-    void projectionIgnoresInputOrder(@ForAll("inputs") Input input, @ForAll boolean showHidden, @ForAll long seed) {
+    void projectionIgnoresInputOrder(
+            @ForAll("inputs") Input input,
+            @ForAll boolean showHidden,
+            @ForAll("queries") String text,
+            @ForAll long seed) {
         // given
         Random random = new Random(seed);
         List<VisitedDirectory> entries = new ArrayList<>(input.entries());
@@ -239,11 +270,104 @@ class DirectoryTreeProperties {
         Collections.shuffle(sessions, random);
 
         // when
-        String original = shape(project(input, showHidden));
-        String shuffled = shape(project(new Input(entries, sessions), showHidden));
+        String original = shape(project(input, showHidden, text));
+        String shuffled = shape(project(new Input(entries, sessions), showHidden, text));
 
         // then
         assertThat(shuffled).isEqualTo(original);
+    }
+
+    @Property
+    @Label("형제는 세션(번호 → 창 ID 순)이 먼저, 폴더는 루트 종류 → 라벨 세그먼트(NFC · 대소문자 무시 → 원문) 순이다")
+    void siblingsFollowSortRules(
+            @ForAll("inputs") Input input, @ForAll boolean showHidden, @ForAll("queries") String text) {
+        // when
+        HistoryTree tree = project(input, showHidden, text);
+
+        // then
+        for (EnvironmentNode e : tree.environments()) {
+            assertSorted(e.children(), true);
+        }
+    }
+
+    private static final Comparator<SessionLeaf> SESSION_ORDER = Comparator.comparingInt(SessionLeaf::number)
+            .thenComparing(s -> s.pane().value());
+
+    private static final Comparator<String> FOLDED = Comparator.comparing(
+            (String s) -> Normalizer.normalize(s, Normalizer.Form.NFC), String.CASE_INSENSITIVE_ORDER);
+
+    private static void assertSorted(List<TreeNode> nodes, boolean roots) {
+        List<SessionLeaf> sessions = new ArrayList<>();
+        List<TreeNode.Folder> siblings = new ArrayList<>();
+        for (TreeNode n : nodes) {
+            switch (n) {
+                case TreeNode.Session s -> {
+                    assertThat(siblings).as("폴더 뒤의 세션 %s", s.session().pane()).isEmpty();
+                    sessions.add(s.session());
+                }
+                case TreeNode.Folder f -> {
+                    siblings.add(f);
+                    assertSorted(f.children(), false);
+                }
+            }
+        }
+        assertThat(sessions).isSortedAccordingTo(SESSION_ORDER);
+        for (int i = 1; i < siblings.size(); i++) {
+            TreeNode.Folder a = siblings.get(i - 1);
+            TreeNode.Folder b = siblings.get(i);
+            assertThat(compareFolders(a, b, roots))
+                    .as("%s 가 %s 보다 앞선다", a.label(), b.label())
+                    .isNegative();
+        }
+    }
+
+    // 루트는 드라이브 → UNC → WSL, 그다음 드라이브 글자 · UNC 호스트 · 공유와 경로 세그먼트. 루트가 아니면 라벨 세그먼트.
+    private static int compareFolders(TreeNode.Folder a, TreeNode.Folder b, boolean roots) {
+        if (!roots) {
+            return compareSegments(labelSegments(a), labelSegments(b));
+        }
+        int byKind = Integer.compare(rootRank(a.path()), rootRank(b.path()));
+        return byKind != 0 ? byKind : compareSegments(rootKey(a.path()), rootKey(b.path()));
+    }
+
+    private static List<String> labelSegments(TreeNode.Folder f) {
+        String separator = f.path().env() instanceof ShellEnvironment.Windows ? "\\" : "/";
+        return List.of(f.label().split(Pattern.quote(separator)));
+    }
+
+    private static int rootRank(WorkspacePath p) {
+        if (p.env() instanceof ShellEnvironment.Wsl) {
+            return 2;
+        }
+        return p.root().startsWith("\\\\") ? 1 : 0;
+    }
+
+    private static List<String> rootKey(WorkspacePath p) {
+        List<String> key = new ArrayList<>();
+        String root = p.root();
+        if (rootRank(p) == 0) {
+            key.add(root.substring(0, 1));
+        } else if (rootRank(p) == 1) {
+            key.addAll(List.of(root.substring(2).split(Pattern.quote("\\"))));
+        }
+        key.addAll(p.segments());
+        return key;
+    }
+
+    // 세그먼트마다 NFC · 대소문자 무시로 먼저 가르고, 모두 같으면 원문으로 가른다.
+    private static int compareSegments(List<String> a, List<String> b) {
+        int folded = lexicographic(a, b, FOLDED);
+        return folded != 0 ? folded : lexicographic(a, b, Comparator.naturalOrder());
+    }
+
+    private static int lexicographic(List<String> a, List<String> b, Comparator<String> element) {
+        for (int i = 0; i < Math.min(a.size(), b.size()); i++) {
+            int c = element.compare(a.get(i), b.get(i));
+            if (c != 0) {
+                return c;
+            }
+        }
+        return Integer.compare(a.size(), b.size());
     }
 
     // 환경 → 자식 순서 · 라벨 · 경로 표기 · 방문 여부 · 세션 창 ID 를 그대로(대소문자 보존) 펼친다.

@@ -5,11 +5,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.text.Normalizer;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import net.jqwik.api.Arbitraries;
 import net.jqwik.api.Arbitrary;
+import net.jqwik.api.Assume;
 import net.jqwik.api.Combinators;
 import net.jqwik.api.ForAll;
 import net.jqwik.api.Label;
@@ -27,7 +32,16 @@ class DirectoryTreeSearchProperties {
     }
 
     private static Arbitrary<List<String>> segments() {
-        return Arbitraries.of("a", "B", "api", "Api2", "src", "x y", "proj", "프로젝트")
+        return Arbitraries.of(
+                        "a",
+                        "B",
+                        "api",
+                        "Api2",
+                        "src",
+                        "x y",
+                        "proj",
+                        "프로젝트",
+                        Normalizer.normalize("프로", Normalizer.Form.NFD))
                 .list()
                 .ofMaxSize(4);
     }
@@ -49,21 +63,41 @@ class DirectoryTreeSearchProperties {
 
     @Provide
     Arbitrary<List<VisitedDirectory>> histories() {
-        return entries().list().ofMaxSize(12).map(list -> {
-            List<VisitedDirectory> unique = new ArrayList<>();
-            for (VisitedDirectory v : list) {
-                if (unique.stream().noneMatch(u -> u.path().equals(v.path()))) {
-                    unique.add(v);
-                }
+        return entries().list().ofMaxSize(12).map(DirectoryTreeSearchProperties::uniqueByPath);
+    }
+
+    private static List<VisitedDirectory> uniqueByPath(List<VisitedDirectory> list) {
+        List<VisitedDirectory> unique = new ArrayList<>();
+        for (VisitedDirectory v : list) {
+            if (unique.stream().noneMatch(u -> u.path().equals(v.path()))) {
+                unique.add(v);
             }
-            return unique;
-        });
+        }
+        return unique;
+    }
+
+    // 대소문자만 다른 부모(Work · work) 아래 형제가 여럿인 Windows 이력 — 검색 중 부모 표기가 비검색 트리와 같은지 보려고 좁게 만든다.
+    @Provide
+    Arbitrary<List<VisitedDirectory>> caseVariantHistories() {
+        Arbitrary<VisitedDirectory> entry = Combinators.combine(
+                        Arbitraries.of("Work", "work", "WORK"), Arbitraries.of("a", "api", "Api2", "b", "src"))
+                .as((parent, child) -> new VisitedDirectory(
+                        path(WIN, "C:\\" + parent + "\\" + child), T, T, 1, false, Optional.empty(), false));
+        return entry.list().ofMaxSize(6).map(DirectoryTreeSearchProperties::uniqueByPath);
     }
 
     @Provide
     Arbitrary<String> queries() {
         return Arbitraries.of(
                 "a", "A", "api", "API", "src", "x y", "/", "a/b", "/a", "\\", "d:", "프로", " api ", "zz", "");
+    }
+
+    // 구현의 고정 목록과 따로, 경로 · 별칭에 나오는 글자로 아무 검색어나 만든다(한글은 완성형 음절만 — 이어 붙여도 NFC 가 유지된다).
+    @Provide
+    Arbitrary<String> anyQueries() {
+        Arbitrary<String> generated =
+                Arbitraries.strings().withChars("aAbBpPiIsSrRcC2 /\\:프로젝트").ofMaxLength(5);
+        return Arbitraries.oneOf(queries(), generated);
     }
 
     private static String norm(String s) {
@@ -102,6 +136,20 @@ class DirectoryTreeSearchProperties {
         List<TreeNode.Folder> out = new ArrayList<>();
         tree.environments().forEach(e -> out.addAll(folders(e.children())));
         return out;
+    }
+
+    private static Set<WorkspacePath> matchedSet(HistoryTree tree) {
+        Set<WorkspacePath> out = new HashSet<>();
+        for (TreeNode.Folder f : allFolders(tree)) {
+            if (f.matched()) {
+                out.add(f.path());
+            }
+        }
+        return out;
+    }
+
+    private static boolean hasSeparator(String s) {
+        return s.indexOf('/') >= 0 || s.indexOf('\\') >= 0;
     }
 
     private static HistoryTree project(List<VisitedDirectory> entries, String text, boolean showHidden) {
@@ -197,6 +245,94 @@ class DirectoryTreeSearchProperties {
             if (f.visit().isEmpty() && !isRoot) {
                 assertThat(f.children()).as("압축되지 않은 중간 노드 %s", f.label()).hasSizeGreaterThan(1);
             }
+        }
+    }
+
+    @Property
+    @Label("대문자 검색어와 소문자 검색어는 같은 트리를 낸다")
+    void caseOfQueryDoesNotMatter(
+            @ForAll("histories") List<VisitedDirectory> entries,
+            @ForAll("anyQueries") String text,
+            @ForAll boolean showHidden) {
+        // when
+        HistoryTree upper = project(entries, text.toUpperCase(Locale.ROOT), showHidden);
+        HistoryTree lower = project(entries, text.toLowerCase(Locale.ROOT), showHidden);
+
+        // then
+        assertThat(upper).isEqualTo(lower);
+    }
+
+    @Property
+    @Label("NFD 검색어와 NFC 검색어는 같은 트리를 낸다")
+    void normalizationOfQueryDoesNotMatter(
+            @ForAll("histories") List<VisitedDirectory> entries,
+            @ForAll("anyQueries") String text,
+            @ForAll boolean showHidden) {
+        // when
+        HistoryTree nfd = project(entries, Normalizer.normalize(text, Normalizer.Form.NFD), showHidden);
+        HistoryTree nfc = project(entries, Normalizer.normalize(text, Normalizer.Form.NFC), showHidden);
+
+        // then
+        assertThat(nfd).isEqualTo(nfc);
+    }
+
+    @Property
+    @Label("구분자 유무가 같으면 검색어를 늘려도 matched 집합은 줄어들기만 한다")
+    void longerQueryNarrowsMatches(
+            @ForAll("histories") List<VisitedDirectory> entries,
+            @ForAll("anyQueries") String text,
+            @ForAll("anyQueries") String prefix,
+            @ForAll("anyQueries") String suffix,
+            @ForAll boolean showHidden) {
+        // given
+        String longer = prefix + text + suffix;
+        Assume.that(!text.isBlank() && hasSeparator(text) == hasSeparator(longer));
+
+        // when
+        Set<WorkspacePath> narrow = matchedSet(project(entries, longer, showHidden));
+        Set<WorkspacePath> wide = matchedSet(project(entries, text, showHidden));
+
+        // then
+        assertThat(wide).containsAll(narrow);
+    }
+
+    @Property
+    @Label("matched 인 폴더는 방문 기록이 있다")
+    void matchedFolderHasVisit(
+            @ForAll("histories") List<VisitedDirectory> entries,
+            @ForAll("anyQueries") String text,
+            @ForAll boolean showHidden) {
+        // when
+        List<TreeNode.Folder> all = allFolders(project(entries, text, showHidden));
+
+        // then
+        for (TreeNode.Folder f : all) {
+            if (f.matched()) {
+                assertThat(f.visit()).as("폴더 %s", f.label()).isPresent();
+            }
+        }
+    }
+
+    @Property
+    @Label("거른 트리의 폴더 표기는 거르지 않은 트리의 같은 폴더 표기와 같다")
+    void filteredSpellingEqualsUnfiltered(
+            @ForAll("caseVariantHistories") List<VisitedDirectory> entries,
+            @ForAll("anyQueries") String text,
+            @ForAll boolean showHidden) {
+        // given
+        Map<WorkspacePath, String> unfiltered = new HashMap<>();
+        for (TreeNode.Folder f : allFolders(project(entries, "", showHidden))) {
+            unfiltered.put(f.path(), f.path().path());
+        }
+
+        // when
+        List<TreeNode.Folder> filtered = allFolders(project(entries, text, showHidden));
+
+        // then
+        for (TreeNode.Folder f : filtered) {
+            assertThat(unfiltered)
+                    .as("폴더 %s", f.label())
+                    .containsEntry(f.path(), f.path().path());
         }
     }
 }

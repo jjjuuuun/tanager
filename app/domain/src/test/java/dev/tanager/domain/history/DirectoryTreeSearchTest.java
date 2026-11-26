@@ -278,20 +278,20 @@ class DirectoryTreeSearchTest {
         }
 
         @Test
-        @DisplayName("별칭이 있어도 폴더 이름으로 찾을 수 있고 구분자 있는 검색은 별칭도 본다")
-        void folderNameAndAliasBothSearchable() {
+        @DisplayName("별칭이 있어도 폴더 이름 · 별칭 · 전체 경로로 모두 찾는다")
+        void folderNameAliasAndPathAllSearchable() {
             // given
             WorkspacePath infra = path(WIN, "C:\\work\\infra");
             WorkHistory h = aliased(history(infra), infra, "Prod 서버");
 
             // when
             HistoryTree byName = project(h, List.of(), new TreeQuery("infra", false, List.of(WIN)));
-            HistoryTree byAliasWithSeparator = project(h, List.of(), new TreeQuery("prod 서", false, List.of(WIN)));
+            HistoryTree byAlias = project(h, List.of(), new TreeQuery("prod 서", false, List.of(WIN)));
             HistoryTree byPath = project(h, List.of(), new TreeQuery("work\\infra", false, List.of(WIN)));
 
             // then
             assertThat(matchedPaths(byName, WIN)).containsExactly(infra);
-            assertThat(matchedPaths(byAliasWithSeparator, WIN)).containsExactly(infra);
+            assertThat(matchedPaths(byAlias, WIN)).containsExactly(infra);
             assertThat(matchedPaths(byPath, WIN)).containsExactly(infra);
         }
 
