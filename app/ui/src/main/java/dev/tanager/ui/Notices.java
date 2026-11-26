@@ -1,5 +1,6 @@
 package dev.tanager.ui;
 
+import dev.tanager.application.port.in.AppEvent;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -23,6 +24,16 @@ record Notices(List<String> messages) {
             }
         }
         return new Notices(next);
+    }
+
+    /** 상태줄에 보일 이벤트의 문장. 저장소 알림(불러오기 복구 · 읽기 전용 · 저장 실패)만 보인다. */
+    static Optional<String> messageOf(AppEvent event) {
+        return switch (event) {
+            case AppEvent.StoreNotice(String message) -> Optional.of(message);
+            case AppEvent.HistoryChanged changed -> Optional.empty();
+            case AppEvent.SessionCwdChanged moved -> Optional.empty();
+            case AppEvent.SessionsChanged sessions -> Optional.empty();
+        };
     }
 
     /** "첫 문장 (+n)". 알림이 없으면 비어 있다. */
