@@ -16,6 +16,7 @@ import dev.tanager.domain.session.ShellKind;
 import dev.tanager.domain.session.ShellProfile;
 import dev.tanager.domain.session.TerminalSession;
 import dev.tanager.domain.session.WorkingDir;
+import dev.tanager.domain.shared.PaneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -76,7 +77,7 @@ class StartResultTest {
     @Test
     @DisplayName("기억을 켠 요청은 프로파일이 있어야 한다")
     void rememberRequiresProfile() {
-        assertThatThrownBy(() -> new StartRequest(Optional.empty(), true, Optional.empty(), SIZE))
+        assertThatThrownBy(() -> new StartRequest(new PaneId("p1"), Optional.empty(), true, Optional.empty(), SIZE))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -84,8 +85,9 @@ class StartResultTest {
     @DisplayName("remembered 요청은 프로파일 · 경로 없이 기억도 켜지 않는다")
     void rememberedRequestIsEmpty() {
         // when
-        StartRequest request = StartRequest.remembered(SIZE);
+        StartRequest request = StartRequest.remembered(new PaneId("p1"), SIZE);
         // then
+        assertThat(request.pane()).isEqualTo(new PaneId("p1"));
         assertThat(request.profile()).isEmpty();
         assertThat(request.rememberAsDefault()).isFalse();
         assertThat(request.dir()).isEmpty();
@@ -96,7 +98,7 @@ class StartResultTest {
     @DisplayName("chosen 요청은 고른 프로파일과 기억 여부를 담고 경로는 비운다")
     void chosenRequestCarriesProfileAndRemember() {
         // when
-        StartRequest request = StartRequest.chosen(new ProfileId("cmd"), true, SIZE);
+        StartRequest request = StartRequest.chosen(new PaneId("p1"), new ProfileId("cmd"), true, SIZE);
         // then
         assertThat(request.profile()).contains(new ProfileId("cmd"));
         assertThat(request.rememberAsDefault()).isTrue();

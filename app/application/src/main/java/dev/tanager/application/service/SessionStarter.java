@@ -1,6 +1,8 @@
 package dev.tanager.application.service;
 
+import dev.tanager.application.port.in.AppEvent;
 import dev.tanager.application.port.in.ListProfilesUseCase;
+import dev.tanager.application.port.in.RecordVisitUseCase;
 import dev.tanager.application.port.in.RememberDefaultProfileUseCase;
 import dev.tanager.application.port.in.StartFailure;
 import dev.tanager.application.port.in.StartNotice;
@@ -10,17 +12,24 @@ import dev.tanager.application.port.in.StartedSession;
 import dev.tanager.application.port.out.AppConfig;
 import dev.tanager.application.port.out.ConfigRepository;
 import dev.tanager.application.port.out.ConfigWarning;
+import dev.tanager.application.port.out.Integration;
 import dev.tanager.application.port.out.LaunchError;
 import dev.tanager.application.port.out.PlatformModule;
 import dev.tanager.application.port.out.PtyLauncher;
 import dev.tanager.application.port.out.TerminalSize;
 import dev.tanager.application.port.out.TerminalStream;
+import dev.tanager.application.state.AppState;
+import dev.tanager.application.state.StateActor;
+import dev.tanager.application.state.Transition;
 import dev.tanager.domain.history.WorkspacePath;
+import dev.tanager.domain.session.IntegrationMode;
+import dev.tanager.domain.session.LiveSessions;
 import dev.tanager.domain.session.ProfileResolution;
 import dev.tanager.domain.session.SessionState;
 import dev.tanager.domain.session.ShellProfile;
 import dev.tanager.domain.session.TerminalSession;
 import dev.tanager.domain.session.WorkingDir;
+import dev.tanager.domain.shared.PaneId;
 import dev.tanager.domain.shared.Result;
 import java.util.ArrayList;
 import java.util.List;
@@ -31,8 +40,12 @@ import java.util.concurrent.CompletionStage;
 /**
  * 프로파일 · 시작 경로를 정해 셸을 띄운다(FR-SES-02 · 04, ADR-0009). 띄울 셸을 정할 수 없으면 다른 셸로 바꾸지 않고 사용자에게 고르게
  * 한다. 설정은 사용자가 기억을 켜고 고른 셸이 떴을 때만 저장한다.
+ *
+ * <p>띄운 셸은 돌려주기 전에 창의 세션으로 등록하고 cwd 추적을 붙인다(FR-SES-03 · FR-HIS-01, ADR-0015). 받은 쪽이 {@code
+ * stream.start()} 하기 전이라 첫 바이트의 보고도 놓치지 않는다.
  */
 public final class SessionStarter implements StartSessionUseCase {
+    private static final System.Logger LOG = System.getLogger(SessionStarter.class.getName());
     private static final String HOME_SHORTHAND = "~";
 
     private final ListProfilesUseCase profiles;
@@ -40,22 +53,29 @@ public final class SessionStarter implements StartSessionUseCase {
     private final PlatformModule platform;
     private final PtyLauncher launcher;
     private final RememberDefaultProfileUseCase memory;
+    private final StateActor state;
+    private final RecordVisitUseCase visits;
 
     public SessionStarter(
             ListProfilesUseCase profiles,
             ConfigRepository config,
             PlatformModule platform,
             PtyLauncher launcher,
-            RememberDefaultProfileUseCase memory) {
+            RememberDefaultProfileUseCase memory,
+            StateActor state,
+            RecordVisitUseCase visits) {
         this.profiles = Objects.requireNonNull(profiles, "profiles");
         this.config = Objects.requireNonNull(config, "config");
         this.platform = Objects.requireNonNull(platform, "platform");
         this.launcher = Objects.requireNonNull(launcher, "launcher");
         this.memory = Objects.requireNonNull(memory, "memory");
+        this.state = Objects.requireNonNull(state, "state");
+        this.visits = Objects.requireNonNull(visits, "visits");
     }
 
     @Override
     public Result<StartedSession, StartFailure> start(StartRequest request) {
+        Objects.requireNonNull(request, "request");
         List<StartNotice> notices = new ArrayList<>();
         List<ShellProfile> available = profiles.list();
         if (available.isEmpty()) {
@@ -74,7 +94,7 @@ public final class SessionStarter implements StartSessionUseCase {
         WorkingDir dir = request.dir().orElseGet(() -> configuredDir(profile, settings, notices));
         Result<StartedSession, StartFailure> started = TerminalSession.start(profile, dir)
                 .fold(
-                        starting -> launch(starting, request.size(), notices),
+                        starting -> launchTracked(request.pane(), starting, request.size(), notices),
                         error -> Result.err(new StartFailure.Rejected(error)));
         if (request.rememberAsDefault() && started.isOk()) {
             return started.map(session -> remembered(session, profile));
@@ -92,12 +112,13 @@ public final class SessionStarter implements StartSessionUseCase {
     }
 
     @Override
-    public Result<StartedSession, StartFailure> restart(TerminalSession exited, TerminalSize size) {
+    public Result<StartedSession, StartFailure> restart(PaneId pane, TerminalSession exited, TerminalSize size) {
+        Objects.requireNonNull(pane, "pane");
         Objects.requireNonNull(exited, "exited");
         Objects.requireNonNull(size, "size");
         return exited.restart()
                 .fold(
-                        starting -> launch(starting, size, new ArrayList<>()),
+                        starting -> launchTracked(pane, starting, size, new ArrayList<>()),
                         error -> Result.err(new StartFailure.Rejected(error)));
     }
 
@@ -127,8 +148,78 @@ public final class SessionStarter implements StartSessionUseCase {
         });
     }
 
+    // 설치 확인은 띄울 때마다 한 번(내용이 같으면 파일을 건드리지 않는다). 홈으로 다시 띄우는 재시도는 같은 결과를 쓴다
+    private Result<StartedSession, StartFailure> launchTracked(
+            PaneId pane, TerminalSession starting, TerminalSize size, List<StartNotice> notices) {
+        Integration integration = installIntegration();
+        return launch(starting, size, notices).map(launched -> tracked(pane, launched, integration, notices));
+    }
+
+    // 포트 계약은 던지지 않는 것이지만, 어겨도 셸은 통합 없이 띄운다
+    private Integration installIntegration() {
+        try {
+            return platform.integration().install();
+        } catch (RuntimeException e) {
+            LOG.log(System.Logger.Level.ERROR, "셸 통합 설치가 예외로 끝났다", e);
+            return new Integration.Unavailable(
+                    "셸 통합 설치가 예외로 끝났다: " + e.getClass().getSimpleName());
+        }
+    }
+
+    /**
+     * 돌려주기 전에 (1) 창의 세션 등록 (2) cwd 추적 구독 (3) 종료 등록 순으로 붙인다. 통합을 쓸 수 없으면 구독 대신 시작 경로를 한 번
+     * 기록하고 알린다. 홈으로 대신 띄웠으면 시작 경로는 홈이라 기록하지 않는다.
+     */
+    private StartedSession tracked(PaneId pane, Launched launched, Integration integration, List<StartNotice> notices) {
+        TerminalSession running = launched.running();
+        TerminalStream stream = launched.stream();
+        IntegrationMode mode = running.profile().integration();
+        state.submit(current -> sessionsChanged(current, current.sessions().launched(pane, running)));
+        if (mode != IntegrationMode.NONE) {
+            switch (integration) {
+                case Integration.Installed _ ->
+                    stream.subscribe(new CwdTracker(pane, running.profile().env(), mode, visits));
+                case Integration.Unavailable(var reason) -> {
+                    notices.add(new StartNotice.IntegrationUnavailable(reason));
+                    if (runningDir(running) instanceof WorkingDir.At at) {
+                        visits.record(pane, at.path());
+                    }
+                }
+            }
+        }
+        long pid = stream.pid();
+        stream.onExit().thenAccept(code -> state.submit(current -> exited(current, pane, pid, code)));
+        CompletionStage<TerminalSession> exited = stream.onExit().thenApply(code -> expect(running.exited(code)));
+        return new StartedSession(running, stream, exited, notices);
+    }
+
+    // 재시작으로 같은 창에 새 셸이 먼저 등록됐으면 늦게 온 옛 셸의 종료는 버린다
+    private static Transition<Boolean> exited(AppState current, PaneId pane, long pid, int code) {
+        boolean same = Optional.ofNullable(current.sessions().byPane().get(pane))
+                .filter(live -> live.session().state() instanceof SessionState.Running r && r.pid() == pid)
+                .isPresent();
+        return same
+                ? sessionsChanged(current, current.sessions().exited(pane, code))
+                : new Transition<>(current, List.of(), false);
+    }
+
+    private static Transition<Boolean> sessionsChanged(AppState current, LiveSessions next) {
+        return new Transition<>(current.withSessions(next), List.of(new AppEvent.SessionsChanged(next)), true);
+    }
+
+    private static WorkingDir runningDir(TerminalSession running) {
+        return switch (running.state()) {
+            case SessionState.Running r -> r.cwd();
+            case SessionState.Starting _, SessionState.Exited _, SessionState.Failed _ ->
+                throw new IllegalStateException("Running 이 아닌 세션을 추적하려 했다: " + running.state());
+        };
+    }
+
+    /** 떴지만 아직 추적을 붙이지 않은 셸. */
+    private record Launched(TerminalSession running, TerminalStream stream) {}
+
     // 경로가 있는지 미리 보지 않는다 — 기동이 WorkingDirectoryNotFound 를 주면 홈에서 한 번 더 띄운다(ADR-0009).
-    private Result<StartedSession, StartFailure> launch(
+    private Result<Launched, StartFailure> launch(
             TerminalSession starting, TerminalSize size, List<StartNotice> notices) {
         WorkingDir dir = startingDir(starting);
         Result<TerminalStream, LaunchError> launched =
@@ -139,7 +230,7 @@ public final class SessionStarter implements StartSessionUseCase {
             return launch(atHome, size, notices);
         }
         return launched.fold(
-                stream -> Result.ok(running(starting, stream, notices)),
+                stream -> Result.ok(new Launched(expect(starting.launched(stream.pid())), stream)),
                 error -> Result.err(failed(starting, error, notices)));
     }
 
@@ -147,12 +238,6 @@ public final class SessionStarter implements StartSessionUseCase {
         return launched.error()
                 .filter(LaunchError.WorkingDirectoryNotFound.class::isInstance)
                 .isPresent();
-    }
-
-    private static StartedSession running(TerminalSession starting, TerminalStream stream, List<StartNotice> notices) {
-        TerminalSession running = expect(starting.launched(stream.pid()));
-        CompletionStage<TerminalSession> exited = stream.onExit().thenApply(code -> expect(running.exited(code)));
-        return new StartedSession(running, stream, exited, notices);
     }
 
     private static StartFailure failed(TerminalSession starting, LaunchError error, List<StartNotice> notices) {

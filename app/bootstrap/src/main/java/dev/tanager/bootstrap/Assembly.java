@@ -9,6 +9,12 @@ import dev.tanager.application.port.out.PtyLauncher;
 import dev.tanager.application.service.DefaultProfileMemory;
 import dev.tanager.application.service.ProfileCatalog;
 import dev.tanager.application.service.SessionStarter;
+import dev.tanager.application.service.VisitRecorder;
+import dev.tanager.application.state.AppState;
+import dev.tanager.application.state.StateActor;
+import dev.tanager.domain.history.HistoryPolicy;
+import dev.tanager.domain.history.WorkHistory;
+import java.time.InstantSource;
 import java.util.Objects;
 
 /** 조립한 유스케이스들. 포트 구현을 골라 서비스에 넣는 일은 여기서만 한다(ADR-0002). */
@@ -37,8 +43,14 @@ record Assembly(ListProfilesUseCase profiles, StartSessionUseCase sessions) {
         installShellIntegration(platform);
         JsonConfigRepository config =
                 new JsonConfigRepository(platform.dirs().appData().resolve(CONFIG_FILE));
+        // 이력은 아직 메모리에만 있다 — state.json 저장 · 불러오기는 #79 에서 잇는다
+        StateActor state =
+                new StateActor(AppState.initial(WorkHistory.empty(HistoryPolicy.DEFAULT)), StateActor.serialExecutor());
+        VisitRecorder visits = new VisitRecorder(state, InstantSource.system());
         return new Assembly(
-                catalog, new SessionStarter(catalog, config, platform, launcher, new DefaultProfileMemory(config)));
+                catalog,
+                new SessionStarter(
+                        catalog, config, platform, launcher, new DefaultProfileMemory(config), state, visits));
     }
 
     /** 파일 I/O 라 백그라운드에서 한 번 돌린다. 결과는 아직 로그에만 남긴다 — 셸에 주입하는 일은 #55 · #81. */

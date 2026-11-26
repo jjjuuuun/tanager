@@ -158,6 +158,11 @@ public final class ScriptedTerminalStream implements TerminalStream {
         return List.copyOf(resizes);
     }
 
+    /** 지금 붙어 있는 출력 구독자 수. 구독이 start 전에 붙었는지 · 붙이지 않았는지 보는 데 쓴다. */
+    public int subscriberCount() {
+        return subscribers.size();
+    }
+
     public synchronized int closeCalls() {
         return closeCalls;
     }

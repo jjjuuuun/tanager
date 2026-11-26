@@ -18,6 +18,7 @@ import dev.tanager.domain.session.ProfileId;
 import dev.tanager.domain.session.ProfileResolution;
 import dev.tanager.domain.session.ShellKind;
 import dev.tanager.domain.session.ShellProfile;
+import dev.tanager.domain.shared.PaneId;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -57,7 +58,7 @@ class AssemblyTest {
         await().atMost(Duration.ofSeconds(2)).until(() -> platform.shellsCalls() == 1);
 
         // when
-        var result = assembly.sessions().start(StartRequest.remembered(SIZE));
+        var result = assembly.sessions().start(StartRequest.remembered(new PaneId("p1"), SIZE));
 
         // then
         assertThat(result.error())
@@ -82,12 +83,14 @@ class AssemblyTest {
 
         // when
         StartedSession first = assembly.sessions()
-                .start(StartRequest.chosen(CMD.id(), true, SIZE))
+                .start(StartRequest.chosen(new PaneId("p1"), CMD.id(), true, SIZE))
                 .value()
                 .orElseThrow();
         first.stream().close();
-        StartedSession second =
-                assembly.sessions().start(StartRequest.remembered(SIZE)).value().orElseThrow();
+        StartedSession second = assembly.sessions()
+                .start(StartRequest.remembered(new PaneId("p1"), SIZE))
+                .value()
+                .orElseThrow();
 
         // then
         String text = Files.readString(file, StandardCharsets.UTF_8);
@@ -110,7 +113,7 @@ class AssemblyTest {
 
         // when
         StartedSession started = assembly.sessions()
-                .start(StartRequest.chosen(CMD.id(), true, SIZE))
+                .start(StartRequest.chosen(new PaneId("p1"), CMD.id(), true, SIZE))
                 .value()
                 .orElseThrow();
 
@@ -148,7 +151,7 @@ class AssemblyTest {
         // when
         Assembly assembly = Assembly.assemble(platform, launcher);
         await().atMost(Duration.ofSeconds(2)).until(() -> integration.installCalls() == 1);
-        var result = assembly.sessions().start(StartRequest.chosen(CMD.id(), false, SIZE));
+        var result = assembly.sessions().start(StartRequest.chosen(new PaneId("p1"), CMD.id(), false, SIZE));
 
         // then
         StartedSession started = result.value().orElseThrow();

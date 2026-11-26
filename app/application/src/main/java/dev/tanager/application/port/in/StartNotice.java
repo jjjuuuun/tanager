@@ -72,4 +72,16 @@ public sealed interface StartNotice {
             return "기본 셸 " + profile.value() + " 을 저장하지 못했다 — " + error.describe();
         }
     }
+
+    /** 셸 통합을 쓸 수 없어 이 셸의 현재 경로를 추적하지 않는다 — 시작 경로만 기록한다. */
+    record IntegrationUnavailable(String reason) implements StartNotice {
+        public IntegrationUnavailable {
+            Objects.requireNonNull(reason, "reason");
+        }
+
+        @Override
+        public String describe() {
+            return "셸 통합을 쓸 수 없어 이동한 경로를 기록하지 않는다 — " + reason;
+        }
+    }
 }
