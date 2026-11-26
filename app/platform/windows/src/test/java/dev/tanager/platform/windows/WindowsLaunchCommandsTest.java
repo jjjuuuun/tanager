@@ -3,6 +3,7 @@ package dev.tanager.platform.windows;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import dev.tanager.application.port.out.Integration;
 import dev.tanager.application.port.out.LaunchCommand;
 import dev.tanager.domain.history.ShellEnvironment;
 import dev.tanager.domain.history.WorkspacePath;
@@ -59,7 +60,8 @@ class WindowsLaunchCommandsTest {
     }
 
     private static LaunchCommand of(ShellProfile profile, WorkingDir dir) {
-        return WindowsLaunchCommands.of(profile, dir, USER_PROFILE);
+        return WindowsLaunchCommands.of(
+                profile, dir, USER_PROFILE, Optional.empty(), new Integration.Unavailable("통합 없음"));
     }
 
     @Test

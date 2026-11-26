@@ -2,6 +2,7 @@ package dev.tanager.platform.macos;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import dev.tanager.application.port.out.Integration;
 import dev.tanager.domain.history.ShellEnvironment;
 import dev.tanager.domain.history.WorkspacePath;
 import dev.tanager.domain.session.IntegrationMode;
@@ -31,7 +32,7 @@ class MacLaunchCommandTest {
                 .value()
                 .orElseThrow());
 
-        assertThatThrownBy(() -> new MacPlatformModule().launchCommand(zsh, cwd))
+        assertThatThrownBy(() -> new MacPlatformModule().launchCommand(zsh, cwd, new Integration.Unavailable("M7 전")))
                 .isInstanceOf(UnsupportedOperationException.class);
     }
 

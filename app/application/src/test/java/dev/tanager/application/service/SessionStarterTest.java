@@ -12,7 +12,9 @@ import dev.tanager.application.port.out.ConfigError;
 import dev.tanager.application.port.out.ConfigWarning;
 import dev.tanager.application.port.out.FakePlatformModule;
 import dev.tanager.application.port.out.FakePlatformModule.LaunchRequest;
+import dev.tanager.application.port.out.FakeShellIntegration;
 import dev.tanager.application.port.out.InMemoryConfigRepository;
+import dev.tanager.application.port.out.Integration;
 import dev.tanager.application.port.out.LaunchError;
 import dev.tanager.application.port.out.LoadedConfig;
 import dev.tanager.application.port.out.OutputCollector;
@@ -37,6 +39,7 @@ import dev.tanager.domain.session.TerminalSession;
 import dev.tanager.domain.session.WorkingDir;
 import dev.tanager.domain.shared.PaneId;
 import dev.tanager.domain.shared.Result;
+import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -133,6 +136,56 @@ class SessionStarterTest {
         assertThat(launcher.commands()).hasSize(1);
         assertThat(launcher.sizes()).containsExactly(SIZE);
         assertThat(session.notices()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("셸 통합이 설치돼 있으면 그 결과를 기동 명령 계산에 넘긴다")
+    void passesInstalledIntegrationToLaunchCommand() {
+        // given
+        FakePlatformModule installed = new FakePlatformModule(List.of(WSL_A))
+                .withIntegration(FakeShellIntegration.installedAt(Path.of("integration-dir")));
+        SessionStarter withIntegration = newStarter(installed);
+
+        // when
+        started(withIntegration.start(requestFor("wsl:A")));
+
+        // then
+        assertThat(installed.launchIntegrations())
+                .containsExactly(new Integration.Installed(Path.of("integration-dir")));
+    }
+
+    @Test
+    @DisplayName("셸 통합을 쓸 수 없으면 Unavailable 을 기동 명령 계산에 넘긴다")
+    void passesUnavailableIntegrationToLaunchCommand() {
+        // given
+        FakePlatformModule unavailable = new FakePlatformModule(List.of(WSL_A))
+                .withIntegration(FakeShellIntegration.unavailable("스크립트를 쓸 수 없다"));
+        SessionStarter withoutIntegration = newStarter(unavailable);
+
+        // when
+        started(withoutIntegration.start(requestFor("wsl:A")));
+
+        // then
+        assertThat(unavailable.launchIntegrations()).containsExactly(new Integration.Unavailable("스크립트를 쓸 수 없다"));
+    }
+
+    @Test
+    @DisplayName("시작 경로가 없어 홈에서 다시 띄울 때도 같은 셸 통합 결과를 넘긴다")
+    void passesSameIntegrationWhenRetryingAtHome() {
+        // given
+        FakePlatformModule installed = new FakePlatformModule(List.of(POWERSHELL))
+                .withIntegration(FakeShellIntegration.installedAt(Path.of("integration-dir")));
+        config.willLoad(configOf(Optional.empty(), "powershell", "C:\\없음"));
+        launcher.willFailFor(
+                command -> command.workingDirectory().equals(Optional.of("C:\\없음")),
+                new LaunchError.WorkingDirectoryNotFound("C:\\없음"));
+
+        // when
+        started(newStarter(installed).start(requestFor("powershell")));
+
+        // then
+        Integration expected = new Integration.Installed(Path.of("integration-dir"));
+        assertThat(installed.launchIntegrations()).containsExactly(expected, expected);
     }
 
     @Test

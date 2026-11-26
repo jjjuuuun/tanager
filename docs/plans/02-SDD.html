@@ -458,7 +458,7 @@ public record CpuWindow(List&lt;Double&gt; recent) {                            
 <ul class="small">
 <li><code>PtyLauncher</code> → <code>TerminalStream</code>(subscribe · write · resize · close · onExit)</li>
 <li><code>HistoryRepository</code> · <code>WorkspaceRepository</code> · <code>ConfigRepository</code></li>
-<li><code>PlatformModule</code> — <code>shells()</code> · <code>launchCommand(profile, WorkingDir)</code> · <code>integration()</code>(M3) · <code>paths()</code>(M5, #53) · <code>dirs()</code> · <code>defaultKeymap()</code> · <code>fileOpener()</code> · <code>resources()</code> · <code>appearance()</code></li>
+<li><code>PlatformModule</code> — <code>shells()</code> · <code>launchCommand(profile, WorkingDir, Integration)</code>(M3, ADR-0014) · <code>integration()</code>(M3) · <code>paths()</code>(M5, #53) · <code>dirs()</code> · <code>defaultKeymap()</code> · <code>fileOpener()</code> · <code>resources()</code> · <code>appearance()</code></li>
 <li><code>ToolkitProvider</code> (여러 개)</li>
 <li><code>Clock</code> · <code>IdGenerator</code> · <code>UiDispatcher</code></li>
 </ul></div>
@@ -609,16 +609,42 @@ public record CpuWindow(List&lt;Double&gt; recent) {                            
 <h3>10.2 기동 명령과 셸 통합</h3>
 <div class="tbl-wrap"><table>
 <tr><th>셸</th><th>기동 (cwd = 시작 경로)</th><th>cwd 알림</th></tr>
-<tr><td>bash (WSL)</td><td><code>wsl.exe -d &lt;배포판&gt; --cd &lt;경로&gt; -- bash --rcfile &lt;/mnt/…/tanager.bash&gt; -i</code></td><td>OSC 7</td></tr>
+<tr><td>bash (WSL)</td><td><code>wsl.exe -d &lt;배포판&gt; --cd &lt;경로|~&gt; -- [ -r &quot;$TANAGER_RC&quot; ] &amp;&amp; exec bash --rcfile &quot;$TANAGER_RC&quot; -i || exec bash -i</code> + 환경 <code>TANAGER_RC=&lt;…\shell-integration\tanager.bash&gt;</code>(Windows 경로) · <code>WSLENV=&lt;기존&gt;:TANAGER_RC/p</code>. WSL 이 <code>/p</code> 로 경로를 바꾸고 기본 로그인 셸이 변수를 펼친다. 큰따옴표는 argv 에 포함(공백 경로). rcfile 을 못 읽으면 <code>bash -i</code> 로 물러선다. 통합이 없으면 <code>-- bash -i</code> (ADR-0014)</td><td>OSC 7</td></tr>
 <tr><td>powershell (5.1)</td><td><code>powershell.exe -NoLogo -NoExit -Command ". '&lt;…\tanager.ps1&gt;'"</code> + 작업 디렉터리 지정. 스크립트는 UTF-8 BOM, 5.1 문법</td><td>OSC 9;9</td></tr>
 <tr><td>cmd</td><td><code>cmd.exe /k</code> + 환경 변수 <code>PROMPT=$e]9;9;$P$e\$P$G</code></td><td>OSC 9;9</td></tr>
 </table></div>
-<h4>tanager.bash (M0 검증)</h4>
-<pre data-lang="bash"><code># 사용자 설정을 먼저 읽고, 프롬프트 훅을 덧붙인다 (덮어쓰지 않음)
-[ -f ~/.bashrc ] &amp;&amp; . ~/.bashrc
+<h4>tanager.bash (M0 검증 → M3 #55 개정. 원본: <code>app/platform/windows/src/main/resources/shell-integration/tanager.bash</code>)</h4>
+<pre data-lang="bash"><code># --rcfile 은 -l 과 함께 쓸 수 없다 → 로그인 셸 순서를 흉내 낸다(#55, ADR-0003 개정 · ADR-0014)
+if [ -z &quot;${__tanager_profile_loaded-}&quot; ]; then
+  __tanager_profile_loaded=1
+  if [ -r /etc/profile ]; then
+    if [ -f /etc/bash.bashrc ]; then
+      # Debian · Ubuntu · Arch: bash 가 이미 읽은 /etc/bash.bashrc 를 /etc/profile 이 또 읽지 않게 PS1 을 잠시 비운다
+      if [ &quot;${PS1+set}&quot; ]; then __tanager_ps1=$PS1; else unset __tanager_ps1; fi
+      PS1=
+      . /etc/profile
+      if [ -z &quot;${PS1-}&quot; ]; then   # /etc/profile 이 새로 정했으면 둔다
+        if [ &quot;${__tanager_ps1+set}&quot; ]; then PS1=$__tanager_ps1; else unset PS1; fi
+      fi
+      unset __tanager_ps1
+      # 비운 PS1 때문에 건너뛴 bash-completion 을 로그인 셸처럼 불러온다
+      if [ -z &quot;${BASH_COMPLETION_VERSINFO-}&quot; ] &amp;&amp; [ -r /etc/profile.d/bash_completion.sh ]; then
+        . /etc/profile.d/bash_completion.sh
+      fi
+    else
+      . /etc/profile               # Fedora 계열 /etc/bashrc 는 PS1 을 보므로 건드리지 않는다
+    fi
+  fi
+  if [ -r ~/.bash_profile ]; then . ~/.bash_profile
+  elif [ -r ~/.bash_login ]; then . ~/.bash_login
+  elif [ -r ~/.profile ]; then . ~/.profile
+  elif [ -r ~/.bashrc ]; then . ~/.bashrc
+  fi
+fi
 
 __tanager_osc7() {
-  local LC_ALL=C p=$PWD out= c i
+  local LC_ALL=C
+  local p=$PWD out= c i
   for (( i = 0; i &lt; ${#p}; i++ )); do            # 바이트 단위 퍼센트 인코딩 (한글 경로 대응)
     c=${p:i:1}            # LC_ALL=C 덕분에 바이트 단위 — 빼면 한글이 %D55C 처럼 깨진다(M0 에서 재현)
     case $c in
@@ -628,7 +654,8 @@ __tanager_osc7() {
   done
   printf &#x27;\e]7;file://%s%s\e\\&#x27; &quot;$HOSTNAME&quot; &quot;$out&quot;
 }
-PROMPT_COMMAND=&quot;__tanager_osc7${PROMPT_COMMAND:+;$PROMPT_COMMAND}&quot;</code></pre>
+# 훅은 받은 $? 를 돌려준다. PROMPT_COMMAND 가 배열이면 원소를 더하고 문자열이면 앞에 붙인다.
+# 이미 있으면 두 번 넣지 않고, export 돼 있으면 함수도 export 한다(전체는 저장소의 tanager.bash).</code></pre>
 <h4>tanager.ps1 (M0 검증 — UTF-8 BOM 으로 저장)</h4>
 <pre data-lang="powershell"><code># 프로필($PROFILE)은 이미 로드된 뒤. 기존 prompt 를 감싸서 앞에 OSC 9;9 를 붙인다 (oh-my-posh 등과 공존)
 $global:__TanagerPrompt = $function:prompt

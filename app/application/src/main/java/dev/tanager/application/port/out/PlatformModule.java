@@ -30,9 +30,12 @@ public interface PlatformModule {
      * {@code profile} 셸을 {@code dir} 에서 띄우는 PTY 명령을 만든다(ADR-0007 · 0009). 외부 상태를 보지 않는 순수 계산이다 —
      * 경로가 실제로 있는지는 확인하지 않는다. {@link WorkingDir.Home} 을 그 환경의 홈으로 바꾸는 일도 여기서 한다.
      *
+     * <p>{@code integration} 은 셸 통합 설치 결과다(ADR-0014). {@link Integration.Installed} 면 셸에 통합 스크립트를 주입하고,
+     * {@link Integration.Unavailable} 이면 통합 없이 띄우는 명령을 만든다.
+     *
      * @throws IllegalArgumentException {@code dir} 이 경로이고 그 환경이 {@code profile} 의 환경과 다를 때
      */
-    LaunchCommand launchCommand(ShellProfile profile, WorkingDir dir);
+    LaunchCommand launchCommand(ShellProfile profile, WorkingDir dir, Integration integration);
 
     /** 앱 데이터 폴더 등 OS 별 위치. 계산만 하고 디렉터리를 만들지 않는다. */
     PlatformDirs dirs();
