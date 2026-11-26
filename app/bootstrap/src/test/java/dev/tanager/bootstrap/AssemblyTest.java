@@ -29,9 +29,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -50,6 +52,20 @@ class AssemblyTest {
 
     private static final TerminalSize SIZE = new TerminalSize(80, 24);
 
+    // 테스트가 만든 조립은 끝날 때 닫는다 — 저장소 잠금 · 타이머 스레드를 남기지 않는다(TempDir 지우기 전에)
+    private final List<Assembly> assemblies = new ArrayList<>();
+
+    @AfterEach
+    void shutdownAssemblies() {
+        assemblies.forEach(Assembly::shutdown);
+    }
+
+    private Assembly assemble(FakePlatformModule platform, ScriptedPtyLauncher launcher) {
+        Assembly assembly = Assembly.assemble(platform, launcher);
+        assemblies.add(assembly);
+        return assembly;
+    }
+
     @Test
     @DisplayName("조립하면 셸 탐지가 미리 한 번 돌고, 기억한 셸이 사라졌으면 셸을 띄우지 않고 선택을 요구한다")
     void assemblePreDetectsShellsAndRequiresChoiceWhenRememberedShellIsGone() throws Exception {
@@ -59,7 +75,7 @@ class AssemblyTest {
         ScriptedPtyLauncher launcher = new ScriptedPtyLauncher();
 
         // when
-        Assembly assembly = Assembly.assemble(platform, launcher);
+        Assembly assembly = assemble(platform, launcher);
 
         // then 셸 탐지는 start 를 부르기 전에 미리 시작된다
         await().atMost(Duration.ofSeconds(2)).until(() -> platform.shellsCalls() == 1);
@@ -86,7 +102,7 @@ class AssemblyTest {
                 StandardCharsets.UTF_8);
         FakePlatformModule platform = new FakePlatformModule(List.of(CMD)).withAppData(appData);
         ScriptedPtyLauncher launcher = new ScriptedPtyLauncher();
-        Assembly assembly = Assembly.assemble(platform, launcher);
+        Assembly assembly = assemble(platform, launcher);
 
         // when
         StartedSession first = assembly.sessions()
@@ -116,7 +132,7 @@ class AssemblyTest {
         Files.writeString(file, "{ broken", StandardCharsets.UTF_8);
         byte[] before = Files.readAllBytes(file);
         FakePlatformModule platform = new FakePlatformModule(List.of(CMD)).withAppData(appData);
-        Assembly assembly = Assembly.assemble(platform, new ScriptedPtyLauncher());
+        Assembly assembly = assemble(platform, new ScriptedPtyLauncher());
 
         // when
         StartedSession started = assembly.sessions()
@@ -139,7 +155,7 @@ class AssemblyTest {
                 new FakePlatformModule(List.of(CMD)).withAppData(appData).withIntegration(integration);
 
         // when
-        Assembly.assemble(platform, new ScriptedPtyLauncher());
+        assemble(platform, new ScriptedPtyLauncher());
 
         // then
         await().atMost(Duration.ofSeconds(2)).until(() -> integration.installCalls() == 1);
@@ -153,7 +169,7 @@ class AssemblyTest {
         FakeShellIntegration integration = FakeShellIntegration.installedAt(appData.resolve("shell-integration"));
         FakePlatformModule platform =
                 new FakePlatformModule(List.of(CMD)).withAppData(appData).withIntegration(integration);
-        Assembly assembly = Assembly.assemble(platform, new ScriptedPtyLauncher());
+        Assembly assembly = assemble(platform, new ScriptedPtyLauncher());
         await().atMost(Duration.ofSeconds(2)).until(() -> integration.installCalls() == 1);
 
         // when
@@ -182,7 +198,7 @@ class AssemblyTest {
         ScriptedPtyLauncher launcher = new ScriptedPtyLauncher();
 
         // when
-        Assembly assembly = Assembly.assemble(platform, launcher);
+        Assembly assembly = assemble(platform, launcher);
         await().atMost(Duration.ofSeconds(2)).until(() -> integration.installCalls() == 1);
         var result = assembly.sessions().start(StartRequest.chosen(new PaneId("p1"), CMD.id(), false, SIZE));
 
@@ -214,7 +230,7 @@ class AssemblyTest {
             Files.writeString(appData.resolve("state.json"), json, StandardCharsets.UTF_8);
         }
         FakePlatformModule platform = new FakePlatformModule(List.of(CMD)).withAppData(appData);
-        return Assembly.assemble(platform, new ScriptedPtyLauncher());
+        return assemble(platform, new ScriptedPtyLauncher());
     }
 
     private static void visit(Assembly assembly, WorkspacePath path) {

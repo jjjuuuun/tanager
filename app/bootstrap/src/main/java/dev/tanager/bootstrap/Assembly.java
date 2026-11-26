@@ -115,9 +115,22 @@ final class Assembly {
 
     /**
      * 앱을 끝낼 때 한 번 부른다(ADR-0011 · 0012): 상태 실행기를 닫고 남은 명령을 처리한 뒤 → 미저장 이력을 바로 저장(최대 2초) → 저장소를
-     * 닫는다(잠금을 푼다). 이 뒤의 명령은 실패한 응답을 받는다.
+     * 닫는다(잠금을 푼다). 저장하지 못했으면 저장소를 닫지 않는다. 이 뒤의 명령은 실패한 응답을 받는다.
      */
     void shutdown() {
+        shutdownInOrder(stateExecutor, saver, FLUSH_TIMEOUT, scheduler::close, history::close);
+    }
+
+    /**
+     * {@link #shutdown} 의 순서. flush 가 실패하면(막힌 저장이 시간을 넘김 · 저장 실패) 저장소를 닫지 않는다 — 닫기는 진행 중인 저장과 같은
+     * 잠금을 기다려 종료를 붙잡을 수 있다. 프로세스가 끝나면 OS 가 파일 잠금을 푼다(ADR-0011 개정).
+     */
+    static void shutdownInOrder(
+            ExecutorService stateExecutor,
+            HistorySaver saver,
+            Duration flushTimeout,
+            Runnable stopTimers,
+            Runnable closeStore) {
         stateExecutor.shutdown();
         try {
             if (!stateExecutor.awaitTermination(DRAIN_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS)) {
@@ -126,11 +139,13 @@ final class Assembly {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
-        if (!saver.flush(FLUSH_TIMEOUT)) {
-            LOG.log(System.Logger.Level.WARNING, "종료 때 이력을 저장하지 못했다");
+        boolean flushed = saver.flush(flushTimeout);
+        stopTimers.run();
+        if (flushed) {
+            closeStore.run();
+        } else {
+            LOG.log(System.Logger.Level.WARNING, "종료 때 이력을 저장하지 못해 저장소를 닫지 않고 끝낸다(잠금은 프로세스가 끝나면 풀린다)");
         }
-        scheduler.close();
-        history.close();
     }
 
     // 블로킹 I/O 라 가상 스레드에서. 종료가 먼저 와 결과를 넘기지 못하면 다시 잡은 잠금을 푼다
