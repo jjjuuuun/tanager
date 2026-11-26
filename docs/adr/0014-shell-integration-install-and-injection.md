@@ -23,14 +23,17 @@ ADR-0003 은 셸 통합 스크립트가 프롬프트마다 OSC 7(bash) · OSC 9;
 ### 배포 (#80 에서 구현)
 - 스크립트는 `app/platform/windows/src/main/resources/shell-integration/` 에 둔다. macOS 는 M7 에 zsh 판을 따로 둔다.
   - `tanager.bash`: LF, BOM 없음. `.gitattributes` 의 `*.bash text eol=lf`.
-  - `tanager.ps1`: UTF-8 BOM, CRLF. `.gitattributes` 의 `*.ps1 text eol=crlf`. `core.autocrlf=false` 라서 작업 트리 파일이 CRLF 여야 Gradle 이 CRLF 로 패키징한다.
+  - `tanager.ps1`: UTF-8 BOM, CRLF. `.gitattributes` 의 `*.ps1 text eol=crlf`. `.gitattributes` 의 `eol=crlf` 가 체크아웃 때 CRLF 를 강제하고, Gradle 은 바이트를 그대로 복사한다.
   - 바이트 계약은 `ShellIntegrationResourcesTest` 가 검사한다.
 - port.out `ShellIntegration { Integration install(); }` 와 `Integration = Installed(directory) | Unavailable(reason)`, `PlatformModule.integration()` 을 둔다.
 - `WindowsShellIntegration.install()` 은 `<appData>\shell-integration\` 에 쓴다.
   - 디렉터리를 만든다.
   - 파일마다 기존 바이트와 비교해 같으면 건드리지 않는다(수정 시각 유지).
-  - 다르면 같은 디렉터리의 임시 파일에 쓰고 `ATOMIC_MOVE` + `REPLACE_EXISTING` 으로 옮긴다. 실패하면 임시 파일을 지운다.
-  - 예외를 던지지 않는다. `IOException` · `RuntimeException` 은 `Unavailable(이유)` 가 된다.
+  - 다르면 같은 디렉터리의 임시 파일에 쓰고 `ATOMIC_MOVE` + `REPLACE_EXISTING` 으로 옮긴다. 끝나면 성공 · 실패와 상관없이 임시 파일을 지운다.
+  - 임시 파일 이름은 `<이름>.tmp`(`tanager.bash.tmp` · `tanager.ps1.tmp`) 하나로 고정한다. 매번 임의 이름으로 만들면 강제 종료 때마다 하나씩 쌓인다. 고정 이름이면 이전 실행이 남긴 tmp 를 다음 설치가 덮어쓴다. 예전 판이 남긴 임의 이름(`tanager.*.tmp`)도 설치를 시작할 때 지운다.
+  - 교체 재시도: Windows 는 대상 파일을 다른 프로세스(이미 뜬 셸 · 백신)가 열고 있으면 교체를 `AccessDenied` 로 거부한다. 100ms 간격으로 세 번까지 다시 시도한다(최대 0.3초 — 시작을 늦추지 않을 만큼만). 교체가 실패한 뒤 대상 바이트가 이미 새 내용과 같으면(다른 인스턴스가 먼저 쓴 경우) 다시 시도하지 않고 `Installed` 로 본다.
+    - 대기(`Sleeper`)와 교체(`Mover`)는 package-private 함수형 인터페이스로 주입한다. 테스트는 실제로 기다리지 않고 실패를 Fake 로 재현한다.
+  - 예외를 던지지 않는다. `IOException` · `RuntimeException` 은 `Unavailable(이유)` 가 된다. 이유는 사용자에게 보일 짧은 문장(`셸 통합 스크립트를 설치하지 못했다: <경로> (<원인>)`)이고, 예외 전체는 `System.Logger` 에 남긴다.
 - 버전 파일은 두지 않는다. 바이트 비교는 사용자가 고친 파일까지 되돌린다.
 - macOS 의 `integration()` 은 M7 전까지 `Unavailable("M7")` 이다.
 - bootstrap 은 시작할 때 가상 스레드에서 `install()` 을 한 번 부르고 결과를 로그에 남긴다(`Unavailable` 은 WARNING). 셸 기동은 기다리지 않는다.
@@ -54,9 +57,11 @@ ADR-0003 은 셸 통합 스크립트가 프롬프트마다 OSC 7(bash) · OSC 9;
   - `PROMPT_COMMAND` 가 배열(bash 5.1+)이면 원소를 더하고, 문자열이면 앞에 붙인다.
   - 훅은 받은 `$?` 를 그대로 돌려준다. 뒤의 훅과 `PS1` 이 직전 명령의 상태를 본다.
   - 이미 들어 있으면 두 번 넣지 않는다.
+  - 사용자가 `PROMPT_COMMAND` 를 export 해 두면 중첩 bash 가 훅 이름만 물려받아 `__tanager_prompt: command not found` 가 뜬다. 그래서 export 돼 있으면 `__tanager_prompt` · `__tanager_osc7` 도 `export -f` 한다(자식 bash 도 OSC 7 을 낸다).
   - 퍼센트 인코딩 함수 첫 줄은 `local LC_ALL=C` 다. 없으면 한글이 코드 포인트(`%D55C`)로 나간다(M0 재현).
 - PowerShell 5.1
   - 원래 prompt 를 감싼다. 이미 감쌌으면 다시 감싸지 않는다.
+  - 사용자가 `Set-StrictMode -Version Latest` 를 켜 두면 없는 `$global:LASTEXITCODE` 를 읽는 순간 예외가 나 호스트가 기본 `PS>` 로 물러선다. `Get-Variable -ErrorAction Ignore` 로 있는지 먼저 보고, 있었을 때만 값을 떠 두고 되돌린다. 원래 없었으면 원래 prompt 가 만든 변수를 지운다(없던 변수를 만들지 않는다).
   - 원래 prompt 를 부르기 전에 `$?` · `$LASTEXITCODE` 를 되돌려, 원래 prompt 가 직전 명령의 값을 보게 한다. `$?` 는 직접 대입할 수 없어, 실패였으면 `Write-Error -ErrorAction Ignore` 로 실패를 한 번 일으킨다.
   - FileSystem 공급자일 때만 `ESC]9;9;"<ProviderPath>"ESC\` 를 앞에 붙인다.
   - 5.1 문법만 쓴다(`` `e `` · `??` · 삼항 없음).
@@ -71,3 +76,11 @@ ADR-0003 은 셸 통합 스크립트가 프롬프트마다 OSC 7(bash) · OSC 9;
 - #80 에서 확인한 것(2026-11-26)
   - `bash -n tanager.bash` 통과(bash 5.2.21). 임시 HOME 에서 `bash --rcfile tanager.bash -i` 로 띄워 한글 · 공백 · `#` 경로가 UTF-8 바이트로 퍼센트 인코딩되고, 문자열 · 배열 `PROMPT_COMMAND` 모두 사용자 훅이 `false` 뒤 `$?=1` 을 보며, 다시 source 해도 OSC 가 한 번만 나오는 것을 봤다.
   - PowerShell 5.1.26100 의 `Parser::ParseFile` 오류 0건. 두 번 dot-source 해도 OSC 9;9 가 한 번만 나오고, 원래 prompt 가 `cmd /c exit 3` 뒤 `$?=False` · `$LASTEXITCODE=3` 을 보며, 레지스트리 공급자(`HKCU:\`)에서는 OSC 를 내지 않는 것을 봤다.
+  - 리뷰 반영(2026-11-26)
+    - bash 5.2.21: `export PROMPT_COMMAND='echo "user-hook status=$?"'` 뒤 자식 `bash -i` 에서 `command not found` 가 없고, 자식이 한글 경로를 UTF-8 퍼센트 인코딩한 OSC 7 을 내며, 자식 · 부모 모두 사용자 훅이 직전 `$?`(1 · 7)를 본다. export 하지 않은 문자열 · 배열 `PROMPT_COMMAND` 는 전과 같다(함수를 export 하지 않고, 다시 source 해도 한 번).
+    - PowerShell 5.1.26100: `Set-StrictMode -Version Latest` 를 켜고 `-NoExit -Command ". '<경로>'"` 로 띄우면 고치기 전에는 첫 프롬프트가 `PS>` 였고, 고친 뒤에는 OSC 9;9 와 원래 프롬프트가 나온다. `cmd /c exit 3` 뒤 `$LASTEXITCODE=3` 이 유지되고, `LASTEXITCODE` 가 없던 세션에서는 prompt 뒤에도 없다(원래 prompt 가 `cmd /c exit 9` 를 불러도). `$Error` 는 늘지 않는다.
+
+## #55 에서 확인할 것
+- Debian 계열(Ubuntu 포함)의 `/etc/bash.bashrc` 이중 실행(`--rcfile` + `/etc/profile`).
+  - Debian 의 bash 는 `--rcfile` 을 줘도 대화형이면 `/etc/bash.bashrc` 를 먼저 읽는다(빈 rcfile 로 확인). 그런데 `tanager.bash` 가 흉내 내는 `/etc/profile` 도 대화형 bash 에서 `/etc/bash.bashrc` 를 다시 source 한다. 그래서 두 번 돈다(Ubuntu 의 sudo 안내 문구가 두 번 나온다). `~/.profile` → `~/.bashrc` 는 로그인 셸과 같아 문제가 아니다.
+  - 회피책 후보: (a) `/etc/profile` 을 source 하는 동안 `PS1` 을 비워 `/etc/profile` 의 `[ "${PS1-}" ]` 분기(`bash.bashrc` 재실행)를 건너뛰게 한다. (b) `/etc/profile` 대신 `/etc/profile.d/*.sh` 만 읽는다. (c) 그대로 두고 문서에 적는다(대부분의 `bash.bashrc` 는 두 번 돌아도 무해). #55 의 wsl 통합 테스트에서 PATH · 프롬프트가 로그인 셸과 같은지로 고른다.
