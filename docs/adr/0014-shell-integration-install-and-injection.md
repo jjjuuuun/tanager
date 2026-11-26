@@ -1,6 +1,6 @@
 # 0014. 셸 통합 스크립트 배포와 주입
 
-- 상태: 채택(#80, 2026-11-26) — 배포는 #80, WSL 주입은 #55(2026-11-27)에서 구현했다. PowerShell · cmd 주입은 #81 에서 구현한다.
+- 상태: 채택(#80, 2026-11-26) — 배포는 #80, WSL 주입은 #55(2026-11-27), PowerShell · cmd 주입은 #81(2026-11-27)에서 구현했다.
 - 날짜: 2026-11-26
 - 관련: #80 · #55 · #81, FR-SES-03, SDD §9.1 · §10.2, ADR-0003 · 0007 · 0009(개정)
 
@@ -56,7 +56,7 @@ ADR-0003 은 셸 통합 스크립트가 프롬프트마다 OSC 7(bash) · OSC 9;
   2. 이름(`/` 앞)이 `TANAGER_RC` 인 항목은 대소문자를 무시하고 지운다 — Tanager 안에서 Tanager 를 띄우면 상속한 WSLENV 에 이미 있다.
   3. 나머지는 순서대로 두고 맨 뒤에 `TANAGER_RC/p` 하나를 붙인다.
 - `/p` 변환은 한글 · 공백 · `'` 가 든 앱 데이터 경로에서도 맞게 동작했다. 그래서 (a) `/mnt/` 직접 계산으로 물러서지 않는다 — 직접 계산해도 같은 따옴표 문제가 남는다.
-- `Unavailable` 이면 M2 명령(`… -- bash -i`) 그대로 띄우고 환경 변수를 더하지 않는다. PowerShell · cmd 는 #81 전까지 그대로다.
+- `Unavailable` 이면 M2 명령(`… -- bash -i`) 그대로 띄우고 환경 변수를 더하지 않는다. PowerShell · cmd 는 아래 "#81" 절.
 - 기본 로그인 셸이 bash 가 아닌 배포판 사용자(zsh · fish 등)는 `[ … ] && … || …` 와 `"$TANAGER_RC"` 를 그 셸이 해석한다. 이 PC 는 bash 라 확인하지 않았다(미검증).
 
 ### #55 로그인 셸 설정
@@ -82,8 +82,8 @@ ADR-0003 은 셸 통합 스크립트가 프롬프트마다 OSC 7(bash) · OSC 9;
   - 원래 prompt 를 부르기 전에 `$?` · `$LASTEXITCODE` 를 되돌려, 원래 prompt 가 직전 명령의 값을 보게 한다. `$?` 는 직접 대입할 수 없어, 실패였으면 `Write-Error -ErrorAction Ignore` 로 실패를 한 번 일으킨다.
   - FileSystem 공급자일 때만 `ESC]9;9;"<ProviderPath>"ESC\` 를 앞에 붙인다.
   - 5.1 문법만 쓴다(`` `e `` · `??` · 삼항 없음).
-  - 기동은 `powershell.exe -NoLogo -NoExit -ExecutionPolicy Bypass -Command ". '<경로>'"` 다(경로의 `'` 는 `''`). 그룹 정책이 막으면 통합이 없다(위험 R4). 기동 명령은 #81 에서 구현한다.
-- cmd: 환경 `PROMPT=$e]9;9;$P$e\` + (상속한 `PROMPT` 또는 `$P$G`)를 준다. 상속값은 모듈을 만들 때 한 번 읽는다. #81 에서 구현한다.
+  - 기동은 `powershell.exe -NoLogo -NoExit -ExecutionPolicy Bypass -Command ". $env:TANAGER_PS1"` + 환경 `TANAGER_PS1=<설치 폴더>\tanager.ps1` 이다(#81 에서 구현됨, 아래 "#81" 절). 처음 안은 경로를 `-Command ". '<경로>'"` 에 넣고 `'` 를 `''` 로 이스케이프하는 것이었으나 #107 규칙대로 환경 변수로 바꿨다. 그룹 정책이 막으면 통합이 없다(위험 R4).
+- cmd: 환경 `PROMPT=$e]9;9;$P$e\` + (상속한 `PROMPT` 또는 `$P$G`)를 준다. 상속값은 모듈을 만들 때 한 번 읽는다. #81 에서 구현됨.
 - 환경 병합: `LaunchCommand` 의 대소문자 무시 병합 규칙(#54)을 쓴다. 어댑터에는 OS 분기가 없다.
 
 ## 결과
@@ -148,7 +148,7 @@ ADR-0003 은 셸 통합 스크립트가 프롬프트마다 OSC 7(bash) · OSC 9;
     - WSL 은 `--` 앞 원소에 `"` 가 있기만 해도 거부한다. `"` 로 시작하는 원소는 pty4j 가 감싸지 않고 wsl.exe 는 다음 `"` 까지 한 인자로 읽어, 감싸지 않는 원소도 뒤 인자를 삼킬 수 있다. 템플릿이 `--` 를 잘못 넣어도 검사에서 빠지지 않게 마지막 `--` 까지 본다. `--` 뒤는 리눅스 셸이 읽는 원시 명령줄이라 `"$TANAGER_RC"` 는 그대로 둔다.
     - **pty4j 를 올려 `joinCmdArgs` 가 `\"` 이스케이프를 하게 돼도 이 검사를 지우지 않는다.** wsl.exe 는 `\"` 를 따르지 않으므로 그 이스케이프는 wsl 에서는 오히려 인자를 가른다.
 - 이 검사는 **wsl.exe 인자 분리만 막는다.** cmd `/c` · `/k` · PowerShell `-Command` 문자열에 사용자 경로를 넣지 않는다(`lpCurrentDirectory` · 환경 변수로 넘긴다). 불가피하면 셸별 이스케이프와 테스트를 둔다.
-  - 지금 PowerShell · cmd 는 작업 디렉터리를 argv 가 아니라 `CreateProcess` 의 `lpCurrentDirectory` 로 넘긴다(`LaunchCommand.workingDirectory`, ADR-0007). #81 의 PowerShell 기동 `-Command ". '<tanager.ps1>'"` 에는 앱 데이터 경로(사용자 이름)가 들어가므로, 위 결정대로 `'` → `''` 이스케이프하고 이 규칙에 따라 테스트를 둔다.
+  - 지금 PowerShell · cmd 는 작업 디렉터리를 argv 가 아니라 `CreateProcess` 의 `lpCurrentDirectory` 로 넘긴다(`LaunchCommand.workingDirectory`, ADR-0007). #81 은 PowerShell 스크립트 경로(앱 데이터, 사용자 이름 포함)도 `-Command` 문자열이 아니라 환경 변수 `TANAGER_PS1` 로 넘긴다 — 이스케이프가 필요 없다(아래 "#81" 절).
 - 확인한 것
   - `WslCommandLineRoundTripTest`(OS 무관): pty4j 0.14.0 `joinCmdArgs` 사본과 위 파싱 규칙 모형(`WslCommandLineModel`)으로, `WorkspacePath` 가 허용한 임의의 WSL 경로(공백 · `'` · `$` · 백틱 · 한글 · C1 · U+2028 · 유니코드 공백 · 따옴표 닮은 문자)로 만든 argv 가 명령줄로 이었다 다시 읽어도 같다. `WorkspacePath` 를 우회해도 방어 검사를 통과한 argv 는 같다(속성 각 1000회). 감싸질 원소의 `"` 규칙을 끄면 속성이 실패한다. `--` 앞 `"` 규칙은 `--cd` 값이 늘 `/` · `~` 로 시작해 속성으로는 드러나지 않으므로(토큰 중간 `"` 는 글자 그대로) 템플릿 원소 단위 테스트로 본다.
   - `WindowsWslCdInjectionTest`(`@Tag("wsl")`, 실제 wsl.exe): `q" -- touch …/proof #` 는 두 곳에서 거부된다. 두 검사를 모두 우회한 명령줄은 실제로 proof 를 만든다(하네스 민감도). 허용되는 `'` · `$` · 백틱 · 한글 · U+3000 · U+0085 · U+2028 · `-- touch` · `#` 가 든 경로는 그 폴더에서 뜨고 proof 는 생기지 않는다. pty4j 는 adapter.pty 에 가둬 두었으므로, 같은 명령줄을 PowerShell 5.1 `ProcessStartInfo.Arguments` 로 `CreateProcess` 에 넘긴다(다른 점은 .NET 이 argv[0] 을 `"…"` 로 감싸는 것뿐).
@@ -156,3 +156,30 @@ ADR-0003 은 셸 통합 스크립트가 프롬프트마다 OSC 7(bash) · OSC 9;
   - 줄바꿈 · 기타 C0 제어 문자가 wsl.exe 인자를 가르는지. `WorkspacePath` 가 거부하므로 확인하지 않았고, 모형은 공백 · 탭만 구분자로 본다(방어 겹은 제어 문자를 따로 보지 않는다).
   - 닫는 `"` 바로 뒤에 글자가 붙은 토큰(`"a"b`)의 처리 — 모형은 추측하지 않고 실패로 본다.
   - pty4j ConPTY(`WinConPtyProcess`) 로 띄운 실제 세션에서의 같은 확인 — 명령줄이 `joinCmdArgs` 로 같다는 것까지만 소스로 봤다.
+
+## #81 PowerShell 5.1 · cmd 주입 (2026-11-27, 구현됨)
+- 셸은 `ShellProfile.kind()`(`WINDOWS_POWERSHELL` · `CMD`)로 가른다. `Integration.Unavailable` 이면 두 셸 모두 M2 와 같다(템플릿 인자 그대로, 환경 변수 없음). 작업 디렉터리는 둘 다 계속 `lpCurrentDirectory` 다.
+- PowerShell(Installed)
+  - argv: 템플릿(`powershell.exe -NoLogo`) 뒤에 `-NoExit -ExecutionPolicy Bypass -Command ". $env:TANAGER_PS1"`. 환경 `TANAGER_PS1=<설치 폴더>\tanager.ps1`(`Path.toString`), 이름 비교는 대소문자 무시.
+  - `-Command` 문자열은 고정이다. 사용자 이름이 든 앱 데이터 경로가 PowerShell 의 따옴표 규칙(`'` · U+2018–U+201B)을 타지 않는다. 변수 값은 다시 단어로 갈리지 않으므로 공백 경로도 그대로 dot-source 된다.
+  - 이 원소는 공백이 있어 pty4j 가 `"…"` 로 감싸지만 `"` 가 없고 `\` 로 끝나지 않아 `requireSafeArgv` 를 통과한다.
+  - `-ExecutionPolicy Bypass` 는 프로세스 범위다. 사용자 정책(RemoteSigned · AllSigned)이 앱 데이터의 스크립트를 막지 않게 한다. 그룹 정책(`MachinePolicy` · `UserPolicy`)이 정하면 그쪽이 이긴다(R4, 미검증).
+- cmd(Installed)
+  - argv 는 템플릿 그대로(`cmd.exe`, `/k` 없음). 환경 `PROMPT=$e]9;9;$P$e\` + base. base 는 모듈을 만들 때 읽은 `PROMPT` 이고, 없거나 공백뿐이면 `$P$G` 다.
+  - 상속값이 이미 접두로 시작하면(대소문자 무시 — cmd 의 `$` 코드가 대소문자를 가리지 않으므로) 다시 붙이지 않는다. Tanager 안에서 Tanager 를 띄워도 OSC 가 두 번 나오지 않고, 병합은 멱등이다(속성 테스트).
+  - OSC 9;9 값에 따옴표가 없다. `OscScanner` 는 따옴표 없는 값도 읽는다(ADR-0015, 픽스처 `osc99-unquoted.bin`).
+  - PROMPT 에는 앱 데이터 경로가 들어가지 않는다.
+- 테스트
+  - `WindowsPowerShellCmdInjectionTest`(OS 무관 16개): 위 argv · 환경, `'` · 공백 · 한글 · U+2018–U+201B 가 든 앱 데이터 경로가 argv · PROMPT 어디에도 나타나지 않음(속성), PROMPT 병합 멱등(속성), 모듈이 `PROMPT` 를 생성 때 한 번만 읽음.
+  - `WindowsPowerShellCmdShellIntegrationTest`(`@Tag("windows")`, 12개 모두 실행 · 통과, 건너뜀 0): 실제 `powershell.exe` · `cmd.exe` 를 모듈이 만든 argv · 작업 디렉터리 · 환경 그대로 파이프로 띄운다(PowerShell 만 `-NoProfile` 을 끼움). 파이프 출력은 OEM 코드 페이지(이 PC 949)로 읽어 UTF-8 로 다시 인코딩한 뒤 `OscScanner` 에 넣는다.
+    - PowerShell: `%TEMP%` 아래 `한글 폴더 #1` 에서 첫 프롬프트 · `cd ..` 뒤 OSC 9;9 두 번, 경로 일치. 앱 데이터가 `O'Neil 한글 앱` 이어도 스크립트를 읽고 오류가 없다. 사용자 prompt(oh-my-posh 흉내) · `Set-StrictMode -Version Latest` 아래에서도 사용자 prompt 글자와 OSC 가 모두 나온다(`PS>` 로 물러서지 않음). `cmd /c exit 3` 뒤 원래 prompt 가 `$LASTEXITCODE=3` · `$?=False`, 성공 뒤 `$?=True` 를 본다. 두 번 dot-source 해도 프롬프트마다 OSC 한 번. `HKCU:\` 에서는 OSC 없음.
+    - cmd: 같은 한글 · 공백 폴더에서 첫 프롬프트 · `cd ..` 뒤 따옴표 없는 OSC 9;9, 경로 일치. 특이한 앱 데이터 경로에서도 OSC 가 나온다. 사용자 `PROMPT=[IT] $P$G` 글자가 유지되고, 없으면 `경로>` 모양이다.
+  - 실측 환경: Windows 10.0.26300, PowerShell 5.1.26100.9818, 콘솔 코드 페이지 949.
+- 앱 패키지(`:bootstrap:jpackageImage` → `Tanager.exe`)로 확인(2026-11-27): `config.json` 의 `defaultProfile` 을 `powershell` · `cmd` 로 두고 각각 띄워 8초 뒤 창을 닫았다.
+  - 자식 셸 명령줄: `powershell.exe -NoLogo -NoExit -ExecutionPolicy Bypass -Command ". $env:TANAGER_PS1"` · `cmd.exe`.
+  - 두 경우 모두 `state.json` 에 Windows 홈(`C:\Users\<사용자>`)이 `visitCount 1` 로 기록됐다. Installed 일 때 시작 경로는 `SessionStarter` 가 아니라 `CwdTracker`(OSC) 만 기록하므로 셸이 낸 OSC 9;9 로 기록된 것이다.
+- 미검증
+  - 그룹 정책으로 실행 정책을 막은 PC(R4) — `-ExecutionPolicy Bypass` 가 지는 경우 통합 없이 뜨고 오류 한 줄이 보일 것으로 보지만 재현하지 않았다.
+  - 실제 oh-my-posh · `$PROFILE` 을 쓰는 사용자 환경. 통합 테스트는 `-NoProfile` 에 테스트 스크립트로 흉내만 냈다.
+  - 사용자 `PROMPT` 가 이미 다른 OSC(예: Windows Terminal 의 OSC 9;9 · 133)를 넣어 둔 경우의 중복.
+  - 한글을 표현하지 못하는 OEM 코드 페이지(437 등) PC 의 통합 테스트 — 한글 테스트는 건너뛰도록 돼 있고, 이 PC(949)에서는 모두 돌았다.
