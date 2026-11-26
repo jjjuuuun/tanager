@@ -94,6 +94,14 @@ final class ArchitectureRules {
         return slices().matching(base + ".adapter.(*)..").should().notDependOnEachOther();
     }
 
+    /** domain 의 바운디드 컨텍스트 패키지(history · session · layout …)끼리 순환 의존하지 않는다(history 는 session 을 모른다). */
+    static ArchRule domainPackagesAreFreeOfCycles(String base) {
+        return slices().matching(base + ".domain.(*)..")
+                .should()
+                .beFreeOfCycles()
+                .because("컨텍스트 의존은 한 방향이다 — session → history, history 는 session 을 import 하지 않는다");
+    }
+
     /** OS 별 플랫폼 모듈끼리는 서로 모른다(macOS 추가 시 다른 모듈을 바꾸지 않기 위해, NFR-04). */
     static ArchRule platformsAreIndependent(String base) {
         return slices().matching(base + ".platform.(*)..").should().notDependOnEachOther();
