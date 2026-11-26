@@ -232,7 +232,16 @@ class WindowsWslInjectionTest {
 
     @Provide
     Arbitrary<List<String>> wslenvEntries() {
-        return Arbitraries.of("FOO/u", "BAR", "PATH/l", "X/p", "TANAGER_RC/u", "tanager_rc/p", "TANAGER_RC", "한글/p")
+        return Arbitraries.of(
+                        "FOO/u",
+                        "BAR",
+                        "PATH/l",
+                        "X/p",
+                        "TANAGER_RC/u",
+                        "tanager_rc/p",
+                        "TANAGER_RC",
+                        "TANAGER_RCX/p",
+                        "한글/p")
                 .list()
                 .ofMaxSize(5);
     }
@@ -243,8 +252,8 @@ class WindowsWslInjectionTest {
                 .withChars(' ', '\'', '#', '%', '&', '한', '글', 'a', 'Z', '1', '_', '-')
                 .ofMinLength(1)
                 .ofMaxLength(20)
-                // Windows 경로 이름은 공백 · 점으로 끝날 수 없다(Path.of 가 거부)
-                .filter(s -> !s.endsWith(" ") && !s.endsWith("."));
+                // Windows 경로 이름은 공백으로 끝날 수 없다(Path.of 가 거부). 점은 글자 집합에 없다
+                .filter(s -> !s.endsWith(" "));
     }
 
     @Property
@@ -261,12 +270,15 @@ class WindowsWslInjectionTest {
         // then
         List<String> parts = Arrays.asList(merged.split(":"));
         assertThat(parts.getLast()).isEqualTo("TANAGER_RC/p");
-        assertThat(parts.stream().filter(p -> p.toUpperCase().startsWith("TANAGER_RC")))
-                .containsExactly("TANAGER_RC/p");
-        List<String> kept = entries.stream()
-                .filter(e -> !e.toUpperCase().startsWith("TANAGER_RC"))
-                .toList();
+        assertThat(parts.stream().filter(WindowsWslInjectionTest::isRcEntry)).containsExactly("TANAGER_RC/p");
+        // TANAGER_RCX 처럼 이름만 비슷한 항목은 남는다 — 이름(/ 앞)이 정확히 같을 때만 지운다
+        List<String> kept = entries.stream().filter(e -> !isRcEntry(e)).toList();
         assertThat(parts.subList(0, parts.size() - 1)).containsExactlyElementsOf(kept);
+    }
+
+    private static boolean isRcEntry(String entry) {
+        int flags = entry.indexOf('/');
+        return (flags < 0 ? entry : entry.substring(0, flags)).equalsIgnoreCase("TANAGER_RC");
     }
 
     @Property

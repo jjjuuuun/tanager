@@ -191,20 +191,41 @@ class WindowsWslShellIntegrationTest {
 
         // when
         Run run = interactive("/tmp", probe);
-        Outcome login = runWslWithInput(List.of("env", "HOME=" + home, "bash", "-l", "-i"), probe);
+        Outcome login = runWslWithInput(List.of("env", "HOME=" + home, "bash", "-l", "-i"), probe, Map.of());
 
         // then
         assertThat(marked(run.text(), "COMP")).isEqualTo(marked(login.text(), "COMP"));
     }
 
     @Test
-    @DisplayName("/etc/profile 을 읽은 뒤에도 PS1 은 원래 값으로 남는다")
-    void promptStringIsRestoredAfterSystemProfile() throws Exception {
-        // given / when
-        Run run = interactive("/tmp", "echo \"PS1<$PS1>\"\nexit\n");
+    @DisplayName("/etc/profile 을 읽은 뒤의 PS1 은 그냥 로그인 셸을 띄울 때와 같다")
+    void promptStringMatchesLoginShell() throws Exception {
+        // given
+        String probe = "echo \"PS1<$PS1>\"\nexit\n";
+
+        // when
+        Run run = interactive("/tmp", probe);
+        Outcome login = runWslWithInput(List.of("env", "HOME=" + home, "bash", "-l", "-i"), probe, Map.of());
 
         // then
-        assertThat(marked(run.text(), "PS1")).isNotEmpty();
+        assertThat(marked(run.text(), "PS1")).isNotEmpty().isEqualTo(marked(login.text(), "PS1"));
+    }
+
+    @Test
+    @DisplayName("PS1 이 없는 비대화형 bash 에서 rcfile 을 source 해도 PS1 은 계속 없다")
+    void unsetPromptStringStaysUnset() throws Exception {
+        // given
+        Path rcfile = installedIntegration(appData).directory().resolve("tanager.bash");
+        writeHomeFile("probe-ps1.sh", ". \"$TANAGER_RC\"\necho \"PS1SET<${PS1+set}>\"\n");
+
+        // when
+        Outcome outcome = runWslWithInput(
+                List.of("env", "-u", "PS1", "HOME=" + home, "bash", home + "/probe-ps1.sh"),
+                "",
+                Map.of("TANAGER_RC", rcfile.toString(), "WSLENV", "TANAGER_RC/p"));
+
+        // then
+        assertThat(marked(outcome.text(), "PS1SET")).isEmpty();
     }
 
     @Test
@@ -253,7 +274,7 @@ class WindowsWslShellIntegrationTest {
     }
 
     @Test
-    @DisplayName("rcfile 을 다시 읽어도(exec bash 와 같은 상황) 우리 훅은 한 번만 들어 있다")
+    @DisplayName("rcfile 을 다시 source 해도 우리 훅은 한 번만 들어 있다")
     void sourcingRcfileAgainDoesNotInstallHookTwice() throws Exception {
         // given / when
         Run run = interactive("/tmp", ". \"$TANAGER_RC\"\necho \"HOOKS<${PROMPT_COMMAND[*]}>\"\nexit\n");
@@ -277,18 +298,8 @@ class WindowsWslShellIntegrationTest {
     /** 앱 데이터를 {@code appDataDir} 로 둔 모듈에서 셸 통합을 설치하고, 만들어진 기동 명령으로 WSL bash 를 띄워 {@code stdin} 을 먹인다. */
     private Run interactive(Path appDataDir, String startDir, String stdin, Map<String, String> envOverride)
             throws Exception {
-        WindowsShellCatalog catalog = new WindowsShellCatalog(
-                new FakeCommandRunner(new CommandOutcome.NotStarted("x")),
-                key -> Optional.empty(),
-                Duration.ofSeconds(1));
-        WindowsPlatformModule module = new WindowsPlatformModule(
-                catalog,
-                key -> key.equals("APPDATA")
-                        ? Optional.of(appDataDir.toString())
-                        : Optional.ofNullable(System.getenv(key)),
-                System.getProperty("user.home"));
-        Integration integration = module.integration().install();
-        assertThat(integration).as("셸 통합 설치").isInstanceOf(Integration.Installed.class);
+        WindowsPlatformModule module = moduleWithAppData(appDataDir);
+        Integration integration = installedIntegration(appDataDir);
         ShellEnvironment.Wsl env = new ShellEnvironment.Wsl(distro);
         ShellProfile profile = new ShellProfile(
                 new ProfileId("wsl:" + distro),
@@ -332,6 +343,25 @@ class WindowsWslShellIntegrationTest {
             }
         }
         return new Run(new String(bytes, StandardCharsets.UTF_8), cwds);
+    }
+
+    private static WindowsPlatformModule moduleWithAppData(Path appDataDir) {
+        WindowsShellCatalog catalog = new WindowsShellCatalog(
+                new FakeCommandRunner(new CommandOutcome.NotStarted("x")),
+                key -> Optional.empty(),
+                Duration.ofSeconds(1));
+        return new WindowsPlatformModule(
+                catalog,
+                key -> key.equals("APPDATA")
+                        ? Optional.of(appDataDir.toString())
+                        : Optional.ofNullable(System.getenv(key)),
+                System.getProperty("user.home"));
+    }
+
+    private static Integration.Installed installedIntegration(Path appDataDir) {
+        Integration integration = moduleWithAppData(appDataDir).integration().install();
+        assertThat(integration).as("셸 통합 설치").isInstanceOf(Integration.Installed.class);
+        return (Integration.Installed) integration;
     }
 
     private void mkdir(String path) throws Exception {
@@ -382,11 +412,12 @@ class WindowsWslShellIntegrationTest {
         return runProcess(argv);
     }
 
-    /** 대화형 로그인 셸처럼 표준 입력을 먹여야 하는 명령. 입력을 다 쓰면 닫는다. */
-    private Outcome runWslWithInput(List<String> command, String stdin) throws Exception {
+    /** 대화형 로그인 셸처럼 표준 입력 · 환경을 줘야 하는 명령. 입력을 다 쓰면 닫는다. */
+    private Outcome runWslWithInput(List<String> command, String stdin, Map<String, String> env) throws Exception {
         List<String> argv = new ArrayList<>(List.of(WSL_EXE, "-d", distro, "--exec"));
         argv.addAll(command);
         ProcessBuilder builder = new ProcessBuilder(argv).redirectErrorStream(true);
+        builder.environment().putAll(env);
         builder.environment().put("WSL_UTF8", "1");
         Process process = builder.start();
         CompletableFuture<byte[]> output = CompletableFuture.supplyAsync(() -> readAll(process));
