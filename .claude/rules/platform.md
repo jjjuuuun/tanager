@@ -17,8 +17,8 @@ paths:
 - 지원 셸: WSL · **Windows PowerShell 5.1** · cmd. PowerShell 7(`pwsh`)은 범위 밖(사용자 결정) — 탐지·기동·셸 통합·테스트 대상 아님. 사용자 정의 프로파일도 없으므로 Tanager 가 띄우는 셸은 자동 탐지한 이 셋뿐이다.
 - bash OSC 7 퍼센트 인코딩 함수 첫 줄에 `local LC_ALL=C` 필수 — 없으면 UTF-8 로캘에서 한글이 코드 포인트(`%D55C`)로 나간다(M0 에서 재현).
 - ConPTY: pty4j 0.14 번들 `conpty.dll` 사용(`setUseWinConPty(true)` → `WinConPtyProcess`). cmd 의 `mode con` 은 ConPTY 아래에서 출력이 없다 — 크기 확인은 하위 프로세스로.
-- PowerShell 기동: `powershell.exe -NoLogo -NoExit -Command ". '<tanager.ps1>'"`. 5.1 문법만 쓴다(`` `e `` 없음 → `[char]27`, `??`·삼항 연산자 금지). 스크립트 파일은 UTF-8 **BOM 포함**이어야 5.1 이 한글을 깨지 않고 읽는다.
-- cwd 추적은 셸 프롬프트가 내보내는 OSC 시퀀스로 한다: bash/zsh → `OSC 7 ; file://<host><퍼센트 인코딩 경로> ST`, PowerShell → `OSC 9 ; 9 ; "<Windows 경로>" ST`. 시퀀스는 read 경계에서 잘릴 수 있으므로 스캐너는 상태를 가진 스트리밍 파서여야 한다.
+- PowerShell 기동: `powershell.exe -NoLogo -NoExit -ExecutionPolicy Bypass -Command ". $env:TANAGER_PS1"` + 환경 `TANAGER_PS1=<shell-integration 폴더>\tanager.ps1`(ADR-0014 #81). 스크립트 경로는 `-Command` 문자열에 넣지 않는다(사용자 이름의 `'` · U+2018–U+201B). cmd 는 `/k` 없이 환경 `PROMPT=$e]9;9;$P$e\` + (상속 `PROMPT` 또는 `$P$G`, 이미 접두가 있으면 그대로). 5.1 문법만 쓴다(`` `e `` 없음 → `[char]27`, `??`·삼항 연산자 금지). 스크립트 파일은 UTF-8 **BOM 포함**이어야 5.1 이 한글을 깨지 않고 읽는다.
+- cwd 추적은 셸 프롬프트가 내보내는 OSC 시퀀스로 한다: bash/zsh → `OSC 7 ; file://<host><퍼센트 인코딩 경로> ST`, PowerShell → `OSC 9 ; 9 ; "<Windows 경로>" ST`, cmd → `OSC 9 ; 9 ; <Windows 경로> ST`(따옴표 없음). 시퀀스는 read 경계에서 잘릴 수 있으므로 스캐너는 상태를 가진 스트리밍 파서여야 한다.
 - 셸 통합 스크립트(`*.sh`)는 LF, `*.ps1` 은 CRLF (`.gitattributes`). 한글 경로는 UTF-8 로 퍼센트 인코딩.
 - 경로 비교: Windows 는 대소문자 무시, WSL·macOS 는 구분. `WorkspacePath` 가 환경별 정책을 가진다.
 - ConPTY 는 Windows 10 1809+ 필요. pty4j 의 ConPTY 사용 여부는 M0 스파이크에서 확인한 값(ADR-0001)을 따른다.
