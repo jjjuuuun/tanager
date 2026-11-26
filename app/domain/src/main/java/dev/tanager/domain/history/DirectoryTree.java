@@ -1,12 +1,12 @@
 package dev.tanager.domain.history;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -16,16 +16,26 @@ import java.util.Set;
  * 이력과 실행 중 세션을 사이드바의 "환경 → 폴더 → 세션" 트리로 투영하는 순수 함수.
  *
  * <p>방문 기록도 세션도 없고 자식이 폴더 하나뿐인 폴더는 자식과 합친다(루트 포함, {@code /} + {@code mnt} → {@code /mnt}). 폴더는 문자열이
- * 아니라 {@link WorkspacePath} 로 묶으므로 Windows 에서 대소문자만 다른 경로는 같은 노드다. EDT 에서 부를 수 있도록 입력 크기에 선형이다.
+ * 아니라 {@link WorkspacePath} 로 묶으므로 Windows 에서 대소문자만 다른 경로는 같은 노드다. 항목 · 세션 수 N 에 대해 O(N log N)이고 경로
+ * 깊이에 비례한다(정렬 한 번 + 경로마다 조상 사슬).
  */
 public final class DirectoryTree {
 
-    private static final Comparator<SessionLeaf> SESSION_ORDER = Comparator.comparingInt(SessionLeaf::number);
+    private static final String UNC_PREFIX = "\\\\";
 
-    // 대소문자 무시(대문자로 접어 비교)로 먼저 가르고, 같으면 일반 문자열 순서로 가려 항상 같은 순서가 되게 한다.
-    // 대문자로 접는 이유: 소문자로 접으면 '\'(0x5C) 가 영문자보다 앞서 UNC 루트가 드라이브 루트보다 먼저 온다.
-    private static final Comparator<String> LABEL_ORDER =
-            Comparator.comparing((String s) -> s.toUpperCase(Locale.ROOT)).thenComparing(Comparator.naturalOrder());
+    private static final Comparator<SessionLeaf> SESSION_ORDER = Comparator.comparingInt(SessionLeaf::number)
+            .thenComparing(s -> s.pane().value());
+
+    // 대소문자 무시로 먼저 가르고, 같으면 자연 순서로 가려 항상 같은 순서가 되게 한다.
+    private static final Comparator<String> NAME_ORDER =
+            String.CASE_INSENSITIVE_ORDER.thenComparing(Comparator.naturalOrder());
+
+    // 라벨을 세그먼트 목록 단위로 비교한다 — 구분자가 순서에 끼지 않아 Windows 와 WSL 이 같은 순서를 낸다.
+    private static final Comparator<List<String>> SEGMENTS_ORDER =
+            lexicographic(String.CASE_INSENSITIVE_ORDER).thenComparing(lexicographic(Comparator.naturalOrder()));
+
+    private static final Comparator<Built> FOLDER_ORDER =
+            Comparator.comparing(Built::kind).thenComparing(Built::key, SEGMENTS_ORDER);
 
     private DirectoryTree() {}
 
@@ -42,7 +52,7 @@ public final class DirectoryTree {
         for (VisitedDirectory v : entries) {
             forest.environment(v.path().env());
             if (query.showHidden() || !v.hidden()) {
-                forest.node(v.path()).visit(v);
+                forest.node(v.path()).visit = Optional.of(v);
             }
         }
         List<SessionLeaf> ordered = new ArrayList<>(sessions);
@@ -58,12 +68,12 @@ public final class DirectoryTree {
         List<EnvironmentNode> environments = new ArrayList<>();
         for (ShellEnvironment env : environmentOrder(query.environmentOrder(), forest.environments.keySet())) {
             EnvBuilder e = forest.environments.getOrDefault(env, new EnvBuilder());
-            environments.add(new EnvironmentNode(env, children(e.sessions, e.roots.values(), true)));
+            environments.add(new EnvironmentNode(env, children(e.sessions, e.roots.values())));
         }
         return new HistoryTree(List.of(), environments);
     }
 
-    // 순서 목록의 환경(비어 있어도) → 목록에 없는 환경은 이름순.
+    // 순서 목록의 환경(비어 있어도) → 목록에 없는 환경은 이름순(같은 이름이면 Windows 먼저).
     private static List<ShellEnvironment> environmentOrder(List<ShellEnvironment> order, Set<ShellEnvironment> seen) {
         Set<ShellEnvironment> result = new LinkedHashSet<>(order);
         List<ShellEnvironment> unlisted = new ArrayList<>();
@@ -72,7 +82,7 @@ public final class DirectoryTree {
                 unlisted.add(env);
             }
         }
-        unlisted.sort(Comparator.comparing(DirectoryTree::environmentName, LABEL_ORDER)
+        unlisted.sort(Comparator.comparing(DirectoryTree::environmentName, NAME_ORDER)
                 .thenComparing(env -> env instanceof ShellEnvironment.Wsl));
         result.addAll(unlisted);
         return List.copyOf(result);
@@ -85,40 +95,62 @@ public final class DirectoryTree {
         };
     }
 
-    private static List<TreeNode> children(
-            List<SessionLeaf> sessions, Iterable<Node> folders, boolean underEnvironment) {
+    private static List<TreeNode> children(List<SessionLeaf> sessions, Collection<Node> folders) {
         List<TreeNode> result = new ArrayList<>();
         for (SessionLeaf s : sessions) {
             result.add(new TreeNode.Session(s));
         }
-        List<TreeNode.Folder> built = new ArrayList<>();
+        List<Built> built = new ArrayList<>();
         for (Node n : folders) {
-            built.add(compressed(n, underEnvironment));
+            built.add(compressed(n));
         }
-        built.sort(Comparator.comparing(TreeNode.Folder::label, LABEL_ORDER));
-        result.addAll(built);
+        built.sort(FOLDER_ORDER);
+        for (Built b : built) {
+            result.add(b.folder());
+        }
         return result;
     }
 
     // 방문도 세션도 없이 폴더 하나만 품은 노드는 자식과 합쳐 한 줄로 만든다.
-    private static TreeNode.Folder compressed(Node start, boolean isRoot) {
-        Node node = start;
-        String label = isRoot ? node.path.root() : lastSegment(node.path);
-        while (node.visit.isEmpty() && node.sessions.isEmpty() && node.children.size() == 1) {
-            node = node.children.values().iterator().next();
-            label = append(label, lastSegment(node.path), separator(node.path.env()));
+    // 라벨은 끝 노드의 표시 경로에서 잘라 만든다 — 중간 노드의 표기를 이어 붙이면 path() 와 대소문자가 어긋날 수 있다.
+    private static Built compressed(Node start) {
+        Node end = start;
+        while (end.visit.isEmpty() && end.sessions.isEmpty() && end.children.size() == 1) {
+            end = end.children.values().iterator().next();
         }
-        return new TreeNode.Folder(
-                node.path, label, node.visit, false, children(node.sessions, node.children.values(), false));
+        WorkspacePath shown = end.displayPath();
+        List<TreeNode> children = children(end.sessions, end.children.values());
+        if (start.path.parent().isEmpty()) {
+            return rootFolder(new TreeNode.Folder(shown, shown.path(), end.visit, false, children));
+        }
+        List<String> segments = shown.segments();
+        List<String> labelSegments = segments.subList(start.path.segments().size() - 1, segments.size());
+        String label = String.join(separator(shown.env()), labelSegments);
+        return new Built(new TreeNode.Folder(shown, label, end.visit, false, children), RootKind.NONE, labelSegments);
     }
 
-    // 드라이브 · WSL 루트는 구분자로 끝나 그대로 붙이고, UNC 루트와 일반 라벨은 구분자를 넣는다.
-    private static String append(String label, String segment, String separator) {
-        return label.endsWith(separator) ? label + segment : label + separator + segment;
-    }
-
-    private static String lastSegment(WorkspacePath path) {
-        return path.segments().getLast();
+    // 환경 바로 아래 루트는 종류(드라이브 → UNC → WSL '/') → 루트 이름(드라이브 글자 · UNC 호스트와 공유) → 라벨 세그먼트 순.
+    private static Built rootFolder(TreeNode.Folder folder) {
+        WorkspacePath path = folder.path();
+        String root = path.root();
+        RootKind kind;
+        List<String> key = new ArrayList<>();
+        switch (path.env()) {
+            case ShellEnvironment.Wsl _ -> kind = RootKind.WSL;
+            case ShellEnvironment.Windows _ -> {
+                if (root.startsWith(UNC_PREFIX)) {
+                    int sep = root.indexOf('\\', UNC_PREFIX.length());
+                    kind = RootKind.UNC;
+                    key.add(root.substring(UNC_PREFIX.length(), sep));
+                    key.add(root.substring(sep + 1));
+                } else {
+                    kind = RootKind.DRIVE;
+                    key.add(root.substring(0, 1));
+                }
+            }
+        }
+        key.addAll(path.segments());
+        return new Built(folder, kind, key);
     }
 
     private static String separator(ShellEnvironment env) {
@@ -127,6 +159,30 @@ public final class DirectoryTree {
             case ShellEnvironment.Windows _ -> "\\";
         };
     }
+
+    private static <T> Comparator<List<T>> lexicographic(Comparator<? super T> element) {
+        return (a, b) -> {
+            int n = Math.min(a.size(), b.size());
+            for (int i = 0; i < n; i++) {
+                int c = element.compare(a.get(i), b.get(i));
+                if (c != 0) {
+                    return c;
+                }
+            }
+            return Integer.compare(a.size(), b.size());
+        };
+    }
+
+    /** 형제 폴더 정렬 순위. 루트가 아닌 형제는 모두 {@code NONE} 이라 라벨 세그먼트로만 가린다. */
+    private enum RootKind {
+        NONE,
+        DRIVE,
+        UNC,
+        WSL
+    }
+
+    /** 만든 폴더와 정렬 키. */
+    private record Built(TreeNode.Folder folder, RootKind kind, List<String> key) {}
 
     /** 투영 중에만 쓰는 가변 작업대. 함수 밖으로 나가지 않는다. */
     private static final class Forest {
@@ -161,7 +217,8 @@ public final class DirectoryTree {
     }
 
     private static final class Node {
-        private WorkspacePath path;
+        // 노드를 처음 만든 경로의 표기. 정렬해 넣으므로 그 아래 보이는 방문 중 문자열 순서로 가장 앞선 것(없으면 가장 앞선 세션 cwd)이다.
+        private final WorkspacePath path;
         private Optional<VisitedDirectory> visit = Optional.empty();
         private final List<SessionLeaf> sessions = new ArrayList<>();
         private final Map<WorkspacePath, Node> children = new HashMap<>();
@@ -171,9 +228,8 @@ public final class DirectoryTree {
         }
 
         // 방문 노드는 방문 기록의 표기를 쓴다.
-        void visit(VisitedDirectory v) {
-            this.visit = Optional.of(v);
-            this.path = v.path();
+        WorkspacePath displayPath() {
+            return visit.map(VisitedDirectory::path).orElse(path);
         }
     }
 }

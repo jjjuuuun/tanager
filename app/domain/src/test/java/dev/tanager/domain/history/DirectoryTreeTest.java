@@ -191,10 +191,41 @@ class DirectoryTreeTest {
             List<TreeNode> top = env(tree, WIN).children();
             assertThat(top).hasSize(1);
             TreeNode.Folder work = folder(top.get(0));
-            assertThat(work.label()).isEqualToIgnoringCase("C:\\Work");
+            assertThat(work.label()).isEqualTo("C:\\Work");
             assertThat(work.path()).isEqualTo(path(WIN, "C:\\work"));
             assertThat(work.children()).hasSize(2);
             assertThat(labels(work.children())).containsExactly("a", "b");
+        }
+
+        @Test
+        @DisplayName("압축 라벨은 끝 노드 경로에서 잘라 만들어 path 와 글자까지 같다")
+        void compressedLabelMatchesPathExactly() {
+            // given — C:\Work\a 노드를 먼저 만든 뒤 대소문자가 다른 C:\work\A 로 방문한다
+            WorkHistory h = history(path(WIN, "C:\\Work\\a\\deep"), path(WIN, "C:\\work\\A"));
+
+            // when
+            HistoryTree tree = project(h, List.of(), query(WIN));
+
+            // then
+            TreeNode.Folder a = folder(env(tree, WIN).children().get(0));
+            assertThat(a.path().path()).isEqualTo("C:\\work\\A");
+            assertThat(a.label()).isEqualTo("C:\\work\\A");
+            assertThat(labels(a.children())).containsExactly("deep");
+        }
+
+        @Test
+        @DisplayName("방문 없는 중간 노드는 그 아래 방문 경로 중 문자열 순서로 가장 앞선 것의 표기를 따른다")
+        void unvisitedNodeTakesSpellingOfFirstVisitBelow() {
+            // given — 'W' < 'w' 이므로 C:\Work\b 가 앞선다
+            WorkHistory h = history(path(WIN, "C:\\work\\a"), path(WIN, "C:\\Work\\b"));
+
+            // when
+            HistoryTree tree = project(h, List.of(), query(WIN));
+
+            // then
+            TreeNode.Folder work = folder(env(tree, WIN).children().get(0));
+            assertThat(work.label()).isEqualTo("C:\\Work");
+            assertThat(work.path().path()).isEqualTo("C:\\Work");
         }
 
         @Test
@@ -292,6 +323,26 @@ class DirectoryTreeTest {
         }
 
         @Test
+        @DisplayName("번호가 같은 세션은 창 ID 순으로 놓는다")
+        void sameNumberOrderedByPane() {
+            // given
+            WorkspacePath p = path(WSL_U, "/a");
+            SessionLeaf b =
+                    new SessionLeaf(new PaneId("pb"), 1, "bash", WSL_U, Optional.of(p), new SessionStatus.Running());
+            SessionLeaf a =
+                    new SessionLeaf(new PaneId("pa"), 1, "bash", WSL_U, Optional.of(p), new SessionStatus.Running());
+
+            // when
+            HistoryTree tree = project(history(), List.of(b, a), query(WSL_U));
+
+            // then
+            TreeNode.Folder f = folder(env(tree, WSL_U).children().get(0));
+            assertThat(f.children())
+                    .extracting(n -> ((TreeNode.Session) n).session().pane().value())
+                    .containsExactly("pa", "pb");
+        }
+
+        @Test
         @DisplayName("세션은 자기 환경 아래에만 달린다")
         void sessionStaysInOwnEnvironment() {
             HistoryTree tree =
@@ -347,6 +398,71 @@ class DirectoryTreeTest {
 
             TreeNode.Folder r = folder(env(tree, WSL_U).children().get(0));
             assertThat(labels(r.children())).containsExactly("a", "B", "b");
+        }
+
+        @Test
+        @DisplayName("밑줄로 시작하는 폴더는 영문자보다 앞선다(대문자로 접지 않는다)")
+        void underscoreSortsBeforeLetters() {
+            // given
+            WorkHistory h = history(path(WSL_U, "/r/Beta"), path(WSL_U, "/r/_archive"), path(WSL_U, "/r/alpha"));
+
+            // when
+            HistoryTree tree = project(h, List.of(), query(WSL_U));
+
+            // then
+            TreeNode.Folder r = folder(env(tree, WSL_U).children().get(0));
+            assertThat(labels(r.children())).containsExactly("_archive", "alpha", "Beta");
+        }
+
+        @Test
+        @DisplayName("압축 라벨은 세그먼트 단위로 비교해 구분자가 순서에 끼지 않는다 — Windows 와 WSL 이 같은 순서")
+        void segmentWiseOrderIgnoresSeparator() {
+            // given
+            WorkHistory wsl = history(path(WSL_U, "/r/a0"), path(WSL_U, "/r/a/b"), path(WSL_U, "/r/x"));
+            WorkHistory win = history(path(WIN, "C:\\r\\a0"), path(WIN, "C:\\r\\a\\b"), path(WIN, "C:\\r\\x"));
+
+            // when
+            TreeNode.Folder wslR = folder(
+                    env(project(wsl, List.of(), query(WSL_U)), WSL_U).children().get(0));
+            TreeNode.Folder winR = folder(
+                    env(project(win, List.of(), query(WIN)), WIN).children().get(0));
+
+            // then
+            assertThat(labels(wslR.children())).containsExactly("a/b", "a0", "x");
+            assertThat(labels(winR.children())).containsExactly("a\\b", "a0", "x");
+        }
+
+        @Test
+        @DisplayName("환경 바로 아래 루트는 드라이브(글자순) → UNC(호스트 · 공유 세그먼트순) 순이다")
+        void rootsOrderedByKind() {
+            // given
+            WorkHistory h = history(
+                    path(WIN, "\\\\srv\\share\\y"),
+                    path(WIN, "d:\\x"),
+                    path(WIN, "\\\\a-b\\s\\q"),
+                    path(WIN, "C:\\z"),
+                    path(WIN, "\\\\a\\s\\q"));
+
+            // when
+            HistoryTree tree = project(h, List.of(), query(WIN));
+
+            // then
+            assertThat(labels(env(tree, WIN).children()))
+                    .containsExactly("C:\\z", "D:\\x", "\\\\a\\s\\q", "\\\\a-b\\s\\q", "\\\\srv\\share\\y");
+        }
+
+        @Test
+        @DisplayName("이름이 같은 환경은 Windows 가 앞선다")
+        void windowsBeforeWslOfSameName() {
+            // given
+            ShellEnvironment wslWindows = new ShellEnvironment.Wsl("Windows");
+            WorkHistory h = history(path(wslWindows, "/w"), path(WIN, "C:\\w"));
+
+            // when
+            HistoryTree tree = project(h, List.of(), query());
+
+            // then
+            assertThat(tree.environments()).extracting(EnvironmentNode::env).containsExactly(WIN, wslWindows);
         }
 
         @Test
@@ -419,6 +535,21 @@ class DirectoryTreeTest {
             assertThat(f.path()).isEqualTo(ab);
             assertThat(f.visit()).isEmpty();
             assertThat(labels(f.children())).containsExactly("#1");
+        }
+
+        @Test
+        @DisplayName("목록에 없는 환경은 항목이 모두 숨김이어도 빈 노드로 남는다")
+        void unlistedEnvironmentWithOnlyHiddenEntriesStays() {
+            // given
+            WorkspacePath z = path(WSL_Z, "/z");
+            WorkHistory h = history(z).hide(z, true).value().orElseThrow();
+
+            // when
+            HistoryTree tree = project(h, List.of(), new TreeQuery("", false, List.of(WIN)));
+
+            // then
+            assertThat(tree.environments()).extracting(EnvironmentNode::env).containsExactly(WIN, WSL_Z);
+            assertThat(env(tree, WSL_Z).children()).isEmpty();
         }
 
         @Test
