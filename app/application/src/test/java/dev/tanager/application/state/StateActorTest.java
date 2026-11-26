@@ -1,5 +1,6 @@
 package dev.tanager.application.state;
 
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -14,6 +15,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.function.Consumer;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -119,16 +121,107 @@ class StateActorTest {
         var next = actor.submit(visit(HOME)).toCompletableFuture();
 
         // when
-        executor.runAll();
+        executor.runNext();
 
         // then
         assertThat(failed).isCompletedExceptionally();
-        assertThatThrownBy(failed::get)
+        assertThatThrownBy(() -> failed.get(10, SECONDS))
                 .isInstanceOf(ExecutionException.class)
                 .hasCauseInstanceOf(IllegalStateException.class);
+        assertThat(actor.snapshot()).isSameAs(before);
+        assertThat(events).isEmpty();
+
+        // when
+        executor.runNext();
+
+        // then
         assertThat(next).isCompletedWithValue(1);
-        assertThat(before.history().entries()).isEmpty();
         assertThat(events).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("명령이 Error 를 던지면 응답을 그 Error 로 완료하고 상태를 그대로 둔 채 Error 를 다시 던진다")
+    void commandErrorCompletesReplyThenRethrows() {
+        // given
+        var events = new ArrayList<AppEvent>();
+        actor.subscribe(events::add);
+        AppState before = actor.snapshot();
+        Command<Integer> fatal = current -> {
+            throw new FatalTestError();
+        };
+        var failed = actor.submit(fatal).toCompletableFuture();
+
+        // when / then
+        assertThatThrownBy(executor::runNext).isInstanceOf(FatalTestError.class);
+        assertThat(failed).isCompletedExceptionally();
+        assertThatThrownBy(() -> failed.get(10, SECONDS)).hasCauseInstanceOf(FatalTestError.class);
+        assertThat(actor.snapshot()).isSameAs(before);
+        assertThat(events).isEmpty();
+    }
+
+    @Test
+    @DisplayName("구독자가 Error 를 던져도 응답은 그 Error 로 완료되고 Error 는 다시 던져진다")
+    void subscriberErrorStillCompletesReply() {
+        // given
+        actor.subscribe(e -> {
+            throw new FatalTestError();
+        });
+        var reply = actor.submit(visit(HOME)).toCompletableFuture();
+
+        // when / then
+        assertThatThrownBy(executor::runNext).isInstanceOf(FatalTestError.class);
+        assertThat(reply).isCompletedExceptionally();
+        assertThatThrownBy(() -> reply.get(10, SECONDS)).hasCauseInstanceOf(FatalTestError.class);
+    }
+
+    @Test
+    @DisplayName("실행기가 일을 거부하면 submit 은 던지지 않고 거부 예외로 실패한 응답을 돌려준다")
+    void rejectedSubmitReturnsFailedReply() {
+        // given
+        StateActor closed = new StateActor(AppState.initial(WorkHistory.empty(HistoryPolicy.DEFAULT)), task -> {
+            throw new RejectedExecutionException("종료됨");
+        });
+
+        // when
+        var reply = closed.submit(visit(HOME)).toCompletableFuture();
+
+        // then
+        assertThat(reply).isCompletedExceptionally();
+        assertThatThrownBy(() -> reply.get(10, SECONDS)).hasCauseInstanceOf(RejectedExecutionException.class);
+    }
+
+    @Test
+    @DisplayName("구독자가 콜백 안에서 낸 명령은 현재 응답이 완료된 뒤에 돌고 교착하지 않는다")
+    void reentrantSubmitRunsAfterCurrentReply() {
+        // given
+        var log = new ArrayList<String>();
+        var inner = new ArrayList<CompletableFuture<Integer>>();
+        actor.subscribe(e -> {
+            int count =
+                    ((AppEvent.HistoryChanged) e).history().entries().get(HOME).visitCount();
+            log.add("event " + count);
+            if (inner.isEmpty()) {
+                CompletableFuture<Integer> reply = actor.submit(visit(HOME)).toCompletableFuture();
+                reply.thenAccept(v -> log.add("reply " + v));
+                inner.add(reply);
+            }
+        });
+        actor.submit(visit(HOME)).thenAccept(v -> log.add("reply " + v));
+
+        // when
+        executor.runNext();
+
+        // then
+        assertThat(log).containsExactly("event 1", "reply 1");
+        assertThat(inner.getFirst()).isNotDone();
+        assertThat(executor.pending()).isEqualTo(1);
+
+        // when
+        executor.runAll();
+
+        // then
+        assertThat(log).containsExactly("event 1", "reply 1", "event 2", "reply 2");
+        assertThat(inner.getFirst()).isCompletedWithValue(2);
     }
 
     @Test
@@ -218,5 +311,12 @@ class StateActorTest {
 
         // then
         assertThat(log).containsExactly("event", "reply");
+    }
+
+    /** 테스트가 일부러 던지는 Error — JUnit · AssertJ 의 AssertionError 와 섞이지 않게 따로 둔다. */
+    private static final class FatalTestError extends Error {
+        FatalTestError() {
+            super("테스트용 Error");
+        }
     }
 }

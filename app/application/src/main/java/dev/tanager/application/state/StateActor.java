@@ -10,6 +10,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.function.Consumer;
 
 /**
@@ -43,12 +44,23 @@ public final class StateActor {
 
     /**
      * 명령을 실행기에 넘기고 바로 돌아온다. 어느 스레드에서 불러도 된다. 응답은 상태 교체 · 이벤트 발행 뒤 완료된다. 명령이 던지면 상태를
-     * 그대로 두고 이벤트 없이 그 예외로 완료된다.
+     * 그대로 두고 이벤트 없이 그 예외로 완료된다. 명령 · 구독자가 {@link Error} 를 던지면 응답을 그 Error 로 완료한 뒤 다시 던진다. 실행기가
+     * 일을 거부하면(종료 뒤) 던지지 않고 {@link RejectedExecutionException} 으로 실패한 응답을 돌려준다.
+     *
+     * <p>응답의 비동기 아닌 후속 단계({@code thenAccept} 등)는 응답을 완료하는 actor 스레드에서 돈다. UI 는
+     * {@code thenAcceptAsync(fn, dispatcher::dispatch)} 로 EDT 에 넘긴다. actor 스레드(구독 콜백 · 후속 단계) 안에서 응답을
+     * 기다리면({@code join} · {@code get}) 그 응답을 낼 스레드가 자신이라 교착한다 — 거기서는 submit 만 하고 기다리지 않는다. 그렇게 낸
+     * 명령은 현재 명령의 응답 뒤에 돈다.
      */
     public <R> CompletionStage<R> submit(Command<R> command) {
         Objects.requireNonNull(command, "command");
         CompletableFuture<R> reply = new CompletableFuture<>();
-        serial.execute(() -> run(command, reply));
+        try {
+            serial.execute(() -> run(command, reply));
+        } catch (RejectedExecutionException e) {
+            LOG.log(Level.WARNING, "실행기가 명령을 거부했다 — 종료 중이면 정상", e);
+            reply.completeExceptionally(e);
+        }
         return reply.minimalCompletionStage();
     }
 
@@ -67,8 +79,19 @@ public final class StateActor {
         return () -> listeners.remove(registration);
     }
 
-    // 실행기 스레드에서만 돈다 — state 를 쓰는 곳은 여기 하나다
+    // 실행기 스레드에서만 돈다. Error 는 실행기에 맡기되 제출한 쪽이 영원히 기다리지 않게 응답부터 완료한다
     private <R> void run(Command<R> command, CompletableFuture<R> reply) {
+        try {
+            apply(command, reply);
+        } catch (Error e) {
+            LOG.log(Level.ERROR, "명령 실행 중 Error — 응답을 실패로 완료하고 다시 던진다", e);
+            reply.completeExceptionally(e);
+            throw e;
+        }
+    }
+
+    // state 를 쓰는 곳은 여기 하나다
+    private <R> void apply(Command<R> command, CompletableFuture<R> reply) {
         Transition<R> transition;
         try {
             transition = Objects.requireNonNull(command.apply(state), "command 가 null 전이를 돌려줬다");
