@@ -36,7 +36,12 @@ ADR-0003 은 셸 통합 스크립트가 프롬프트마다 OSC 7(bash) · OSC 9;
 - **중복 · 원격**(#77 CwdTracker)
   - 중복 제거 기준은 그 창이 **마지막으로 알린 경로**다. 시작 경로와 비교하면 시작 폴더가 기록되지 않는다.
   - OSC 7 은 세션의 첫 host 로 고정한다. ssh 원격 셸이 OSC 7 을 내도 로컬 이력을 더럽히지 않게 한다. OSC 9;9 는 구별할 수 없어 받아들인다.
-- **구독 순서**: `SessionStarter` 가 `StartedSession` 을 돌려주기 전에 붙인다(ADR-0007 의 start 전 구독). 콜백 예외는 내부에서 삼켜 구독이 해제되지 않게 한다.
+    - 고정하는 것은 모드가 맞고 경로로 해석된 첫 OSC 7 의 host 다. 해석하지 못한 보고는 host 를 고정하지 않는다.
+  - 판정은 `domain.session.LiveSessions.cwdReported` 가, 방문 기록은 `WorkHistory.recordVisit` 이 한다. `VisitRecorder` 가 둘을 `StateActor` 명령 하나에서 함께 적용해 `HistoryChanged` → `SessionCwdChanged` 순으로 낸다. `CwdTracker` 는 중복을 거르지 않는다.
+- **구독 순서**: `SessionStarter` 가 `StartedSession` 을 돌려주기 전에 붙인다(ADR-0007 의 start 전 구독). 콜백 예외는 내부에서 삼켜 구독이 해제되지 않게 한다. 로그는 세션마다 한 번만 남기고 출력 내용은 남기지 않는다.
+  - 순서: (1) 세션 등록(`SessionsChanged`) (2) 통합이 `Installed` 이고 모드가 `NONE` 이 아니면 `CwdTracker` 구독 (3) `onExit` 에 종료 등록(`SessionsChanged`). 종료는 그 창의 현재 세션 pid 가 같을 때만 적용한다 — 재시작 뒤 늦게 온 옛 셸의 종료가 새 세션을 끝난 것으로 만들지 않게.
+  - 셸 통합이 `Unavailable` 이면 구독하지 않고 `StartNotice.IntegrationUnavailable` 을 준다. 시작 경로가 `At` 이면 그 경로를 한 번 기록한다(경로가 없어 홈으로 대신 띄웠으면 기록하지 않는다).
+  - `SessionStarter` 는 start · restart 마다 `install()` 을 한 번 부른다(내용이 같으면 파일을 건드리지 않는다). 포트 계약을 어겨 예외가 나면 `Unavailable` 로 본다.
 
 ## 결과
 - 스캐너는 픽스처 · 속성 테스트로 조각을 어디서 나눠도 같은 보고를 낸다는 것을 고정한다. ConPTY 앞머리 · 한글 경로(`local LC_ALL=C` 가 빠졌을 때 나오는 바이트 포함) 회귀를 domain 테스트가 잡는다.
