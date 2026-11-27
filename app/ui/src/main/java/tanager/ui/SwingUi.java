@@ -11,8 +11,6 @@ import javax.swing.SwingUtilities;
 import tanager.application.platform.PlatformSelectionError;
 import tanager.application.port.in.AppEvent;
 import tanager.application.port.in.AppEvents;
-import tanager.application.port.in.ClosePaneUseCase;
-import tanager.application.port.in.FocusPaneUseCase;
 import tanager.application.port.in.ListProfilesUseCase;
 import tanager.application.port.in.ManageHistoryUseCase;
 import tanager.application.port.in.OpenPaneUseCase;
@@ -40,6 +38,7 @@ public final class SwingUi {
     /**
      * EDT 에서 메인 창을 띄우고 기억한 셸 하나를 연다(없으면 셸 선택 화면). {@code events} 의 저장소 알림은 상태줄에 보인다.
      *
+     * @param panes 창 닫기 · 포커스 · 분할 · 크기 · 줌 · 교환(키보드 · 마우스, #148)
      * @param onShutdown 앱을 끝낼 때 셸을 닫은 뒤 EDT 밖에서 한 번 부른다(미저장 이력 저장 등, ADR-0011). 끝나면 프로세스를 끝낸다
      */
     public static void showMainWindow(
@@ -47,8 +46,7 @@ public final class SwingUi {
             ListProfilesUseCase profiles,
             QueryHistoryTreeUseCase historyTree,
             ManageHistoryUseCase historyManager,
-            ClosePaneUseCase closePane,
-            FocusPaneUseCase focusPane,
+            PaneCommands panes,
             OpenPaneUseCase open,
             AppEvents events,
             Runnable onShutdown) {
@@ -91,16 +89,7 @@ public final class SwingUi {
             Executor background =
                     task -> Thread.ofVirtual().name("tanager-session-start").start(task);
             MainWindow window = new MainWindow(
-                    sessions,
-                    profiles,
-                    historyTree,
-                    historyManager,
-                    closePane,
-                    focusPane,
-                    open,
-                    onShutdown,
-                    settings,
-                    background);
+                    sessions, profiles, historyTree, historyManager, panes, open, onShutdown, settings, background);
             shown.set(window);
             window.show(warnings);
             inbox.attach(window::notify);

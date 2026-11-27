@@ -11,6 +11,7 @@ import tanager.application.port.in.AppEvents;
 import tanager.application.port.out.PlatformModule;
 import tanager.application.state.UiAppEvents;
 import tanager.domain.shared.Result;
+import tanager.ui.PaneCommands;
 import tanager.ui.SwingUi;
 import tanager.ui.SwingUiDispatcher;
 
@@ -46,8 +47,7 @@ public final class TanagerApp {
                         assembly.profiles(),
                         assembly.historyTree(),
                         assembly.historyManager(),
-                        assembly.panes(),
-                        assembly.panes(),
+                        PaneCommands.of(assembly.panes()),
                         assembly.panes(),
                         events,
                         assembly::shutdown);

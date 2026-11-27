@@ -14,6 +14,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
@@ -27,8 +28,6 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
 import javax.swing.border.EmptyBorder;
-import tanager.application.port.in.ClosePaneUseCase;
-import tanager.application.port.in.FocusPaneUseCase;
 import tanager.application.port.in.ListProfilesUseCase;
 import tanager.application.port.in.ManageHistoryUseCase;
 import tanager.application.port.in.OpenPaneUseCase;
@@ -38,6 +37,9 @@ import tanager.domain.history.WorkspacePath;
 import tanager.domain.shared.PaneId;
 import tanager.domain.workspace.Workspace;
 import tanager.ui.i18n.Msg;
+import tanager.ui.keys.KeyHelp;
+import tanager.ui.keys.Keymap;
+import tanager.ui.keys.LayoutAction;
 import tanager.ui.layout.LayoutView;
 import tanager.ui.layout.PaneDiff;
 import tanager.ui.pane.PaneController;
@@ -82,20 +84,20 @@ final class MainWindow {
     private final Runnable onShutdown;
     private final StartSessionUseCase sessions;
     private final ListProfilesUseCase profiles;
-    private final ClosePaneUseCase closePane;
-    private final FocusPaneUseCase focusPane;
+    private final PaneCommands commands;
     private final TerminalSettings settings;
     private final Executor ui = SwingUtilities::invokeLater;
     private final Executor background;
     private boolean closing;
+    // 가로챈 키가 만드는 글자(KEY_TYPED)도 터미널에 보내지 않는다 — Alt+Shift+= 의 '+' 가 셸로 새지 않게. 다음 키를 떼면 풀린다
+    private boolean swallowTyped;
 
     MainWindow(
             StartSessionUseCase sessions,
             ListProfilesUseCase profiles,
             QueryHistoryTreeUseCase historyTree,
             ManageHistoryUseCase historyManager,
-            ClosePaneUseCase closePane,
-            FocusPaneUseCase focusPane,
+            PaneCommands commands,
             OpenPaneUseCase open,
             Runnable onShutdown,
             TerminalSettings settings,
@@ -103,8 +105,7 @@ final class MainWindow {
         this.onShutdown = Objects.requireNonNull(onShutdown, "onShutdown");
         this.sessions = Objects.requireNonNull(sessions, "sessions");
         this.profiles = Objects.requireNonNull(profiles, "profiles");
-        this.closePane = Objects.requireNonNull(closePane, "closePane");
-        this.focusPane = Objects.requireNonNull(focusPane, "focusPane");
+        this.commands = Objects.requireNonNull(commands, "commands");
         this.settings = Objects.requireNonNull(settings, "settings");
         this.background = Objects.requireNonNull(background, "background");
         for (PaneId id : workspace.tab().root().panes()) {
@@ -187,13 +188,46 @@ final class MainWindow {
         exit();
     }
 
-    // Ctrl+Shift+E: 사이드바 보이기 · 숨기기, Ctrl+Shift+F: 사이드바 검색(SDD §8.2). 전환 효과는 M4(FR-UI-04)
+    // 이 창의 키만 본다(대화 상자 · 다른 창 제외). 레이아웃 키(#148)와 사이드바 키를 터미널보다 먼저 가로챈다
     private boolean shortcut(KeyEvent event) {
-        boolean ours = event.getID() == KeyEvent.KEY_PRESSED
-                && event.isControlDown()
-                && event.isShiftDown()
-                && !event.isAltDown()
-                && SwingUtilities.getWindowAncestor(event.getComponent()) == frame;
+        if (closing || SwingUtilities.getWindowAncestor(event.getComponent()) != frame) {
+            return false;
+        }
+        return switch (event.getID()) {
+            case KeyEvent.KEY_PRESSED -> {
+                swallowTyped = pressed(event);
+                yield swallowTyped;
+            }
+            case KeyEvent.KEY_TYPED -> swallowTyped;
+            default -> {
+                swallowTyped = false;
+                yield false;
+            }
+        };
+    }
+
+    private boolean pressed(KeyEvent event) {
+        Optional<LayoutAction> action = Keymap.actionFor(event.getKeyCode(), event.getModifiersEx());
+        if (action.isPresent()) {
+            run(action.get());
+            return true;
+        }
+        return sidebarShortcut(event);
+    }
+
+    // 결과(이웃 없음 · 마지막 창 등)는 무시한다 — 바뀐 배치는 LayoutChanged 로, 마지막 창 닫기는 LastPaneClosed 로 온다
+    private void run(LayoutAction action) {
+        commands.run(action, workspace.tab().focused(), layout.area(), layout.gap())
+                .whenComplete((result, failure) -> {
+                    if (failure != null) {
+                        LOG.log(System.Logger.Level.WARNING, "레이아웃 조작이 예외로 끝났다", failure);
+                    }
+                });
+    }
+
+    // Ctrl+Shift+E: 사이드바 보이기 · 숨기기, Ctrl+Shift+F: 사이드바 검색(SDD §8.2). 전환 효과는 M4(FR-UI-04)
+    private boolean sidebarShortcut(KeyEvent event) {
+        boolean ours = event.isControlDown() && event.isShiftDown() && !event.isAltDown();
         if (ours && event.getKeyCode() == KeyEvent.VK_E) {
             sidebar.component().setVisible(!sidebar.component().isVisible());
             frame.getContentPane().revalidate();
@@ -315,13 +349,13 @@ final class MainWindow {
         // 끝난 창의 Esc: 작업 공간에서 닫는다. 마지막 창이면 LastPaneClosed 가 와서 앱이 끝난다
         @Override
         public void removed() {
-            closePane.close(id);
+            commands.close().close(id);
         }
 
         @Override
         public void focusGained() {
             if (!closing && !workspace.tab().focused().equals(id) && panes.containsKey(id)) {
-                focusPane.focus(id);
+                commands.focus().focus(id);
             }
         }
     }
@@ -338,7 +372,7 @@ final class MainWindow {
             if (workspace.tab().focused().equals(pane)) {
                 target.focus();
             } else {
-                focusPane.focus(pane);
+                commands.focus().focus(pane);
             }
         }
 
@@ -356,7 +390,7 @@ final class MainWindow {
         @Override
         public void close(PaneId pane) {
             if (!closing && panes.containsKey(pane)) {
-                closePane.close(pane);
+                commands.close().close(pane);
             }
         }
     }
@@ -391,10 +425,26 @@ final class MainWindow {
                 BorderFactory.createMatteBorder(1, 0, 0, 0, ThemeColors.get(ColorToken.BORDER)),
                 new EmptyBorder(0, 10, 0, 10)));
         statusLeft.setForeground(ThemeColors.get(ColorToken.MUTED));
+        statusLeft.setToolTipText(keysTooltip());
         statusRight.setForeground(ThemeColors.get(ColorToken.WARN));
         bar.add(statusLeft, BorderLayout.WEST);
         bar.add(statusRight, BorderLayout.EAST);
         return bar;
+    }
+
+    // 레이아웃 키 도움말(#148): 상태줄 왼쪽에 마우스를 올리면 보인다
+    private static String keysTooltip() {
+        StringBuilder html = new StringBuilder("<html><b>")
+                .append(escape(Msg.LAYOUT_KEYS_TITLE.text()))
+                .append("</b><table>");
+        for (KeyHelp.Row row : KeyHelp.rows()) {
+            html.append("<tr><td>")
+                    .append(escape(row.action()))
+                    .append("</td><td>")
+                    .append(escape(row.keys()))
+                    .append("</td></tr>");
+        }
+        return html.append("</table></html>").toString();
     }
 
     private static String tooltip(List<String> messages) {

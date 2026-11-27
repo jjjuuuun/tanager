@@ -36,6 +36,21 @@ public final class LayoutView {
         return panel;
     }
 
+    /** 창들을 놓는 영역(이 컴포넌트 안쪽 좌표). 방향 포커스 · 교환이 이 영역과 {@link #gap()} 으로 이웃을 찾는다(#148). */
+    public Rect area() {
+        Insets in = panel.getInsets();
+        return new Rect(
+                in.left,
+                in.top,
+                Math.max(0, panel.getWidth() - in.left - in.right),
+                Math.max(0, panel.getHeight() - in.top - in.bottom));
+    }
+
+    /** 창 사이 간격(px). */
+    public int gap() {
+        return gap;
+    }
+
     /**
      * {@code tree} 대로 {@code components} 를 놓는다. 빠진 컴포넌트는 떼고 새 컴포넌트는 붙인다. 크기를 곧바로 정한다 — 새 창의 셸은 이 크기로
      * 띄운다.
@@ -78,13 +93,7 @@ public final class LayoutView {
 
         @Override
         public void layoutContainer(Container parent) {
-            Insets in = parent.getInsets();
-            Rect bounds = new Rect(
-                    in.left,
-                    in.top,
-                    Math.max(0, parent.getWidth() - in.left - in.right),
-                    Math.max(0, parent.getHeight() - in.top - in.bottom));
-            Map<PaneId, Rect> rects = LayoutGeometry.rects(tree, bounds, gap);
+            Map<PaneId, Rect> rects = LayoutGeometry.rects(tree, area(), gap);
             rects.forEach((pane, r) -> {
                 JComponent component = panes.get(pane);
                 if (component != null) {
