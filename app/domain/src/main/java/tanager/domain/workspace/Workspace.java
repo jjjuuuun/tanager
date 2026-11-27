@@ -407,12 +407,8 @@ public record Workspace(List<Tab> tabs, int active, Map<PaneId, PaneSpec> specs,
 
     private Result<Integer, TabError> find(TabId tab) {
         Objects.requireNonNull(tab, "tab");
-        for (int i = 0; i < tabs.size(); i++) {
-            if (tabs.get(i).id().equals(tab)) {
-                return Result.ok(i);
-            }
-        }
-        return Result.err(new TabError.UnknownTab(tab));
+        OptionalInt index = indexOf(tabs, tab);
+        return index.isPresent() ? Result.ok(index.getAsInt()) : Result.err(new TabError.UnknownTab(tab));
     }
 
     private OptionalInt indexOfPane(PaneId pane) {
@@ -431,13 +427,18 @@ public record Workspace(List<Tab> tabs, int active, Map<PaneId, PaneSpec> specs,
                 .orElseThrow(() -> new IllegalStateException(pane + " 을 " + source.id() + " 에서 뺄 수 없다"));
     }
 
+    // 연산 뒤의 새 목록에서 탭 위치. 그 연산이 탭을 남겼으니 없으면 버그다
     private static int indexIn(List<Tab> tabs, TabId id) {
+        return indexOf(tabs, id).orElseThrow(() -> new IllegalStateException("탭이 없다: " + id));
+    }
+
+    private static OptionalInt indexOf(List<Tab> tabs, TabId id) {
         for (int i = 0; i < tabs.size(); i++) {
             if (tabs.get(i).id().equals(id)) {
-                return i;
+                return OptionalInt.of(i);
             }
         }
-        throw new IllegalStateException("탭이 없다: " + id);
+        return OptionalInt.empty();
     }
 
     private static void requireBelow(String id, String prefix, int next, String field) {
