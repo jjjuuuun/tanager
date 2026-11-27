@@ -9,11 +9,14 @@ import java.util.function.Function;
 import tanager.application.platform.OperatingSystem;
 import tanager.application.port.out.Integration;
 import tanager.application.port.out.LaunchCommand;
+import tanager.application.port.out.PathTranslation;
 import tanager.application.port.out.PlatformDirs;
 import tanager.application.port.out.PlatformModule;
 import tanager.application.port.out.ShellIntegration;
+import tanager.domain.history.PathTranslator;
 import tanager.domain.history.ShellEnvironment;
 import tanager.domain.history.WorkspacePath;
+import tanager.domain.history.WslMount;
 import tanager.domain.session.ShellProfile;
 import tanager.domain.session.WorkingDir;
 
@@ -105,5 +108,11 @@ public final class WindowsPlatformModule implements PlatformModule {
     @Override
     public ShellIntegration integration() {
         return new WindowsShellIntegration(appData);
+    }
+
+    /** WSL 기본 마운트 루트(/mnt/)로 바꾼다. 배포판별 wsl.conf 의 automount root 는 #53(M5)이 읽는다. */
+    @Override
+    public PathTranslation paths() {
+        return (from, to) -> PathTranslator.translate(from, to, WslMount.DEFAULT);
     }
 }

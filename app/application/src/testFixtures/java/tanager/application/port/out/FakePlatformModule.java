@@ -9,6 +9,8 @@ import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 import tanager.application.platform.OperatingSystem;
+import tanager.domain.history.PathTranslator;
+import tanager.domain.history.WslMount;
 import tanager.domain.session.ShellProfile;
 import tanager.domain.session.WorkingDir;
 
@@ -147,5 +149,11 @@ public final class FakePlatformModule implements PlatformModule {
     @Override
     public synchronized ShellIntegration integration() {
         return customIntegration.orElse(defaultIntegration);
+    }
+
+    /** Windows 와 같은 규칙(마운트 루트 /mnt/). */
+    @Override
+    public PathTranslation paths() {
+        return (from, to) -> PathTranslator.translate(from, to, WslMount.DEFAULT);
     }
 }

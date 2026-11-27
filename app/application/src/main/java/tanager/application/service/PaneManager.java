@@ -13,6 +13,7 @@ import tanager.application.port.in.OpenPaneUseCase;
 import tanager.application.port.out.AppConfig;
 import tanager.application.port.out.ConfigRepository;
 import tanager.application.port.out.LoadedConfig;
+import tanager.application.port.out.PathTranslation;
 import tanager.application.state.StateActor;
 import tanager.application.state.Transition;
 import tanager.domain.history.WorkspacePath;
@@ -30,13 +31,18 @@ import tanager.domain.workspace.Workspace;
 public final class PaneManager implements OpenPaneUseCase, ClosePaneUseCase, FocusPaneUseCase {
     private final ListProfilesUseCase profiles;
     private final ConfigRepository config;
+    private final PathTranslation paths;
     private final StateActor state;
 
-    public PaneManager(ListProfilesUseCase profiles, ConfigRepository config, StateActor state) {
+    public PaneManager(ListProfilesUseCase profiles, ConfigRepository config, PathTranslation paths, StateActor state) {
         this.profiles = Objects.requireNonNull(profiles, "profiles");
         this.config = Objects.requireNonNull(config, "config");
+        this.paths = Objects.requireNonNull(paths, "paths");
         this.state = Objects.requireNonNull(state, "state");
     }
+
+    /** 띄울 셸과 그 셸 환경의 시작 경로. */
+    private record Choice(ShellProfile shell, WorkspacePath dir) {}
 
     @Override
     public CompletionStage<Result<PaneSpec, OpenError>> open(WorkspacePath path, Optional<ProfileId> profile) {
@@ -44,14 +50,15 @@ public final class PaneManager implements OpenPaneUseCase, ClosePaneUseCase, Foc
         Objects.requireNonNull(profile, "profile");
         // 설정을 읽지 못하면 기본값으로 연다 — 그 경고는 세션 시작이 알린다
         AppConfig settings = config.load().value().map(LoadedConfig::config).orElseGet(AppConfig::defaults);
-        Result<ShellProfile, OpenError> chosen = choose(path, profile, settings, profiles.list());
+        Result<Choice, OpenError> chosen = choose(path, profile, settings, profiles.list());
         Orientation orientation = switch (settings.openPlacement()) {
             case RIGHT -> Orientation.ROW;
             case DOWN -> Orientation.COLUMN;
         };
         return state.submit(current -> chosen.fold(
-                shell -> {
-                    Workspace.Opened opened = current.workspace().openBeside(orientation, shell.id(), path);
+                choice -> {
+                    Workspace.Opened opened = current.workspace()
+                            .openBeside(orientation, choice.shell().id(), choice.dir());
                     Workspace next = opened.workspace();
                     return new Transition<>(
                             current.withWorkspace(next),
@@ -62,7 +69,7 @@ public final class PaneManager implements OpenPaneUseCase, ClosePaneUseCase, Foc
                 error -> new Transition<>(current, List.of(), Result.<PaneSpec, OpenError>err(error))));
     }
 
-    private static Result<ShellProfile, OpenError> choose(
+    private Result<Choice, OpenError> choose(
             WorkspacePath path, Optional<ProfileId> wanted, AppConfig settings, List<ShellProfile> available) {
         if (wanted.isPresent()) {
             ProfileId id = wanted.get();
@@ -71,13 +78,14 @@ public final class PaneManager implements OpenPaneUseCase, ClosePaneUseCase, Foc
             if (found.isEmpty()) {
                 return Result.err(new OpenError.UnknownProfile(id));
             }
-            if (!found.get().env().equals(path.env())) {
-                return Result.err(new OpenError.EnvironmentMismatch(id, path));
-            }
-            return Result.ok(found.get());
+            // 다른 환경의 셸이면 그 환경의 경로로 바꿔 연다(/mnt/c/x ↔ C:\x). 바꿀 수 없으면 열지 않는다
+            ShellProfile shell = found.get();
+            return paths.translate(path, shell.env())
+                    .<Result<Choice, OpenError>>map(dir -> Result.ok(new Choice(shell, dir)))
+                    .orElseGet(() -> Result.err(new OpenError.EnvironmentMismatch(id, path)));
         }
         return ProfileResolution.forEnvironment(path.env(), settings.defaultProfile(), available)
-                .<Result<ShellProfile, OpenError>>map(Result::ok)
+                .<Result<Choice, OpenError>>map(shell -> Result.ok(new Choice(shell, path)))
                 .orElseGet(() -> Result.err(new OpenError.NoProfileForEnvironment(path.env())));
     }
 
