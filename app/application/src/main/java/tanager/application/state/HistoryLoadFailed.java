@@ -16,8 +16,9 @@ public record HistoryLoadFailed(HistoryStoreError error) implements Command<Bool
 
     @Override
     public Transition<Boolean> apply(AppState current) {
-        String reason = error.describe();
         return new Transition<>(
-                current.withStore(new HistoryStore.ReadOnly(reason)), List.of(new AppEvent.StoreNotice(reason)), true);
+                current.withStore(new HistoryStore.ReadOnly(error.describe())),
+                List.of(new AppEvent.StoreNotice(new AppEvent.StoreProblem.LoadFailed(error))),
+                true);
     }
 }

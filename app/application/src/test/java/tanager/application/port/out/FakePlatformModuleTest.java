@@ -35,8 +35,31 @@ class FakePlatformModuleTest {
                 .orElseThrow());
 
         // when / then
-        assertThatThrownBy(() -> platform.launchCommand(WSL, windows, new Integration.Unavailable("x")))
+        assertThatThrownBy(() -> platform.launchCommand(
+                        WSL, windows, new Integration.Unavailable(new Integration.Problem.NotSupported())))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThat(platform.launchRequests()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("appearance 는 기본으로 애니메이션을 켜고 withAppearance 로 바꿀 수 있다")
+    void appearanceDefaultsToAnimationsOn() {
+        // given
+        FakePlatformModule platform = new FakePlatformModule(List.of(WSL));
+
+        // when
+        SystemAppearance initial = platform.appearance();
+        SystemAppearance changed =
+                platform.withAppearance(new SystemAppearance(false)).appearance();
+
+        // then
+        assertThat(initial.animations()).isTrue();
+        assertThat(changed.animations()).isFalse();
+    }
+
+    @Test
+    @DisplayName("SystemAppearance.DEFAULT 는 애니메이션을 켠다(OS 값을 못 읽었을 때)")
+    void defaultAppearanceEnablesAnimations() {
+        assertThat(SystemAppearance.DEFAULT.animations()).isTrue();
     }
 }

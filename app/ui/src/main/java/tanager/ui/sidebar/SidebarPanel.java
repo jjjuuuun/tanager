@@ -2,6 +2,7 @@ package tanager.ui.sidebar;
 
 import java.awt.BorderLayout;
 import java.awt.Dimension;
+import java.awt.GraphicsEnvironment;
 import java.awt.event.ActionEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -25,6 +26,7 @@ import javax.swing.JScrollPane;
 import javax.swing.JTextField;
 import javax.swing.JTree;
 import javax.swing.KeyStroke;
+import javax.swing.SwingUtilities;
 import javax.swing.ToolTipManager;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
@@ -33,7 +35,9 @@ import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
 import javax.swing.tree.TreeSelectionModel;
 import tanager.application.port.in.ManageHistoryUseCase;
+import tanager.application.port.in.OpenChoices;
 import tanager.application.port.in.QueryHistoryTreeUseCase;
+import tanager.application.port.out.OpenPlacement;
 import tanager.domain.history.Alias;
 import tanager.domain.history.EnvironmentNode;
 import tanager.domain.history.HistoryError;
@@ -44,6 +48,7 @@ import tanager.domain.history.TreeNode;
 import tanager.domain.history.VisitedDirectory;
 import tanager.domain.history.WorkspacePath;
 import tanager.domain.shared.Result;
+import tanager.ui.i18n.Msg;
 import tanager.ui.theme.ColorToken;
 import tanager.ui.theme.ThemeColors;
 
@@ -55,7 +60,7 @@ public final class SidebarPanel {
     /** 기본 폭(저장은 M5). */
     public static final int DEFAULT_WIDTH = 280;
     /** 검색 결과가 없을 때 보이는 글자. */
-    static final String NO_MATCH = "맞는 폴더 없음";
+    static final String NO_MATCH = Msg.SIDEBAR_NO_MATCH.text();
 
     /** 고른 항목의 기록 삭제(Delete). */
     static final String FORGET_KEY = "tanager.sidebar.forget";
@@ -64,6 +69,7 @@ public final class SidebarPanel {
     private static final System.Logger LOG = System.getLogger(SidebarPanel.class.getName());
     private static final String ESCAPE = "tanager.sidebar.escape";
     private static final String TO_TREE = "tanager.sidebar.toTree";
+    private static final String OPEN_KEY = "tanager.sidebar.open";
 
     private final QueryHistoryTreeUseCase query;
     private final ManageHistoryUseCase manage;
@@ -78,6 +84,8 @@ public final class SidebarPanel {
     private final JLabel empty = new JLabel(NO_MATCH);
     private Optional<ExpansionState> beforeSearch = Optional.empty();
     private Runnable leave = () -> {};
+    private SidebarOpener opener = SidebarOpener.NONE;
+    private SidebarSessions sessions = SidebarSessions.NONE;
     private boolean pending;
     private boolean drawn;
     private boolean searching;
@@ -117,6 +125,8 @@ public final class SidebarPanel {
         panel.setPreferredSize(new Dimension(DEFAULT_WIDTH, 0));
         layoutSearch();
         bindMenu();
+        bindOpen();
+        bindDrag();
         JPanel body = new JPanel(new BorderLayout());
         body.setOpaque(false);
         body.add(empty, BorderLayout.NORTH);
@@ -151,7 +161,7 @@ public final class SidebarPanel {
 
     // 입력마다 다시 거른다(2000개 기준 수 ms, 한 틱에 한 번으로 합친다). ↓ 는 트리의 첫 결과로
     private void layoutSearch() {
-        search.putClientProperty("JTextField.placeholderText", "폴더 검색  Ctrl+Shift+F");
+        search.putClientProperty("JTextField.placeholderText", Msg.SIDEBAR_SEARCH_PLACEHOLDER.text());
         search.getDocument().addDocumentListener(new DocumentListener() {
             @Override
             public void insertUpdate(DocumentEvent e) {
@@ -253,6 +263,111 @@ public final class SidebarPanel {
         restored.selected().ifPresentOrElse(key -> tree.setSelectionPath(pathOf(key)), tree::clearSelection);
     }
 
+    /** 창을 여는 길을 붙인다(#91). 메인 창이 만든 뒤 한 번 부른다. EDT 에서 부른다. */
+    public void opener(SidebarOpener next) {
+        this.opener = Objects.requireNonNull(next, "next");
+    }
+
+    /** 세션 창에 부탁하는 길을 붙인다(#92). 메인 창이 만든 뒤 한 번 부른다. EDT 에서 부른다. */
+    public void sessions(SidebarSessions next) {
+        this.sessions = Objects.requireNonNull(next, "next");
+    }
+
+    /** {@code item} 에서 열기 · 세션 메뉴의 {@code entry} 를 한다(#91 · #92). EDT 에서 부른다. */
+    void open(MenuItem entry, SidebarItem item) {
+        if (!entry.enabled() || item.target().isEmpty()) {
+            return;
+        }
+        MenuTarget target = item.target().orElseThrow();
+        switch (entry.action()) {
+            case OPEN_RIGHT -> openBeside(target, OpenPlacement.RIGHT);
+            case OPEN_DOWN -> openBeside(target, OpenPlacement.DOWN);
+            case OPEN_WITH -> folderOf(target).ifPresent(p -> opener.open(p, entry.profile(), Optional.empty()));
+            case NEW_PANE -> {
+                if (target instanceof MenuTarget.Environment(var env, boolean hidden)) {
+                    opener.openHome(env);
+                }
+            }
+            case FOCUS -> sessionOf(target).ifPresent(session -> sessions.focus(session.pane()));
+            // 실행 중 강제 재시작은 M4 에서 판단 — 끝난 세션만
+            case RESTART ->
+                sessionOf(target)
+                        .filter(MenuTarget.Session::exited)
+                        .ifPresent(session -> sessions.restart(session.pane()));
+            case CLOSE -> sessionOf(target).ifPresent(session -> sessions.close(session.pane()));
+            default -> perform(entry.action(), item);
+        }
+    }
+
+    // 폴더는 포커스 창 옆에 그 경로를, 세션은 그 창 옆에 같은 셸 · 같은 경로를 연다
+    private void openBeside(MenuTarget target, OpenPlacement placement) {
+        switch (target) {
+            case MenuTarget.Folder folder -> opener.open(folder.path(), Optional.empty(), Optional.of(placement));
+            case MenuTarget.Session session -> opener.openSame(session.pane(), placement);
+            case MenuTarget.Environment _ -> {}
+        }
+    }
+
+    private static Optional<WorkspacePath> folderOf(MenuTarget target) {
+        return target instanceof MenuTarget.Folder folder ? Optional.of(folder.path()) : Optional.empty();
+    }
+
+    private static Optional<MenuTarget.Session> sessionOf(MenuTarget target) {
+        return target instanceof MenuTarget.Session session ? Optional.of(session) : Optional.empty();
+    }
+
+    // 폴더 더블클릭 · Enter = 설정 자리에 기본 셸로 열기(§8.4). 더블클릭은 펼치기 대신 열기다 — 펼치기는 화살표 · 손잡이.
+    // 세션은 한 번 누르기 · Enter = 그 창 포커스(#92) — 사이드바 포커스는 남기지 않고 터미널로
+    private void bindOpen() {
+        tree.setToggleClickCount(0);
+        tree.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                if (!SwingUtilities.isLeftMouseButton(e)) {
+                    return;
+                }
+                Optional<SidebarItem> clicked = Optional.ofNullable(tree.getPathForLocation(e.getX(), e.getY()))
+                        .map(path -> ((DefaultMutableTreeNode) path.getLastPathComponent()).getUserObject())
+                        .filter(SidebarItem.class::isInstance)
+                        .map(SidebarItem.class::cast);
+                if (e.getClickCount() == 1) {
+                    clicked.ifPresent(SidebarPanel.this::focusSession);
+                } else if (e.getClickCount() == 2) {
+                    clicked.ifPresent(SidebarPanel.this::openFolder);
+                }
+            }
+        });
+        tree.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke("ENTER"), OPEN_KEY);
+        tree.getActionMap().put(OPEN_KEY, new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                selectedItem().ifPresent(item -> {
+                    openFolder(item);
+                    focusSession(item);
+                });
+            }
+        });
+    }
+
+    // 폴더를 창 영역으로 끌어 그 자리에 연다(#151). 더블클릭 · Enter · 메뉴는 그대로다. JTree 는 화면이 없으면 끌기를 켤 수 없다
+    // (HeadlessException) — 테스트는 내보내는 값만 본다
+    private void bindDrag() {
+        tree.setTransferHandler(new FolderDragSource(Optional.ofNullable(tree.getTransferHandler())));
+        if (!GraphicsEnvironment.isHeadless()) {
+            tree.setDragEnabled(true);
+        }
+    }
+
+    private void openFolder(SidebarItem item) {
+        item.target()
+                .flatMap(SidebarPanel::folderOf)
+                .ifPresent(p -> opener.open(p, Optional.empty(), Optional.empty()));
+    }
+
+    private void focusSession(SidebarItem item) {
+        item.target().flatMap(SidebarPanel::sessionOf).ifPresent(session -> sessions.focus(session.pane()));
+    }
+
     /** {@code item} 에서 메뉴의 {@code action} 을 한다(#86). 비활성 동작은 하지 않는다. EDT 에서 부른다. */
     void perform(MenuAction action, SidebarItem item) {
         Optional<MenuTarget> target = item.target();
@@ -279,6 +394,8 @@ public final class SidebarPanel {
                 refresh();
             }
             case EXPAND_ALL, COLLAPSE_ALL -> expandAll(item.key(), action == MenuAction.EXPAND_ALL);
+            // 열기 · 세션 동작은 open(MenuItem, …) 이 한다 — FolderMenu 항목이 아니라 여기까지 오지 않는다
+            case OPEN_RIGHT, OPEN_DOWN, OPEN_WITH, NEW_PANE, FOCUS, RESTART, CLOSE -> {}
         }
     }
 
@@ -374,14 +491,49 @@ public final class SidebarPanel {
         if (!(user instanceof SidebarItem item) || item.target().isEmpty()) {
             return;
         }
-        JPopupMenu menu = new JPopupMenu();
-        for (MenuItem entry : FolderMenu.items(item.target().orElseThrow())) {
-            JMenuItem row = new JMenuItem(entry.label());
-            row.setEnabled(entry.enabled());
-            row.addActionListener(event -> perform(entry.action(), item));
-            menu.add(row);
+        MenuTarget target = item.target().orElseThrow();
+        // 폴더의 열기 후보는 셸 목록 · 설정 · 경로 변환이 필요해 EDT 밖에서 구한 뒤 띄운다
+        if (target instanceof MenuTarget.Folder folder) {
+            opener.choices(folder.path(), choices -> popup(item, OpenMenu.entries(target, choices), x, y));
+        } else {
+            popup(item, OpenMenu.entries(target, new OpenChoices(Optional.empty(), List.of())), x, y);
         }
-        menu.show(tree, x, y);
+    }
+
+    private void popup(SidebarItem item, List<MenuEntry> opens, int x, int y) {
+        JPopupMenu menu = new JPopupMenu();
+        for (MenuEntry entry : opens) {
+            menu.add(component(entry, item));
+        }
+        if (!opens.isEmpty()) {
+            menu.addSeparator();
+        }
+        for (MenuItem entry : FolderMenu.items(item.target().orElseThrow())) {
+            menu.add(component(entry, item));
+        }
+        if (tree.isShowing()) {
+            menu.show(tree, x, y);
+        }
+    }
+
+    private javax.swing.JMenuItem component(MenuEntry entry, SidebarItem item) {
+        return switch (entry) {
+            case MenuItem one -> {
+                JMenuItem row = new JMenuItem(one.label());
+                row.setEnabled(one.enabled());
+                row.addActionListener(event -> open(one, item));
+                yield row;
+            }
+            case Submenu sub -> {
+                javax.swing.JMenu menu = new javax.swing.JMenu(sub.label());
+                menu.setEnabled(sub.enabled());
+                sub.reason().ifPresent(menu::setToolTipText);
+                for (MenuItem one : sub.items()) {
+                    menu.add(component(one, item));
+                }
+                yield menu;
+            }
+        };
     }
 
     private Optional<SidebarItem> selectedItem() {
@@ -529,7 +681,9 @@ public final class SidebarPanel {
                                             : SidebarItem.Kind.SESSION_EXITED,
                                     false,
                                     Optional.of(new MenuTarget.Session(
-                                            session.session().cwd())),
+                                            session.session().pane(),
+                                            session.session().cwd(),
+                                            session.session().status() instanceof SessionStatus.Exited)),
                                     false));
             }
         }

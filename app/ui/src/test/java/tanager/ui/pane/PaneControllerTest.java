@@ -2,7 +2,10 @@ package tanager.ui.pane;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.awt.Component;
+import java.awt.event.InputEvent;
 import java.awt.event.MouseEvent;
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import java.util.Queue;
@@ -31,12 +34,17 @@ import tanager.application.port.out.ScriptedTerminalStream;
 import tanager.application.port.out.TerminalSize;
 import tanager.domain.history.ShellEnvironment;
 import tanager.domain.history.WorkspacePath;
+import tanager.domain.layout.Orientation;
 import tanager.domain.session.ProfileResolution;
 import tanager.domain.session.ShellProfile;
 import tanager.domain.session.TerminalSession;
+import tanager.domain.session.WorkingDir;
 import tanager.domain.shared.PaneId;
 import tanager.domain.shared.Result;
+import tanager.domain.workspace.PaneSpec;
 import tanager.ui.font.TerminalFontSet;
+import tanager.ui.keys.LayoutAction;
+import tanager.ui.motion.Motion;
 import tanager.ui.terminal.TanagerTermWidget;
 import tanager.ui.terminal.TerminalSettings;
 import tanager.ui.theme.JediTermColors;
@@ -44,6 +52,8 @@ import tanager.ui.theme.SoftDarkLaf;
 
 /** 창 컨트롤러의 효과 실행. Swing 은 EDT 에서, 두 executor 는 테스트가 직접 비운다. */
 class PaneControllerTest {
+    // 테두리 전환은 AnimatorTest 가 본다 — 여기서는 Swing 타이머 없이 바로 바뀌게 한다
+    private static final Motion INSTANT = new Motion(Duration.ZERO, false);
     private final QueueExecutor ui = new QueueExecutor();
     private final QueueExecutor background = new QueueExecutor();
     private final FakeSessions sessions = new FakeSessions();
@@ -58,7 +68,8 @@ class PaneControllerTest {
             previous = UIManager.getLookAndFeel();
             UIManager.setLookAndFeel(new SoftDarkLaf());
             TerminalSettings settings = new TerminalSettings(TerminalFontSet.fallback(), JediTermColors.current());
-            controller = new PaneController(new PaneId("p1"), ui, background, sessions, profiles, settings, host);
+            controller =
+                    new PaneController(new PaneId("p1"), ui, background, sessions, profiles, settings, INSTANT, host);
             return null;
         });
     }
@@ -90,6 +101,45 @@ class PaneControllerTest {
         // then
         assertThat(sessions.restarts).containsExactly(exited);
         assertThat(onEdt(controller::widget)).isNotSameAs(old);
+        assertThat(onEdt(controller::state)).isInstanceOf(PaneState.Running.class);
+    }
+
+    @Test
+    @DisplayName("사이드바의 재시작은 끝난 창에서 Enter 와 같이 끝난 세션으로 restart 를 부른다(#92)")
+    void restartFromSidebarRestartsExitedSession() {
+        // given
+        startAndConnect();
+        sessions.streams.getFirst().exit(3);
+        drain();
+        TerminalSession exited = ((PaneState.Exited) onEdt(controller::state)).session();
+
+        // when
+        onEdt(() -> {
+            controller.restart();
+            return null;
+        });
+        drain();
+
+        // then
+        assertThat(sessions.restarts).containsExactly(exited);
+        assertThat(onEdt(controller::state)).isInstanceOf(PaneState.Running.class);
+    }
+
+    @Test
+    @DisplayName("실행 중인 창의 재시작은 아무것도 하지 않는다(#92 — 강제 재시작은 M4 에서 판단)")
+    void restartWhileRunningDoesNothing() {
+        // given
+        startAndConnect();
+
+        // when
+        onEdt(() -> {
+            controller.restart();
+            return null;
+        });
+        drain();
+
+        // then
+        assertThat(sessions.restarts).isEmpty();
         assertThat(onEdt(controller::state)).isInstanceOf(PaneState.Running.class);
     }
 
@@ -126,6 +176,49 @@ class PaneControllerTest {
         // then
         assertThat(onEdt(() -> controller.widget().getTerminalPanel().isFocusable()))
                 .isFalse();
+    }
+
+    @Test
+    @DisplayName("명세로 시작하면 그 프로파일 · 경로로 띄운다 — 트리에서 연 창(#89)")
+    void startWithSpec() {
+        // given
+        WorkspacePath a = WorkspacePath.of(new ShellEnvironment.Windows(), "C:\\a")
+                .value()
+                .orElseThrow();
+        PaneSpec spec = new PaneSpec(new PaneId("p1"), Optional.of(PaneFixtures.CMD.id()), Optional.of(a));
+
+        // when
+        onEdt(() -> {
+            controller.start(spec);
+            return null;
+        });
+        drain();
+
+        // then
+        StartRequest request = sessions.requests.getLast();
+        assertThat(request.profile()).contains(PaneFixtures.CMD.id());
+        assertThat(request.dir()).contains(new WorkingDir.At(a));
+        assertThat(request.rememberAsDefault()).isFalse();
+        assertThat(onEdt(controller::running)).isTrue();
+    }
+
+    @Test
+    @DisplayName("창 안으로 포커스가 들어오면 Host 에 한 번 알린다(클릭 포커스, #89)")
+    void focusGainedNotifiesHost() {
+        // given
+        startAndConnect();
+
+        // when
+        onEdt(() -> {
+            controller.focusChanged(true);
+            controller.focusChanged(true);
+            controller.focusChanged(false);
+            controller.focusChanged(true);
+            return null;
+        });
+
+        // then
+        assertThat(host.focusGained.get()).isEqualTo(2);
     }
 
     @Test
@@ -536,6 +629,107 @@ class PaneControllerTest {
         assertThat(onEdt(() -> controller.notice().getParent())).isNotNull();
     }
 
+    @Test
+    @DisplayName("머리줄 버튼(오른쪽 분할 · 아래 분할 · 줌 · 닫기)을 누르면 Host 에 그 동작을 알린다 — 툴팁에 키, 포커스는 받지 않는다(#149)")
+    void headerButtonsRequestLayoutActions() {
+        // given
+        List<LayoutAction> actions = List.of(
+                new LayoutAction.Split(Orientation.ROW),
+                new LayoutAction.Split(Orientation.COLUMN),
+                new LayoutAction.Zoom(),
+                new LayoutAction.Close());
+
+        // when
+        onEdt(() -> {
+            for (LayoutAction action : actions) {
+                controller.headerButton(action).doClick();
+            }
+            return null;
+        });
+
+        // then
+        assertThat(host.layout).containsExactlyElementsOf(actions);
+        assertThat(onEdt(() -> controller
+                        .headerButton(new LayoutAction.Split(Orientation.ROW))
+                        .getToolTipText()))
+                .isEqualTo("오른쪽으로 분할 (Alt+Shift+=)");
+        assertThat(onEdt(() -> controller.headerButton(new LayoutAction.Close()).getToolTipText()))
+                .isEqualTo("창 닫기 (Ctrl+Shift+W)");
+        assertThat(onEdt(() -> controller.headerButton(new LayoutAction.Zoom()).isFocusable()))
+                .isFalse();
+    }
+
+    @Test
+    @DisplayName("머리줄 더블클릭은 줌을 알린다, 한 번 클릭은 알리지 않는다(#149)")
+    void headerDoubleClickRequestsZoom() {
+        // when
+        onEdt(() -> {
+            click(controller.header(), 1, MouseEvent.BUTTON1, false);
+            click(controller.header(), 2, MouseEvent.BUTTON1, false);
+            return null;
+        });
+
+        // then
+        assertThat(host.layout).containsExactly(new LayoutAction.Zoom());
+    }
+
+    @Test
+    @DisplayName("머리줄 우클릭은 이 창의 셸과 함께 메뉴를 요청한다 — 실행 중이면 그 셸, 기동 전이면 비어 있다(#149)")
+    void headerRightClickRequestsMenu() {
+        // given: 기동 전
+        onEdt(() -> {
+            click(controller.header(), 1, MouseEvent.BUTTON3, true);
+            return null;
+        });
+
+        // when: 셸이 뜬 뒤
+        startAndConnect();
+        onEdt(() -> {
+            click(controller.header(), 1, MouseEvent.BUTTON3, true);
+            return null;
+        });
+
+        // then
+        assertThat(host.menus).containsExactly(Optional.empty(), Optional.of(PaneFixtures.CMD));
+        assertThat(host.layout).isEmpty();
+    }
+
+    @Test
+    @DisplayName("머리줄 왼쪽 손잡이(≡)와 머리줄 · 경로 글자가 끌기 손잡이다 — 손잡이는 툴팁 · 이동 커서를 갖는다(#151)")
+    void headerOffersDragHandles() {
+        // when
+        List<JComponent> handles = onEdt(controller::dragHandles);
+        JComponent grip = onEdt(controller::grip);
+
+        // then
+        assertThat(handles).contains(grip, controller.header());
+        String tooltip = onEdt(grip::getToolTipText);
+        assertThat(tooltip).isEqualTo("끌어서 옮기기 — 다른 창의 가장자리에 놓으면 그쪽으로, 가운데에 놓으면 교환");
+        assertThat(onEdt(() -> grip.getCursor().getType())).isEqualTo(java.awt.Cursor.MOVE_CURSOR);
+    }
+
+    @Test
+    @DisplayName("손잡이를 두 번 눌러도 머리줄처럼 줌을 알린다 — 끌지 않은 클릭은 그대로다(#151)")
+    void gripDoubleClickZooms() {
+        // when
+        onEdt(() -> {
+            click(controller.grip(), 2, MouseEvent.BUTTON1, false);
+            return null;
+        });
+
+        // then
+        assertThat(host.layout).containsExactly(new LayoutAction.Zoom());
+    }
+
+    // 누름 · 뗌 · 클릭을 차례로 보낸다. 팝업 트리거는 누름에만 싣는다(뗌에서 또 띄우지 않게)
+    private static void click(JComponent target, int count, int button, boolean popup) {
+        long now = System.currentTimeMillis();
+        int mask = button == MouseEvent.BUTTON3 ? InputEvent.BUTTON3_DOWN_MASK : InputEvent.BUTTON1_DOWN_MASK;
+        target.dispatchEvent(new MouseEvent(target, MouseEvent.MOUSE_PRESSED, now, mask, 5, 5, count, popup, button));
+        target.dispatchEvent(new MouseEvent(target, MouseEvent.MOUSE_RELEASED, now, 0, 5, 5, count, false, button));
+        target.dispatchEvent(new MouseEvent(target, MouseEvent.MOUSE_CLICKED, now, 0, 5, 5, count, false, button));
+    }
+
     private void startAndConnect() {
         onEdt(() -> {
             controller.start();
@@ -671,6 +865,25 @@ class PaneControllerTest {
 
     private static final class RecordingHost implements PaneController.Host {
         final AtomicInteger removed = new AtomicInteger();
+        final AtomicInteger focusGained = new AtomicInteger();
+        final List<LayoutAction> layout = new CopyOnWriteArrayList<>();
+        final List<Optional<ShellProfile>> menus = new CopyOnWriteArrayList<>();
+
+        @Override
+        public void layoutRequested(LayoutAction action) {
+            layout.add(action);
+        }
+
+        @Override
+        public void menuRequested(Optional<ShellProfile> shell, Component invoker, int x, int y) {
+            menus.add(shell);
+        }
+
+        @Override
+        public void focusGained() {
+            focusGained.incrementAndGet();
+        }
+
         final List<String> notices = new CopyOnWriteArrayList<>();
 
         @Override

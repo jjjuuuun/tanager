@@ -2,8 +2,8 @@
 # PreToolUse(Bash: git * / gh *) — Git 전략을 강제한다.
 #   exit 2               = 차단 (사유는 stderr 로 Claude 에 전달)
 #   permissionDecision   = "ask" 를 stdout JSON 으로 내면 allow 규칙과 상관없이 사용자 승인을 받는다
-# 역할 분담(사용자 결정 2026-11-25 · ADR-0005 개정): 사용자 몫은 dev → main 릴리스 PR 병합 하나.
-#           그 밖(작업 PR squash · 역병합 · hotfix 병합 · 태그 · Release · PR 닫기)은 Claude.
+# 역할 분담(사용자 결정 2026-11-25 · 2026-11-27 개정 · ADR-0005): 사용자 몫은 v1.0.0 이상 릴리스 PR(dev → main) 병합 하나.
+#           그 밖(작업 PR squash · v1.0.0 미만 릴리스 병합 · 역병합 · hotfix 병합 · 태그 · Release · PR 닫기)은 Claude.
 #           되돌리기 어려운 것(강제 푸시 · 보호 브랜치 직접 변경 · 원격 태그 삭제 등)은 계속 막거나 승인 창.
 # 보호 브랜치: main(릴리스 전용) · dev(통합). 둘 다 직접 커밋·푸시 금지.
 set -euo pipefail
@@ -47,8 +47,9 @@ if [[ "$cmd" =~ git[[:space:]]+(commit|merge|cherry-pick|revert|am)([[:space:]]|
   block "$branch 에 직접 커밋/병합할 수 없습니다. 'git switch dev && git pull --ff-only && git switch -c <type>/<이슈번호>-<slug>' 후 작업하세요."
 fi
 
-# 4) PR 병합: dev → main 릴리스 PR 은 사용자만. Claude 는 PR 의 head · base 를 조회해 다음만 병합한다.
+# 4) PR 병합: Claude 는 PR 의 head · base · 제목을 조회해 다음만 병합한다.
 #    작업 PR(→ dev, head ≠ main) = --squash · 역병합(main → dev) = --merge · hotfix/* → main = --merge
+#    릴리스 PR(dev → main) = --merge, 단 제목의 버전이 v1.0.0 이상이면 사용자만(#145)
 #    gh pr 로 시작하는 구간만 본다(이슈·PR 본문 같은 텍스트 오탐 방지)
 prseg="$(printf '%s\n' "$cmd" | sed -E 's/(&&|\|\||;|\|)/\n/g' | grep -E '^[[:space:]]*gh[[:space:]]+pr[[:space:]]+' || true)"
 [[ "$prseg" =~ gh[[:space:]]+pr[[:space:]]+review && "$prseg" =~ (^|[[:space:]])(--approve|-a)([[:space:]]|$) ]] && block "자기 PR 은 승인할 수 없습니다. 'gh pr review <번호> --comment' 를 쓰세요."
@@ -59,10 +60,15 @@ while IFS= read -r m; do
   [[ "$m" =~ gh[[:space:]]+pr[[:space:]]+merge[[:space:]]+([0-9]+)([[:space:]]|$) ]] || block "병합할 PR 번호를 merge 바로 뒤에 숫자로 쓰세요."
   num="${BASH_REMATCH[1]}"
   repo=""; [[ "$m" =~ (--repo|-R)[[:space:]=]+([^[:space:]]+) ]] && repo="${BASH_REMATCH[2]}"
-  refs="$(cd "${CLAUDE_PROJECT_DIR:-.}" && gh pr view "$num" ${repo:+--repo "$repo"} --json headRefName,baseRefName -q '.headRefName+" "+.baseRefName' 2>/dev/null || true)"
-  [[ "$refs" =~ ^([^[:space:]]+)[[:space:]]([^[:space:]]+)$ ]] || block "PR #$num 의 head · base 를 확인할 수 없습니다."
-  head="${BASH_REMATCH[1]}"; base="${BASH_REMATCH[2]}"
-  [[ "$base" == "main" && "$head" == "dev" ]] && block "릴리스 PR(dev → main)은 사용자가 병합합니다."
+  refs="$(cd "${CLAUDE_PROJECT_DIR:-.}" && gh pr view "$num" ${repo:+--repo "$repo"} --json headRefName,baseRefName,title -q '.headRefName+" "+.baseRefName+" "+.title' 2>/dev/null || true)"
+  [[ "$refs" =~ ^([^[:space:]]+)[[:space:]]([^[:space:]]+)[[:space:]](.*)$ ]] || block "PR #$num 의 head · base 를 확인할 수 없습니다."
+  head="${BASH_REMATCH[1]}"; base="${BASH_REMATCH[2]}"; title="${BASH_REMATCH[3]}"
+  if [[ "$base" == "main" && "$head" == "dev" ]]; then
+    [[ "$title" =~ v([0-9]+)\.[0-9]+\.[0-9]+ ]] || block "릴리스 PR #$num 제목에서 버전(vX.Y.Z)을 찾을 수 없습니다."
+    (( BASH_REMATCH[1] >= 1 )) && block "v1.0.0 이상 릴리스 PR(dev → main)은 사용자가 병합합니다(PR #$num: $title)."
+    [[ "$m" =~ (^|[[:space:]])(--merge|-m)([[:space:]]|$) ]] || block "릴리스 PR 은 merge commit(--merge)으로 병합합니다."
+    continue
+  fi
   if [[ "$m" =~ (^|[[:space:]])(--squash|-s)([[:space:]]|$) ]]; then
     [[ "$base" == "dev" && "$head" != "main" ]] || block "squash 는 dev 로 가는 작업 PR 에만 씁니다(PR #$num: $head → $base)."
   elif [[ "$m" =~ (^|[[:space:]])(--merge|-m)([[:space:]]|$) ]]; then

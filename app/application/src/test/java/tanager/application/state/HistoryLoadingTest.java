@@ -215,8 +215,9 @@ class HistoryLoadingTest {
         assertThat(events.stream()
                         .filter(AppEvent.StoreNotice.class::isInstance)
                         .map(AppEvent.StoreNotice.class::cast)
-                        .map(AppEvent.StoreNotice::message))
-                .containsExactly(recovered.describe(), skipped.describe());
+                        .map(AppEvent.StoreNotice::problem))
+                .containsExactly(
+                        new AppEvent.StoreProblem.Loaded(recovered), new AppEvent.StoreProblem.Loaded(skipped));
     }
 
     @Test
@@ -265,8 +266,8 @@ class HistoryLoadingTest {
         assertThat(actor.snapshot().store()).isInstanceOf(HistoryStore.ReadOnly.class);
         assertThat(count(A)).isEqualTo(1);
         assertThat(events)
-                .anyMatch(
-                        e -> e instanceof AppEvent.StoreNotice n && n.message().contains(error.describe()));
+                .anyMatch(e -> e instanceof AppEvent.StoreNotice n
+                        && n.problem().equals(new AppEvent.StoreProblem.LoadFailed(error)));
     }
 
     @Test

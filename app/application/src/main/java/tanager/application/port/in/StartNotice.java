@@ -3,6 +3,7 @@ package tanager.application.port.in;
 import java.util.Objects;
 import tanager.application.port.out.ConfigError;
 import tanager.application.port.out.ConfigWarning;
+import tanager.application.port.out.Integration;
 import tanager.domain.history.WorkspacePath;
 import tanager.domain.session.ProfileId;
 
@@ -74,14 +75,14 @@ public sealed interface StartNotice {
     }
 
     /** 셸 통합을 쓸 수 없어 이 셸의 현재 경로를 추적하지 않는다 — 시작 경로만 기록한다. */
-    record IntegrationUnavailable(String reason) implements StartNotice {
+    record IntegrationUnavailable(Integration.Problem problem) implements StartNotice {
         public IntegrationUnavailable {
-            Objects.requireNonNull(reason, "reason");
+            Objects.requireNonNull(problem, "problem");
         }
 
         @Override
         public String describe() {
-            return "셸 통합을 쓸 수 없어 이동한 경로를 기록하지 않는다 — " + reason;
+            return "셸 통합을 쓸 수 없어 이동한 경로를 기록하지 않는다 — " + problem.describe();
         }
     }
 }

@@ -134,4 +134,30 @@ class ProfileResolutionTest {
             assertThat(result).isEqualTo(new ProfileResolution.Choose(available, wanted));
         }
     }
+
+    @Test
+    @DisplayName("기억한 기본 프로파일이 그 환경이면 그것을 고른다(#88)")
+    void forEnvironmentUsesRememberedWhenSameEnvironment() {
+        assertThat(ProfileResolution.forEnvironment(new ShellEnvironment.Windows(), Optional.of(CMD.id()), ALL))
+                .contains(CMD);
+    }
+
+    @Test
+    @DisplayName("기본 프로파일이 다른 환경이면 그 환경의 탐지 순서 첫 프로파일이다(#88)")
+    void forEnvironmentFallsBackToFirstDetected() {
+        assertThat(ProfileResolution.forEnvironment(new ShellEnvironment.Windows(), Optional.of(WSL_A.id()), ALL))
+                .contains(POWERSHELL);
+        assertThat(ProfileResolution.forEnvironment(new ShellEnvironment.Wsl("B"), Optional.empty(), ALL))
+                .contains(WSL_B);
+    }
+
+    @Test
+    @DisplayName("기억한 기본이 목록에서 사라졌으면 탐지 순서 첫 프로파일, 그 환경의 셸이 없으면 empty(#88)")
+    void forEnvironmentMissing() {
+        assertThat(ProfileResolution.forEnvironment(
+                        new ShellEnvironment.Windows(), Optional.of(new ProfileId("gone")), ALL))
+                .contains(POWERSHELL);
+        assertThat(ProfileResolution.forEnvironment(new ShellEnvironment.Wsl("Z"), Optional.of(WSL_A.id()), ALL))
+                .isEmpty();
+    }
 }

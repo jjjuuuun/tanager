@@ -1,12 +1,15 @@
 package tanager.platform.macos;
 
 import java.util.List;
+import java.util.Optional;
 import tanager.application.platform.OperatingSystem;
 import tanager.application.port.out.Integration;
 import tanager.application.port.out.LaunchCommand;
+import tanager.application.port.out.PathTranslation;
 import tanager.application.port.out.PlatformDirs;
 import tanager.application.port.out.PlatformModule;
 import tanager.application.port.out.ShellIntegration;
+import tanager.application.port.out.SystemAppearance;
 import tanager.domain.session.ShellProfile;
 import tanager.domain.session.WorkingDir;
 
@@ -44,6 +47,18 @@ public final class MacPlatformModule implements PlatformModule {
     /** M7 에서 zsh 판을 채운다. 그때까지 셸 통합 없음. */
     @Override
     public ShellIntegration integration() {
-        return () -> new Integration.Unavailable("M7");
+        return () -> new Integration.Unavailable(new Integration.Problem.NotSupported());
+    }
+
+    /** macOS 셸 환경(Posix)은 M7 에서 더한다. 그때까지는 같은 환경만 그대로 돌려준다. */
+    @Override
+    public PathTranslation paths() {
+        return (from, to) -> from.env().equals(to) ? Optional.of(from) : Optional.empty();
+    }
+
+    /** M7 에서 NSWorkspace 의 '동작 줄이기'를 읽는다. 그때까지 애니메이션을 켠다. */
+    @Override
+    public SystemAppearance appearance() {
+        return SystemAppearance.DEFAULT;
     }
 }

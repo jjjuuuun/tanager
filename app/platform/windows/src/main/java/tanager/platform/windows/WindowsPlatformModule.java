@@ -9,17 +9,23 @@ import java.util.function.Function;
 import tanager.application.platform.OperatingSystem;
 import tanager.application.port.out.Integration;
 import tanager.application.port.out.LaunchCommand;
+import tanager.application.port.out.PathTranslation;
 import tanager.application.port.out.PlatformDirs;
 import tanager.application.port.out.PlatformModule;
 import tanager.application.port.out.ShellIntegration;
+import tanager.application.port.out.SystemAppearance;
+import tanager.domain.history.PathTranslator;
 import tanager.domain.history.ShellEnvironment;
 import tanager.domain.history.WorkspacePath;
+import tanager.domain.history.WslMount;
 import tanager.domain.session.ShellProfile;
 import tanager.domain.session.WorkingDir;
 
 /** Windows 계열(10 · 11). WSL · PowerShell 5.1 · cmd 는 이 모듈이 맡는다(M2~). */
 public final class WindowsPlatformModule implements PlatformModule {
     private static final Duration WSL_LIST_TIMEOUT = Duration.ofSeconds(3);
+    // 시작 화면 전에 한 번 읽는다 — reg.exe 는 보통 수십 ms 라 길게 기다리지 않는다
+    private static final Duration APPEARANCE_TIMEOUT = Duration.ofSeconds(1);
     private static final String APP_FOLDER = "Tanager";
     private static final Function<String, Optional<String>> SYSTEM_ENV =
             name -> Optional.ofNullable(System.getenv(name));
@@ -29,6 +35,7 @@ public final class WindowsPlatformModule implements PlatformModule {
     private final Optional<String> wslenv;
     private final Optional<String> prompt;
     private final Path appData;
+    private final CommandRunner appearanceRunner;
 
     /** ServiceLoader 용. 실제 프로세스 실행과 시스템 환경변수를 쓴다. */
     public WindowsPlatformModule() {
@@ -53,6 +60,16 @@ public final class WindowsPlatformModule implements PlatformModule {
      */
     WindowsPlatformModule(
             WindowsShellCatalog shellCatalog, Function<String, Optional<String>> env, String fallbackHome) {
+        this(shellCatalog, env, fallbackHome, new ProcessCommandRunner());
+    }
+
+    /** {@code appearanceRunner} 는 {@link #appearance()} 가 레지스트리를 읽을 때 쓴다. */
+    WindowsPlatformModule(
+            WindowsShellCatalog shellCatalog,
+            Function<String, Optional<String>> env,
+            String fallbackHome,
+            CommandRunner appearanceRunner) {
+        this.appearanceRunner = Objects.requireNonNull(appearanceRunner, "appearanceRunner");
         this.shellCatalog = Objects.requireNonNull(shellCatalog, "shellCatalog");
         Objects.requireNonNull(env, "env");
         Objects.requireNonNull(fallbackHome, "fallbackHome");
@@ -105,5 +122,17 @@ public final class WindowsPlatformModule implements PlatformModule {
     @Override
     public ShellIntegration integration() {
         return new WindowsShellIntegration(appData);
+    }
+
+    /** WSL 기본 마운트 루트(/mnt/)로 바꾼다. 배포판별 wsl.conf 의 automount root 는 #53(M5)이 읽는다. */
+    @Override
+    public PathTranslation paths() {
+        return (from, to) -> PathTranslator.translate(from, to, WslMount.DEFAULT);
+    }
+
+    /** '애니메이션 효과' 설정을 레지스트리에서 읽는다(#152). 부를 때마다 reg.exe 를 실행한다. */
+    @Override
+    public SystemAppearance appearance() {
+        return WindowsAppearance.read(appearanceRunner, APPEARANCE_TIMEOUT);
     }
 }

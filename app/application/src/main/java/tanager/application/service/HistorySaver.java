@@ -190,7 +190,7 @@ public final class HistorySaver {
     }
 
     private boolean finish(WorkHistory latest, Result<WorkHistory, HistoryStoreError> result) {
-        Optional<String> notice = Optional.empty();
+        Optional<HistoryStoreError> notice = Optional.empty();
         boolean again;
         boolean saved = result.error().isEmpty();
         synchronized (monitor) {
@@ -203,7 +203,7 @@ public final class HistorySaver {
                 HistoryStoreError error = result.error().orElseThrow();
                 dirty = true;
                 if (!lastFailure.equals(Optional.of(error))) {
-                    notice = Optional.of(error.describe());
+                    notice = Optional.of(error);
                 }
                 lastFailure = Optional.of(error);
             }
@@ -218,8 +218,9 @@ public final class HistorySaver {
         return saved;
     }
 
-    private void announce(String message) {
-        LOG.log(Level.WARNING, "이력 저장 실패: {0}", message);
-        state.submit(current -> new Transition<>(current, List.of(new AppEvent.StoreNotice(message)), true));
+    private void announce(HistoryStoreError error) {
+        LOG.log(Level.WARNING, "이력 저장 실패: {0}", error.describe());
+        state.submit(current -> new Transition<>(
+                current, List.of(new AppEvent.StoreNotice(new AppEvent.StoreProblem.SaveFailed(error))), true));
     }
 }

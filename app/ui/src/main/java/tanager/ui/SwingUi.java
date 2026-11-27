@@ -8,16 +8,23 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
+import tanager.application.platform.PlatformSelectionError;
 import tanager.application.port.in.AppEvent;
 import tanager.application.port.in.AppEvents;
 import tanager.application.port.in.ListProfilesUseCase;
 import tanager.application.port.in.ManageHistoryUseCase;
+import tanager.application.port.in.OpenPaneUseCase;
 import tanager.application.port.in.QueryHistoryTreeUseCase;
 import tanager.application.port.in.StartSessionUseCase;
+import tanager.application.port.out.SystemAppearance;
 import tanager.domain.history.WorkspacePath;
 import tanager.domain.shared.PaneId;
+import tanager.domain.workspace.Workspace;
 import tanager.ui.font.TerminalFontSet;
 import tanager.ui.font.TerminalFonts;
+import tanager.ui.i18n.Msg;
+import tanager.ui.i18n.NoticeText;
+import tanager.ui.motion.Motion;
 import tanager.ui.terminal.TerminalSettings;
 import tanager.ui.theme.JediTermColors;
 import tanager.ui.theme.SoftDarkLaf;
@@ -33,6 +40,8 @@ public final class SwingUi {
     /**
      * EDT 에서 메인 창을 띄우고 기억한 셸 하나를 연다(없으면 셸 선택 화면). {@code events} 의 저장소 알림은 상태줄에 보인다.
      *
+     * @param panes 창 닫기 · 포커스 · 분할 · 크기 · 줌 · 교환(키보드 · 마우스, #148)
+     * @param appearance OS 외관 설정. 애니메이션을 껐으면 전환 효과 없이 바로 바뀐다(FR-UI-04)
      * @param onShutdown 앱을 끝낼 때 셸을 닫은 뒤 EDT 밖에서 한 번 부른다(미저장 이력 저장 등, ADR-0011). 끝나면 프로세스를 끝낸다
      */
     public static void showMainWindow(
@@ -40,7 +49,10 @@ public final class SwingUi {
             ListProfilesUseCase profiles,
             QueryHistoryTreeUseCase historyTree,
             ManageHistoryUseCase historyManager,
+            PaneCommands panes,
+            OpenPaneUseCase open,
             AppEvents events,
+            SystemAppearance appearance,
             Runnable onShutdown) {
         // 창을 만들기 전에 구독한다 — 이력 불러오기 알림이 창보다 먼저 올 수 있다. 창은 앱과 수명이 같아 해제하지 않는다
         NoticeInbox inbox = new NoticeInbox();
@@ -48,6 +60,13 @@ public final class SwingUi {
         // 셸이 알린 경로를 그 창의 머리줄 · 상태줄로(#82). 콜백과 창 만들기 모두 EDT 에서 돈다 — 창이 생기기 전 보고는 받을 창이 없다
         AtomicReference<MainWindow> shown = new AtomicReference<>();
         events.subscribeOnUi(event -> {
+            // 창 배치는 StateActor 가 정하고 화면은 따라 그린다(#89). 마지막 창이 닫히면 앱을 끝낸다
+            if (event instanceof AppEvent.LayoutChanged(Workspace workspace)) {
+                Optional.ofNullable(shown.get()).ifPresent(window -> window.layoutChanged(workspace));
+            }
+            if (event instanceof AppEvent.LastPaneClosed) {
+                Optional.ofNullable(shown.get()).ifPresent(MainWindow::lastPaneClosed);
+            }
             if (event instanceof AppEvent.SessionCwdChanged(PaneId pane, WorkspacePath cwd)) {
                 Optional.ofNullable(shown.get()).ifPresent(window -> window.cwdChanged(pane, cwd));
             }
@@ -63,29 +82,44 @@ public final class SwingUi {
             List<String> warnings = new ArrayList<>();
             // 글꼴이 없어도 창은 띄운다 — 논리 글꼴 Monospaced 로 대신하고 상태줄에 알린다
             TerminalFontSet fonts = TerminalFonts.registerBundled().fold(set -> set, error -> {
-                warnings.add("번들 글꼴을 쓸 수 없어 Monospaced 로 표시한다 — " + error);
+                warnings.add(Msg.APP_FONT_FALLBACK.text(error));
                 return TerminalFontSet.fallback();
             });
             if (!installTheme()) {
-                showFatalAndExit("소프트 다크 테마를 설치하지 못했다");
+                showFatalAndExit(Msg.APP_THEME_FAILED.text());
                 return;
             }
             TerminalSettings settings = new TerminalSettings(fonts, JediTermColors.current());
+            Motion motion = Motion.fromTheme(appearance.animations());
             Executor background =
                     task -> Thread.ofVirtual().name("tanager-session-start").start(task);
-            MainWindow window =
-                    new MainWindow(sessions, profiles, historyTree, historyManager, onShutdown, settings, background);
+            MainWindow window = new MainWindow(
+                    sessions,
+                    profiles,
+                    historyTree,
+                    historyManager,
+                    panes,
+                    open,
+                    onShutdown,
+                    settings,
+                    motion,
+                    background);
             shown.set(window);
             window.show(warnings);
             inbox.attach(window::notify);
         });
     }
 
+    /** 플랫폼을 고르지 못해 시작할 수 없음을 알리고 끝낸다. */
+    public static void showFatalAndExit(PlatformSelectionError error) {
+        showFatalAndExit(NoticeText.DEFAULT.of(error));
+    }
+
     /** 시작할 수 없는 오류를 알리고 끝낸다. */
-    public static void showFatalAndExit(String message) {
+    private static void showFatalAndExit(String message) {
         SwingUtilities.invokeLater(() -> {
             installTheme();
-            JOptionPane.showMessageDialog(null, message, "Tanager 를 시작할 수 없습니다", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(null, message, Msg.APP_CANNOT_START.text(), JOptionPane.ERROR_MESSAGE);
             System.exit(1);
         });
     }

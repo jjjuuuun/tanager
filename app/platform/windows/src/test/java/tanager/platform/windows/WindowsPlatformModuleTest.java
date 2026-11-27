@@ -94,4 +94,44 @@ class WindowsPlatformModuleTest {
         assertThat(expected.resolve("tanager.ps1")).isRegularFile();
         assertThat(expected.resolve("tanager.bash")).isRegularFile();
     }
+
+    @Test
+    @DisplayName("paths() 는 WSL 기본 마운트(/mnt/)로 /mnt/c/x ↔ C:\\x 를 바꾼다(#90)")
+    void pathsUseDefaultMount() {
+        // given
+        var mnt = tanager.domain.history.WorkspacePath.of(
+                        new tanager.domain.history.ShellEnvironment.Wsl("U"), "/mnt/c/x")
+                .value()
+                .orElseThrow();
+
+        // when
+        var windows = new WindowsPlatformModule()
+                .paths()
+                .translate(mnt, new tanager.domain.history.ShellEnvironment.Windows());
+
+        // then
+        org.assertj.core.api.Assertions.assertThat(windows.map(tanager.domain.history.WorkspacePath::path))
+                .contains("C:\\x");
+    }
+
+    @Test
+    @DisplayName("appearance() 는 레지스트리의 '애니메이션 효과' 설정을 읽는다(#152)")
+    void appearanceReadsAnimationSetting() {
+        // given
+        WindowsShellCatalog catalog = new WindowsShellCatalog(
+                new FakeCommandRunner(new CommandOutcome.NotStarted("x")),
+                key -> Optional.empty(),
+                Duration.ofSeconds(1));
+        FakeCommandRunner reg = new FakeCommandRunner(new CommandOutcome.Exited(
+                0, "    MinAnimate    REG_SZ    0\r\n".getBytes(java.nio.charset.StandardCharsets.US_ASCII)));
+        WindowsPlatformModule custom = new WindowsPlatformModule(catalog, key -> Optional.empty(), "C:\\Users\\u", reg);
+
+        // when
+        boolean animations = custom.appearance().animations();
+
+        // then
+        assertThat(animations).isFalse();
+        assertThat(reg.commands()).hasSize(1);
+        assertThat(reg.commands().getFirst()).startsWith("reg.exe", "query");
+    }
 }

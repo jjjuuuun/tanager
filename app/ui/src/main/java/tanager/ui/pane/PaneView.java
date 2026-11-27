@@ -11,6 +11,8 @@ import tanager.domain.session.SessionState;
 import tanager.domain.session.ShellProfile;
 import tanager.domain.session.TerminalSession;
 import tanager.domain.session.WorkingDir;
+import tanager.ui.i18n.Msg;
+import tanager.ui.i18n.NoticeText;
 
 /**
  * 창 상태를 화면 글자로 옮긴 것(순수 계산).
@@ -29,12 +31,12 @@ record PaneView(
         Optional<String> hint,
         Optional<String> path,
         Optional<String> warning) {
-    static final String STARTING = "셸을 시작하는 중…";
-    static final String EXITED_HINT = "Enter 다시 시작 · Tab 다른 셸 · Esc 닫기";
-    static final String RETRY_HINT = "Enter 다시 시도 · Tab 다른 셸 · Esc 닫기";
-    static final String CLOSE_HINT = "Esc 닫기";
-    static final String PICKING_HEADER = "셸 선택";
-    static final String NO_INTEGRATION = "셸 통합 없음 — 경로를 기록하지 않는다";
+    static final String STARTING = Msg.PANE_STARTING.text();
+    static final String EXITED_HINT = Msg.PANE_HINT_EXITED.text();
+    static final String RETRY_HINT = Msg.PANE_HINT_RETRY.text();
+    static final String CLOSE_HINT = Msg.HINT_ESC_CLOSE.text();
+    static final String PICKING_HEADER = Msg.PANE_PICKING_HEADER.text();
+    static final String NO_INTEGRATION = Msg.PANE_NO_INTEGRATION.text();
 
     PaneView {
         Objects.requireNonNull(header, "header");
@@ -61,7 +63,7 @@ record PaneView(
                 new PaneView(
                         header(session),
                         sessionStatus(session),
-                        Optional.of("종료 코드 " + exitCode(session)),
+                        Optional.of(Msg.PANE_EXIT_CODE.text(exitCode(session))),
                         Optional.of(EXITED_HINT),
                         pathOf(session),
                         Optional.empty());
@@ -70,7 +72,7 @@ record PaneView(
                 new PaneView(
                         retry.knownProfile().map(PaneView::shell).orElse("Tanager"),
                         retry.knownProfile().map(PaneView::status).orElse(""),
-                        Optional.of("셸을 시작하다 예상하지 못한 오류가 났다 — " + detail),
+                        Optional.of(Msg.PANE_ERRORED.text(detail)),
                         Optional.of(RETRY_HINT),
                         Optional.empty(),
                         Optional.empty());
@@ -99,7 +101,7 @@ record PaneView(
                 new PaneView(
                         shell(launch.failed().profile()),
                         status(launch.failed().profile()),
-                        Optional.of("셸을 시작하지 못했다 — " + launch.error().describe()),
+                        Optional.of(Msg.PANE_LAUNCH_FAILED.text(NoticeText.DEFAULT.of(launch.error()))),
                         Optional.of(RETRY_HINT),
                         Optional.empty(),
                         Optional.empty());
@@ -107,7 +109,7 @@ record PaneView(
                 new PaneView(
                         "Tanager",
                         "",
-                        Optional.of("띄울 수 있는 셸(WSL · Windows PowerShell · cmd)을 찾지 못했다 — 앱을 다시 시작해 주세요"),
+                        Optional.of(Msg.PANE_NO_SHELL.text()),
                         Optional.of(CLOSE_HINT),
                         Optional.empty(),
                         Optional.empty());
@@ -115,7 +117,7 @@ record PaneView(
                 new PaneView(
                         "Tanager",
                         "",
-                        Optional.of("세션을 시작할 수 없다 — " + describe(rejected.error())),
+                        Optional.of(Msg.PANE_REJECTED.text(describe(rejected.error()))),
                         Optional.of(CLOSE_HINT),
                         Optional.empty(),
                         Optional.empty());
@@ -201,8 +203,8 @@ record PaneView(
     private static String describe(SessionError error) {
         return switch (error) {
             case SessionError.IllegalTransition(SessionState from, String event) ->
-                "지금 상태(" + from.getClass().getSimpleName() + ")에서 " + event + " 를 할 수 없다";
-            case SessionError.EnvironmentMismatch _ -> "시작 경로의 환경이 셸의 환경과 다르다";
+                Msg.PANE_REJECTED_TRANSITION.text(from.getClass().getSimpleName(), event);
+            case SessionError.EnvironmentMismatch _ -> Msg.PANE_REJECTED_ENVIRONMENT.text();
         };
     }
 }

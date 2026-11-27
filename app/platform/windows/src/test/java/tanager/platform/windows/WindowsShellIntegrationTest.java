@@ -171,7 +171,7 @@ class WindowsShellIntegrationTest {
         assertThat(result)
                 .isInstanceOfSatisfying(
                         Integration.Unavailable.class,
-                        u -> assertThat(u.reason()).isNotBlank());
+                        u -> assertThat(u.problem()).isInstanceOf(Integration.Problem.InstallFailed.class));
     }
 
     @Test
@@ -215,10 +215,11 @@ class WindowsShellIntegrationTest {
         assertThat(result)
                 .isInstanceOfSatisfying(
                         Integration.Unavailable.class,
-                        u -> assertThat(u.reason())
-                                .startsWith("셸 통합 스크립트를 설치하지 못했다: " + target + " (")
-                                .endsWith(")")
-                                .doesNotContain("java.", "Exception:"));
+                        u -> assertThat(u.problem())
+                                .isInstanceOfSatisfying(Integration.Problem.InstallFailed.class, failed -> {
+                                    assertThat(failed.path()).isEqualTo(target.toString());
+                                    assertThat(failed.detail()).doesNotContain("java.", "Exception:");
+                                }));
     }
 
     @Test

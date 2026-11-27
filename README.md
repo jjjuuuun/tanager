@@ -3,13 +3,13 @@
 **English** | [한국어](README.ko.md)
 
 [![CI](https://github.com/jjjuuuun/tanager/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/jjjuuuun/tanager/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/badge/release-v0.3.0-blue)](https://github.com/jjjuuuun/tanager/releases)
+[![Release](https://img.shields.io/badge/release-v0.4.0-blue)](https://github.com/jjjuuuun/tanager/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 A desktop terminal manager for Windows. Split **WSL**, **Windows PowerShell 5.1** and **cmd** terminals in one window like tmux, and keep every directory you have worked in as a **folder tree** — so after a reboot you know exactly where you left off.
 
 > [!NOTE]
-> **Latest release: v0.3.0 — history and folder tree.** One terminal per window, and every directory you work in is kept in a folder tree on the left. Splits and opening a folder from the tree arrive in **v0.4.0**. See the [roadmap](#roadmap).
+> **Latest release: v0.4.0 — splits.** Split one window into as many terminals as you need with the keyboard or the mouse, and open any folder from the tree in a new pane. Tabs, restoring the layout after a restart, and settings are planned for **v0.5.0**. See the [roadmap](#roadmap).
 
 ## Why Tanager?
 
@@ -43,40 +43,37 @@ The executable is not code-signed yet, so Windows SmartScreen may warn you. Choo
 
 ## Usage
 
-### What works in v0.3.0
+### What works in v0.4.0
 
 1. Launch `Tanager.exe`. Tanager lists the shells it found on this PC — your WSL distros, Windows PowerShell 5.1 and cmd.
 2. Pick one with the arrow keys and <kbd>Enter</kbd> (or <kbd>1</kbd>–<kbd>9</kbd>). Leave the "open this shell directly next time" option on to skip the list from then on.
 3. The shell runs in a full terminal (ConPTY). Korean text and IME input work thanks to the bundled D2Coding font.
 4. As you `cd`, the pane header and the status bar show where the shell is, and the folder appears in the **sidebar** under its environment ("WSL · Ubuntu", "Windows"). Running sessions hang under the folder they are in.
-5. In the sidebar:
-   - <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd> searches the tree. <kbd>Esc</kbd> clears the search.
-   - <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd> shows or hides the sidebar.
-   - Right-click a folder (or press the menu key or <kbd>Shift</kbd>+<kbd>F10</kbd>) to copy its path, pin it, give it an alias, hide it or delete it from history. <kbd>Delete</kbd> deletes the selected entry.
-6. When the shell exits, the pane shows its exit code:
-   - <kbd>Enter</kbd> restarts it in the last directory it reported.
-   - <kbd>Tab</kbd> picks another shell.
-   - <kbd>Esc</kbd> closes the window.
+5. Split the window with the keys below or the pane header buttons. Each pane runs its own shell. Drag the dividers to resize, and drag a pane by its header (≡) onto another pane to move or swap it.
+6. In the sidebar:
+   - Double-click a folder, press <kbd>Enter</kbd> or drag it onto a pane to open it in a new pane. Right-click it for **Open here ▸ Right / Below** and **Open with another profile ▸** — WSL and Windows paths are translated (`/mnt/c/work` ↔ `C:\work`).
+   - Click a session to jump to its pane. Its menu can also restart or close it.
+   - <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd> searches the tree, and <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd> shows or hides the sidebar.
+   - The folder menu (right-click, the menu key or <kbd>Shift</kbd>+<kbd>F10</kbd>) also copies the path, pins, sets an alias, hides or deletes from history.
+7. When a shell exits, its pane shows the exit code. <kbd>Enter</kbd> restarts it in the last directory it reported, <kbd>Tab</kbd> picks another shell and <kbd>Esc</kbd> closes the pane. Closing the last pane closes the app.
 
-History is saved to `%APPDATA%\Tanager\state.json`.
+History is saved to `%APPDATA%\Tanager\state.json`. The interface is in English, or in Korean when the Windows display language is Korean. The layout is not restored after a restart yet (v0.5.0).
 
-The interface is in Korean for now.
+### Key bindings
 
-### Planned key bindings (from v0.4.0)
-
-Default key bindings (Windows). Everything can also be done with the mouse — pane header buttons, dragging dividers, and dragging panes or sidebar folders onto drop zones. Bindings may still change before v1.0.
+Default key bindings (Windows). Layout keys work even while a shell has the focus, and take precedence over shell keys such as <kbd>Alt</kbd>+<kbd>←</kbd> in bash. Bindings may still change before v1.0.
 
 | Action | Keys | Mouse |
 |---|---|---|
-| Split right / down | <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>=</kbd> / <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>-</kbd> | Pane header ▥ / ▤ |
+| Split right / down | <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>=</kbd> / <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>-</kbd> | Pane header ▥ / ▤, or right-click ▸ Split |
 | Move focus | <kbd>Alt</kbd>+<kbd>←↑→↓</kbd> | Click a pane |
 | Resize (5 %) | <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>←↑→↓</kbd> | Drag the divider (double-click = 50:50) |
 | Zoom | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> | Pane header □ or double-click the header |
 | Close pane | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>W</kbd> | Pane header × |
 | Move / swap panes | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>←→</kbd> (swap) | Drag the header ≡ onto another pane's edge (move) or centre (swap) |
-| New tab / switch tab | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd> / <kbd>Ctrl</kbd>+<kbd>Tab</kbd> | Tab bar |
 | Open a folder from history | <kbd>Enter</kbd> in the sidebar | Double-click, or drag it onto a pane |
-| Toggle toolkit | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>K</kbd> | — |
+| New tab / switch tab *(planned, v0.5.0)* | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd> / <kbd>Ctrl</kbd>+<kbd>Tab</kbd> | Tab bar |
+| Toggle toolkit *(planned, v1.0.0)* | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>K</kbd> | — |
 
 Tanager learns where each shell is through a small shell-integration hook that reports the current directory after every prompt (OSC 7 for bash, OSC 9;9 for PowerShell and cmd). It never records the commands you type or their output — only directories.
 
@@ -149,9 +146,9 @@ The full rules (in Korean) are in [`.claude/rules/git.md`](.claude/rules/git.md)
 |---|---|
 | v0.1.0 | Scaffolding — modules, architecture rules, platform selection, packaging ✅ |
 | v0.2.0 | Single terminal — shell detection, one terminal pane, restart on exit, soft theme ✅ |
-| **v0.3.0** | History and folder tree — directory tracking, folder → session tree, pin and search ✅ |
-| v0.4.0 | Splits — keyboard and mouse |
-| v0.5.0 | Restore, tabs, settings, themes, resource monitor |
+| v0.3.0 | History and folder tree — directory tracking, folder → session tree, pin and search ✅ |
+| **v0.4.0** | Splits — split, resize, zoom, swap and move with keyboard and mouse, open from the tree ✅ |
+| v0.5.0 | Restore, tabs, settings, themes, resource monitor (next, planned) |
 | v1.0.0 | Toolkit panel and stabilisation |
 | v1.1.0 | macOS |
 

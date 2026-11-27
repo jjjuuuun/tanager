@@ -16,6 +16,7 @@ import tanager.application.port.in.StartedSession;
 import tanager.application.port.out.FakePlatformModule;
 import tanager.application.port.out.FakeShellIntegration;
 import tanager.application.port.out.InMemoryConfigRepository;
+import tanager.application.port.out.Integration;
 import tanager.application.port.out.LaunchError;
 import tanager.application.port.out.ScriptedPtyLauncher;
 import tanager.application.port.out.ScriptedTerminalStream;
@@ -240,7 +241,7 @@ class SessionStarterTrackingTest {
     @DisplayName("셸 통합을 쓸 수 없으면 구독 없이 시작 경로를 한 번 기록하고 알림을 준다")
     void unavailableIntegrationRecordsStartDirOnce() {
         // given
-        platform.withIntegration(FakeShellIntegration.unavailable("스크립트를 쓸 수 없다"));
+        platform.withIntegration(FakeShellIntegration.unavailable());
 
         // when
         StartedSession session = start(P1, POWERSHELL, Optional.of(new WorkingDir.At(win("C:\\work"))));
@@ -248,7 +249,8 @@ class SessionStarterTrackingTest {
         // then
         assertThat(count(win("C:\\work"))).isEqualTo(1);
         assertThat(streamOf(0).subscriberCount()).isZero();
-        assertThat(session.notices()).containsExactly(new StartNotice.IntegrationUnavailable("스크립트를 쓸 수 없다"));
+        assertThat(session.notices())
+                .containsExactly(new StartNotice.IntegrationUnavailable(new Integration.Problem.NotSupported()));
         assertThat(session.notices().get(0).describe()).isNotBlank();
         assertThat(leaf(P1).cwd()).contains(win("C:\\work"));
     }
@@ -257,14 +259,15 @@ class SessionStarterTrackingTest {
     @DisplayName("셸 통합을 쓸 수 없고 홈에서 시작하면 기록은 없고 알림만 있다")
     void unavailableIntegrationAtHomeRecordsNothing() {
         // given
-        platform.withIntegration(FakeShellIntegration.unavailable("x"));
+        platform.withIntegration(FakeShellIntegration.unavailable());
 
         // when
         StartedSession session = startAtHome(P1, POWERSHELL);
 
         // then
         assertThat(state.snapshot().history().entries()).isEmpty();
-        assertThat(session.notices()).containsExactly(new StartNotice.IntegrationUnavailable("x"));
+        assertThat(session.notices())
+                .containsExactly(new StartNotice.IntegrationUnavailable(new Integration.Problem.NotSupported()));
     }
 
     @Test

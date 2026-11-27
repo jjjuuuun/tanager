@@ -10,13 +10,21 @@ import tanager.domain.session.ProfileId;
  *
  * @param defaultProfile 시작할 때 띄울 프로파일
  * @param profiles 프로파일별 설정
+ * @param openPlacement 트리에서 연 창의 자리
  */
-public record AppConfig(Optional<ProfileId> defaultProfile, Map<ProfileId, ProfileSettings> profiles) {
+public record AppConfig(
+        Optional<ProfileId> defaultProfile, Map<ProfileId, ProfileSettings> profiles, OpenPlacement openPlacement) {
     private static final AppConfig DEFAULTS = new AppConfig(Optional.empty(), Map.of());
 
     public AppConfig {
         Objects.requireNonNull(defaultProfile, "defaultProfile");
         profiles = Map.copyOf(profiles);
+        Objects.requireNonNull(openPlacement, "openPlacement");
+    }
+
+    /** 창 자리는 기본값(오른쪽)인 설정. */
+    public AppConfig(Optional<ProfileId> defaultProfile, Map<ProfileId, ProfileSettings> profiles) {
+        this(defaultProfile, profiles, OpenPlacement.RIGHT);
     }
 
     /** 설정 파일이 없을 때의 값: 기본 프로파일도 프로파일별 설정도 없다. */

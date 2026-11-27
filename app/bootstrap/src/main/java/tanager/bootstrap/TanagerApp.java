@@ -9,8 +9,10 @@ import tanager.application.platform.PlatformSelection;
 import tanager.application.platform.PlatformSelectionError;
 import tanager.application.port.in.AppEvents;
 import tanager.application.port.out.PlatformModule;
+import tanager.application.port.out.SystemAppearance;
 import tanager.application.state.UiAppEvents;
 import tanager.domain.shared.Result;
+import tanager.ui.PaneCommands;
 import tanager.ui.SwingUi;
 import tanager.ui.SwingUiDispatcher;
 
@@ -41,17 +43,22 @@ public final class TanagerApp {
                 LOG.log(System.Logger.Level.INFO, "플랫폼: {0} ({1})", platform.id(), os.describe());
                 Assembly assembly = Assembly.assemble(platform, new Pty4jLauncher());
                 AppEvents events = new UiAppEvents(assembly.state(), new SwingUiDispatcher());
+                // 외부 명령(Windows: reg.exe)을 쓸 수 있어 EDT 가 아닌 여기서 한 번 읽는다
+                SystemAppearance appearance = platform.appearance();
                 SwingUi.showMainWindow(
                         assembly.sessions(),
                         assembly.profiles(),
                         assembly.historyTree(),
                         assembly.historyManager(),
+                        PaneCommands.of(assembly.panes()),
+                        assembly.panes(),
                         events,
+                        appearance,
                         assembly::shutdown);
             }
             case Result.Err<PlatformModule, PlatformSelectionError>(PlatformSelectionError error) -> {
                 LOG.log(System.Logger.Level.ERROR, error.describe());
-                SwingUi.showFatalAndExit(error.describe());
+                SwingUi.showFatalAndExit(error);
             }
         }
     }

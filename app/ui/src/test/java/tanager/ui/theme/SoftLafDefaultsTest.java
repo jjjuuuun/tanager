@@ -88,6 +88,21 @@ class SoftLafDefaultsTest {
     }
 
     @Test
+    @DisplayName("ThemeColors 는 토큰 색에 불투명도를 입힌 반투명 색을 준다 — 끌어다 놓을 곳 미리보기(#151)")
+    void themeColorsTranslucent() {
+        // given
+        javax.swing.UIManager.put(ColorToken.ACCENT.key(), new Color(1, 2, 3));
+        try {
+            // when / then
+            assertThat(ThemeColors.translucent(ColorToken.ACCENT, 64)).isEqualTo(new Color(1, 2, 3, 64));
+            org.assertj.core.api.Assertions.assertThatIllegalArgumentException()
+                    .isThrownBy(() -> ThemeColors.translucent(ColorToken.ACCENT, 256));
+        } finally {
+            javax.swing.UIManager.put(ColorToken.ACCENT.key(), null);
+        }
+    }
+
+    @Test
     @DisplayName("테마가 설치되지 않아 값이 없으면 ThemeColors 는 IllegalStateException")
     void themeColorsWithoutThemeThrows() throws Exception {
         // given: 소프트 테마가 아닌 LaF 를 명시적으로 깐다(LaF 는 JVM 전역 — 다른 테스트가 남긴 테마에 기대지 않는다)
@@ -123,6 +138,18 @@ class SoftLafDefaultsTest {
                     .as(component)
                     .isLessThan(Contrast.ratio(background, new Rgb(0, 0, 0)));
         }
+    }
+
+    @ParameterizedTest
+    @EnumSource(SoftTheme.class)
+    @DisplayName("전환 시간 토큰은 150~200ms 다(FR-UI-04)")
+    void motionDurationInRange(SoftTheme theme) {
+        // given
+        UIDefaults d = defaults(theme);
+
+        // then
+        assertThat(d.get("Tanager.motion.duration")).isInstanceOf(Integer.class);
+        assertThat(d.getInt("Tanager.motion.duration")).isBetween(150, 200);
     }
 
     @ParameterizedTest

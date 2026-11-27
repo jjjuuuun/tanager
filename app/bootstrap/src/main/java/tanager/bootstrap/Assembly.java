@@ -26,6 +26,7 @@ import tanager.application.service.HistoryManager;
 import tanager.application.service.HistorySaver;
 import tanager.application.service.HistoryTreeQuery;
 import tanager.application.service.IntegrationStatus;
+import tanager.application.service.PaneManager;
 import tanager.application.service.ProfileCatalog;
 import tanager.application.service.SessionStarter;
 import tanager.application.service.VisitRecorder;
@@ -57,6 +58,7 @@ final class Assembly {
     private final HistorySaver saver;
     private final ExecutorScheduler scheduler;
     private final JsonStateRepository history;
+    private final PaneManager panes;
 
     private Assembly(
             ListProfilesUseCase profiles,
@@ -65,7 +67,8 @@ final class Assembly {
             ExecutorService stateExecutor,
             HistorySaver saver,
             ExecutorScheduler scheduler,
-            JsonStateRepository history) {
+            JsonStateRepository history,
+            PaneManager panes) {
         this.profiles = profiles;
         this.sessions = sessions;
         this.state = state;
@@ -73,6 +76,7 @@ final class Assembly {
         this.saver = saver;
         this.scheduler = scheduler;
         this.history = history;
+        this.panes = panes;
     }
 
     /**
@@ -98,7 +102,8 @@ final class Assembly {
         VisitRecorder visits = new VisitRecorder(state, InstantSource.system());
         SessionStarter starter = new SessionStarter(
                 catalog, config, platform, integration, launcher, new DefaultProfileMemory(config), state, visits);
-        return new Assembly(catalog, starter, state, stateExecutor, saver, scheduler, history);
+        PaneManager panes = new PaneManager(catalog, config, platform.paths(), state);
+        return new Assembly(catalog, starter, state, stateExecutor, saver, scheduler, history, panes);
     }
 
     // 탐지가 끝나면 그 순서를 트리의 환경 순서로 알린다(#83). 실패하면 트리는 이력의 환경을 이름순으로 놓는다
@@ -132,6 +137,11 @@ final class Assembly {
 
     StateActor state() {
         return state;
+    }
+
+    /** 창 열기 · 닫기 · 포커스(#88 · #89). */
+    PaneManager panes() {
+        return panes;
     }
 
     /**
@@ -203,8 +213,8 @@ final class Assembly {
                 switch (integration.await()) {
                     case Integration.Installed(var directory) ->
                         LOG.log(System.Logger.Level.INFO, "셸 통합 스크립트: {0}", directory);
-                    case Integration.Unavailable(var reason) ->
-                        LOG.log(System.Logger.Level.WARNING, "셸 통합 없음: {0}", reason);
+                    case Integration.Unavailable(var problem) ->
+                        LOG.log(System.Logger.Level.WARNING, "셸 통합 없음: {0}", problem.describe());
                 }
             } catch (RuntimeException e) {
                 LOG.log(System.Logger.Level.ERROR, "셸 통합 설치 실패", e);

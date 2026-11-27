@@ -43,12 +43,36 @@ class MacPlatformModuleTest {
     }
 
     @Test
-    @DisplayName("integration().install() 은 M7 전까지 예외 없이 Unavailable(M7) 이다")
+    @DisplayName("integration().install() 은 M7 전까지 예외 없이 Unavailable(NotSupported) 다")
     void integrationIsUnavailable() {
         // when
         Integration result = module.integration().install();
 
         // then
-        assertThat(result).isEqualTo(new Integration.Unavailable("M7"));
+        assertThat(result).isEqualTo(new Integration.Unavailable(new Integration.Problem.NotSupported()));
+    }
+
+    @Test
+    @DisplayName("paths() 는 같은 환경만 그대로 돌려준다(Posix 는 M7)")
+    void pathsSameEnvironmentOnly() {
+        // given
+        var win = new tanager.domain.history.ShellEnvironment.Windows();
+        var path = tanager.domain.history.WorkspacePath.of(win, "C:\\x").value().orElseThrow();
+
+        // when / then
+        org.assertj.core.api.Assertions.assertThat(
+                        new MacPlatformModule().paths().translate(path, win))
+                .contains(path);
+        org.assertj.core.api.Assertions.assertThat(new MacPlatformModule()
+                        .paths()
+                        .translate(path, new tanager.domain.history.ShellEnvironment.Wsl("U")))
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("appearance() 는 애니메이션을 켠다(M7 에서 OS 설정을 읽는다)")
+    void appearanceEnablesAnimations() {
+        // when / then
+        assertThat(new MacPlatformModule().appearance().animations()).isTrue();
     }
 }

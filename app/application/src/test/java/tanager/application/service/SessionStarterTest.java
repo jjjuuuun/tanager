@@ -158,15 +158,16 @@ class SessionStarterTest {
     @DisplayName("셸 통합을 쓸 수 없으면 Unavailable 을 기동 명령 계산에 넘긴다")
     void passesUnavailableIntegrationToLaunchCommand() {
         // given
-        FakePlatformModule unavailable = new FakePlatformModule(List.of(WSL_A))
-                .withIntegration(FakeShellIntegration.unavailable("스크립트를 쓸 수 없다"));
+        FakePlatformModule unavailable =
+                new FakePlatformModule(List.of(WSL_A)).withIntegration(FakeShellIntegration.unavailable());
         SessionStarter withoutIntegration = newStarter(unavailable);
 
         // when
         started(withoutIntegration.start(requestFor("wsl:A")));
 
         // then
-        assertThat(unavailable.launchIntegrations()).containsExactly(new Integration.Unavailable("스크립트를 쓸 수 없다"));
+        assertThat(unavailable.launchIntegrations())
+                .containsExactly(new Integration.Unavailable(new Integration.Problem.NotSupported()));
     }
 
     @Test
@@ -230,7 +231,8 @@ class SessionStarterTest {
     @DisplayName("설정을 읽다 난 경고는 알림으로 전달한다")
     void forwardsConfigWarnings() {
         // given
-        ConfigWarning warning = new ConfigWarning.IgnoredValue("defaultProfile", "문자열이 아니다");
+        ConfigWarning warning =
+                new ConfigWarning.IgnoredValue("defaultProfile", ConfigWarning.IgnoredReason.NOT_NON_EMPTY_STRING);
         config.willLoad(Result.ok(new LoadedConfig(AppConfig.defaults(), List.of(warning))));
 
         // when
@@ -427,7 +429,7 @@ class SessionStarterTest {
     @DisplayName("알림은 설정 경고 → 시작 경로 순서다")
     void noticesFollowDecisionOrder() {
         // given
-        ConfigWarning warning = new ConfigWarning.IgnoredValue("profiles.x", "객체가 아니다");
+        ConfigWarning warning = new ConfigWarning.IgnoredValue("profiles.x", ConfigWarning.IgnoredReason.NOT_OBJECT);
         config.willLoad(Result.ok(new LoadedConfig(
                 new AppConfig(
                         Optional.of(new ProfileId("wsl:Gone")),
@@ -450,7 +452,7 @@ class SessionStarterTest {
     @DisplayName("잘못된 시작 경로 알림도 설정 경고 뒤에 온다")
     void invalidStartDirNoticeComesLast() {
         // given
-        ConfigWarning warning = new ConfigWarning.IgnoredValue("profiles.x", "객체가 아니다");
+        ConfigWarning warning = new ConfigWarning.IgnoredValue("profiles.x", ConfigWarning.IgnoredReason.NOT_OBJECT);
         config.willLoad(Result.ok(new LoadedConfig(
                 new AppConfig(
                         Optional.of(new ProfileId("wsl:Gone")),
@@ -692,7 +694,9 @@ class SessionStarterTest {
     }
 
     static Stream<ConfigError> saveErrors() {
-        return Stream.of(new ConfigError.WouldOverwrite("새 버전"), new ConfigError.WriteFailed("disk"));
+        return Stream.of(
+                new ConfigError.WouldOverwrite(ConfigError.Risk.NEWER_VERSION, "schemaVersion 2"),
+                new ConfigError.WriteFailed("disk"));
     }
 
     @Test
@@ -743,7 +747,8 @@ class SessionStarterTest {
     @DisplayName("설정 경고는 선택 요구에도 담긴다")
     void choiceRequiredCarriesConfigWarnings() {
         // given
-        ConfigWarning warning = new ConfigWarning.IgnoredValue("defaultProfile", "문자열이 아니다");
+        ConfigWarning warning =
+                new ConfigWarning.IgnoredValue("defaultProfile", ConfigWarning.IgnoredReason.NOT_NON_EMPTY_STRING);
         config.willLoad(Result.ok(new LoadedConfig(AppConfig.defaults(), List.of(warning))));
 
         // when

@@ -2,6 +2,8 @@ package tanager.ui.pane;
 
 import java.util.Objects;
 import java.util.Optional;
+import tanager.domain.history.WorkspacePath;
+import tanager.domain.session.ProfileId;
 import tanager.domain.session.SessionState;
 import tanager.domain.session.ShellProfile;
 import tanager.domain.session.TerminalSession;
@@ -18,8 +20,23 @@ sealed interface Attempt {
         };
     }
 
-    /** 기억한 셸로 새로 띄운다(없거나 사라졌으면 선택 화면이 된다). */
-    record Fresh() implements Attempt {}
+    /**
+     * 창의 명세대로 새로 띄운다. 프로파일이 비면 기억한 셸(없거나 사라졌으면 선택 화면), 경로가 비면 그 셸의 시작 경로.
+     *
+     * @param profile 띄울 프로파일(트리에서 연 창, #89)
+     * @param dir 시작 경로(트리에서 연 창의 경로)
+     */
+    record Fresh(Optional<ProfileId> profile, Optional<WorkspacePath> dir) implements Attempt {
+        public Fresh {
+            Objects.requireNonNull(profile, "profile");
+            Objects.requireNonNull(dir, "dir");
+        }
+
+        /** 기억한 셸을 그 셸의 시작 경로에서. */
+        Fresh() {
+            this(Optional.empty(), Optional.empty());
+        }
+    }
 
     /** 끝난 세션을 같은 프로파일로 마지막 경로에서 다시 띄운다. */
     record Restart(TerminalSession exited) implements Attempt {

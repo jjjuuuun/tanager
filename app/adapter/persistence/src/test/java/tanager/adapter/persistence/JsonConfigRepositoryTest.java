@@ -23,6 +23,7 @@ import tanager.application.port.out.AppConfig;
 import tanager.application.port.out.ConfigError;
 import tanager.application.port.out.ConfigWarning;
 import tanager.application.port.out.LoadedConfig;
+import tanager.application.port.out.OpenPlacement;
 import tanager.application.port.out.ProfileSettings;
 import tanager.domain.session.ProfileId;
 import tanager.domain.shared.Result;
@@ -173,7 +174,7 @@ class JsonConfigRepositoryTest {
     }
 
     @Test
-    @DisplayName("Corrupt 의 설명에는 오류가 난 줄과 열이 있다")
+    @DisplayName("Corrupt 의 설명에는 오류가 난 줄:열이 있다(언어와 무관한 형식, #137)")
     void corruptDetailHasLocation() throws IOException {
         // given
         write("{\n  \"defaultProfile\": ,\n}");
@@ -183,7 +184,7 @@ class JsonConfigRepositoryTest {
 
         // then
         assertThat(error).isInstanceOf(ConfigError.Corrupt.class);
-        assertThat(((ConfigError.Corrupt) error).detail()).contains("줄 2").contains("열 ");
+        assertThat(((ConfigError.Corrupt) error).detail()).containsPattern("\\(2:\\d+\\)$");
     }
 
     @Test
@@ -491,5 +492,63 @@ class JsonConfigRepositoryTest {
                 walk.sorted(Comparator.reverseOrder()).forEach(p -> p.toFile().delete());
             }
         }
+    }
+
+    // ---- openPlacement(#88) ----
+
+    @Test
+    @DisplayName("openPlacement 는 RIGHT · DOWN 을 읽고, 없으면 RIGHT 이며 경고가 없다")
+    void openPlacementKnownValues() throws IOException {
+        for (var entry : java.util.Map.of(
+                        "{\"openPlacement\": \"RIGHT\"}", OpenPlacement.RIGHT,
+                        "{\"openPlacement\": \"DOWN\"}", OpenPlacement.DOWN,
+                        "{}", OpenPlacement.RIGHT)
+                .entrySet()) {
+            // given
+            write(entry.getKey());
+
+            // when
+            LoadedConfig loaded = repository().load().value().orElseThrow();
+
+            // then
+            assertThat(loaded.config().openPlacement()).as(entry.getKey()).isEqualTo(entry.getValue());
+            assertThat(loaded.warnings()).as(entry.getKey()).isEmpty();
+        }
+    }
+
+    @Test
+    @DisplayName("NEW_TAB 은 탭이 생기기 전까지 RIGHT + 아직 지원하지 않음 경고, 모르는 값 · 문자열 아님도 RIGHT + 경고")
+    void openPlacementFallbacks() throws IOException {
+        for (var entry : java.util.Map.of(
+                        "{\"openPlacement\": \"NEW_TAB\"}", ConfigWarning.IgnoredReason.NOT_SUPPORTED_YET,
+                        "{\"openPlacement\": \"UP\"}", ConfigWarning.IgnoredReason.UNKNOWN_VALUE,
+                        "{\"openPlacement\": 3}", ConfigWarning.IgnoredReason.NOT_NON_EMPTY_STRING)
+                .entrySet()) {
+            // given
+            write(entry.getKey());
+
+            // when
+            LoadedConfig loaded = repository().load().value().orElseThrow();
+
+            // then
+            assertThat(loaded.config().openPlacement()).as(entry.getKey()).isEqualTo(OpenPlacement.RIGHT);
+            assertThat(loaded.warnings())
+                    .as(entry.getKey())
+                    .containsExactly(new ConfigWarning.IgnoredValue("openPlacement", entry.getValue()));
+        }
+    }
+
+    @Test
+    @DisplayName("기본 셸을 저장해도 파일의 openPlacement 는 그대로다(앱은 이 키를 쓰지 않는다)")
+    void saveKeepsOpenPlacement() throws IOException {
+        // given
+        write("{\"openPlacement\": \"DOWN\"}");
+
+        // when
+        repository().save(new AppConfig(Optional.of(new ProfileId("cmd")), java.util.Map.of()));
+
+        // then
+        assertThat(repository().load().value().orElseThrow().config().openPlacement())
+                .isEqualTo(OpenPlacement.DOWN);
     }
 }

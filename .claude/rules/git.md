@@ -31,7 +31,7 @@ feat/12-…   ●─●─●             hotfix/31-… ●──────●
 
 `pr-lint.yml` 이 head·base·제목 조합을 검사한다. Claude 는 PR 본문 첫 줄에 병합 방법을 적는다.
 
-**확인 지점**: 사용자가 하는 일은 **마일스톤마다 한 번, 릴리스 PR(dev → main) 병합**뿐이다. 그동안의 PR · 리뷰 코멘트를 모아 보고 병합을 결정한다(사용자 결정 2026-11-24, 2026-11-25 개정 · ADR-0005). 그 밖의 병합(작업 PR squash · 역병합 · hotfix)과 태그 · Release 는 Claude 가 묻지 않고 한다. 중간에 보고 싶으면 PR · 리뷰 코멘트는 언제든 남아 있고, 문제가 있으면 릴리스 전에 되돌리는 PR 을 만든다.
+**확인 지점**: 사용자가 하는 일은 **v1.0.0 이상 릴리스 PR(dev → main) 병합**뿐이다(사용자 결정 2026-11-24, 2026-11-25 · 2026-11-27 개정 · ADR-0005). v1.0.0 미만 릴리스 PR 도 Claude 가 CI green · 릴리스 리뷰 "릴리스 권장"이면 merge commit 으로 병합하고 태그 · Release 까지 한다(v0.3.1 까지는 사용자가 병합했다). 그 밖의 병합(작업 PR squash · 역병합 · hotfix)과 태그 · Release 도 Claude 가 묻지 않고 한다. 진행 상황은 6시간마다 메일로 보고한다(18 · 0 · 6 · 12시). 중간에 보고 싶으면 PR · 리뷰 코멘트는 언제든 남아 있고, 문제가 있으면 릴리스 전에 되돌리는 PR 을 만든다.
 
 ## 커밋 메시지 (`.gitmessage`, `.githooks/commit-msg` 가 검사)
 ```
@@ -66,12 +66,13 @@ feat/12-…   ●─●─●             hotfix/31-… ●──────●
 | 9. Ready for review | Claude | `gh pr ready` |
 | 10. 조건이 맞으면 **Squash merge** — CI green · 차단 0건 · 권고 "병합 권장". 아니면 멈추고 사용자에게 넘김 | Claude | `gh pr merge <n> --squash --delete-branch` |
 | 11. 마일스톤의 이슈가 모두 닫히면 **릴리스 PR dev → main** 생성 — 포함된 PR · 각 리뷰 권고 · 남은 지적 · 수동 확인 항목을 모아 정리 | Claude | `/release` |
-| 12. **사용자 확인 지점(마일스톤마다 한 번)** — 릴리스 PR 을 보고 merge commit 병합 또는 보류 | **사용자** | GitHub 화면 |
+| 12. 릴리스 PR merge commit 병합 — v1.0.0 미만은 Claude(CI green · "릴리스 권장"), **v1.0.0 이상은 사용자**(메일로 알리고 병합을 감시) | Claude / **사용자(≥ v1.0.0)** | `gh pr merge <n> --merge` / GitHub 화면 |
 | 13. main 에서 `git tag -a vX.Y.Z` → `git push origin vX.Y.Z` → release 워크플로 → 마일스톤 닫기 | Claude | `/release` |
 
 긴급 수정: `hotfix/<n>-<slug>`(main 에서 분기) → 1~9 와 같되 base = main, 조건이 맞으면 Claude 가 **merge commit** 으로 병합(`gh pr merge <n> --merge`) → 13(패치 버전) → main → dev 역병합 PR 도 Claude 가 만들고 merge commit 으로 병합.
 
-- Claude 가 절대 하지 않는 것: **릴리스 PR(dev → main) 병합**, `--rebase`·`--admin`·`--auto` 병합, 작업 PR 의 merge commit 병합, `gh pr review --approve`, main·dev 직접 커밋/푸시/병합, 강제 푸시(`--force-with-lease` 는 작업 브랜치에서만), `gh release delete`. `settings.json` deny + `guard-git.sh` 가 막는다. 병합은 PR 의 head · base 를 조회해 작업 PR(→ dev) = `--squash`, 역병합(main → dev) · `hotfix/*` → main = `--merge` 일 때만 통과한다.
+- Claude 가 절대 하지 않는 것: **v1.0.0 이상 릴리스 PR(dev → main) 병합**, `--rebase`·`--admin`·`--auto` 병합, 작업 PR 의 merge commit 병합, `gh pr review --approve`, main·dev 직접 커밋/푸시/병합, 강제 푸시(`--force-with-lease` 는 작업 브랜치에서만), `gh release delete`. `settings.json` deny + `guard-git.sh` 가 막는다. 병합은 PR 의 head · base · 제목을 조회해 작업 PR(→ dev) = `--squash`, 역병합(main → dev) · `hotfix/*` → main · v1.0.0 미만 릴리스(dev → main) = `--merge` 일 때만 통과한다.
+- CI 를 기다릴 때는 `.claude/scripts/pr-wait.sh <PR> [최대 초]` 를 쓴다(0 통과 · 1 실패 · 2 PR 없음 · 3 시간 초과). 끝없는 `until` 대기를 직접 쓰지 않는다 — push 실패를 놓치고 30분 멈춘 적이 있다(#145).
 - 태그 생성 · 푸시와 `gh release create` 는 승인 없이 한다. 승인 창이 뜨는 것은 원격 태그 · ref 삭제(`git push origin :<ref>`)와 `--tags` · `--follow-tags` 푸시뿐이다.
 - `guard-git.sh` 는 명령 **실행 전** 브랜치로 판단한다. 브랜치 생성과 커밋을 한 명령에 묶지 말고 따로 실행한다. 전역 옵션(`-C`·`-c`)을 붙여도 같은 검사를 받고, 훅 경로 변경(`.githooks` 외), `--mirror`·`--delete` 푸시, `gh api` 로 PR 병합·닫기도 막는다.
 - 커밋 메시지는 파일로 넘긴다(`git commit -F <파일>`). 메시지 본문의 `dev`·`push` 같은 글자를 guard 가 명령으로 오인하지 않게.
@@ -88,7 +89,7 @@ v0.1.0 릴리스 실패(#32)에서 나온 규칙. Windows 러너의 `shell: pwsh
 - 저장소 최초 설정(빈 시작 커밋 · dev 생성 · 기본 브랜치 main · ruleset · 라벨 · 마일스톤)은 사용자가 `.github/scripts/bootstrap-repo.sh <owner/repo>` 로 한 번 실행한다. M1 이후 `--with-checks` 로 다시 실행해 필수 CI 검사를 켠다.
 
 ## 배포 문서는 영어 (사용자 결정 2026-11-27, #115)
-- GitHub Release 노트(`docs/releases/<버전>.md`), Release 제목, README.md, 설치 파일에 들어가는 문구처럼 **밖으로 나가는 문서는 영어**로 쓴다. `README.ko.md` 는 번역본으로 같이 갱신한다.
+- GitHub Release 노트(`docs/releases/<버전>.md`), Release 제목, README.md, 설치 파일에 들어가는 문구처럼 **밖으로 나가는 문서는 영어**로 쓴다. Release 노트는 영어 본문 아래에 `<details>` 로 접히는 **한국어 번역**을 붙인다(GitHub 에 언어 전환이 없어서, 사용자 요청 2026-11-27). `README.ko.md` 는 번역본으로 같이 갱신한다.
 - README 는 dev 가 아니라 **main(마지막 릴리스) 기준**으로 쓴다. 릴리스마다 `/release` 7-2 단계에서 갱신하고, 빌드 안내에 dev 로 전환하라는 줄을 넣지 않는다. Release 배지는 GitHub API 를 부르지 않는 정적 배지(`badge/release-<버전>-blue`)를 쓴다(동적 배지가 깨져 보인 적 있음).
 - 커밋 메시지 · 이슈 · PR 본문 · 리뷰 코멘트 · 릴리스 PR 본문 · SDD · ADR · 규칙 문서는 지금처럼 한국어.
 

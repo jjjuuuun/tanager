@@ -5,8 +5,8 @@ argument-hint: "[vX.Y.Z]"
 ---
 # /release $ARGUMENTS
 
-역할: PR 준비 · 리뷰 · 태그 · Release · hotfix · 역병합은 Claude(묻지 않는다). **사용자는 릴리스 PR(dev → main) 병합만** 한다.
-작업 PR 은 Claude 가 dev 에 병합해 왔으므로, **이 릴리스 PR 이 사용자가 그 마일스톤 전체를 확인하는 유일한 지점**이다. 본문만 읽고 판단할 수 있게 쓴다.
+역할: PR 준비 · 리뷰 · 태그 · Release · hotfix · 역병합, 그리고 **v1.0.0 미만 릴리스 PR 병합**은 Claude(묻지 않는다). **사용자는 v1.0.0 이상 릴리스 PR(dev → main) 병합만** 한다(2026-11-27 개정, #145).
+릴리스 PR 본문은 마일스톤 전체를 모은 기록이다. 사용자가 나중에 이것만 읽고도 판단할 수 있게 쓴다.
 
 ## A. 준비 확인 (하나라도 실패하면 멈추고 보고)
 1. 버전: 인자가 있으면 그것, 없으면 `.github/milestones.json` 에서 열린 마일스톤의 `release`. 형식 `vX.Y.Z[-pre]`. 이미 있는 태그면 중단(`git tag -l`).
@@ -20,7 +20,7 @@ argument-hint: "[vX.Y.Z]"
 7. WSL 통합 테스트(CI 에서 안 도는 `@Tag("wsl")`): `cmd.exe /c gradlew.bat :platform:windows:test` 결과를 기록한다(M1 이후).
 7-1. 포함된 PR 모으기: `gh pr list --base dev --state merged --search 'milestone:"<마일스톤>"' --json number,title,url,mergedAt` → PR 마다 `gh api repos/{owner}/{repo}/pulls/<n>/reviews` 에서 `## Claude 리뷰` 로 시작하는 마지막 코멘트의 **권고 줄**과 **남은 지적** 항목을 뽑는다. 사용자가 손으로 확인해야 하는 항목(UI · 한글 입력 · 설치 등)은 따로 모은다.
 7-2. **배포 문서(영어) PR** — 배포 문서는 영어로 쓰고, README 는 dev 가 아니라 **main(이번 릴리스) 기준**으로 쓴다(사용자 결정 2026-11-27, #115). 릴리스 PR 을 열기 전에 작업 PR 하나로 dev 에 넣는다(`/issue` → `docs/<n>-release-vX-Y-Z`(브랜치 이름에는 점을 쓸 수 없다 — 버전의 `.` 은 `-` 로) → `/pr`).
-   - `docs/releases/<버전>.md`: 영어 Release 노트. release 워크플로가 이 파일을 Release 본문으로 쓴다(없으면 git-cliff 로 대신). 구성: 제목(`## Tanager X.Y.Z — <영어 마일스톤 이름> (날짜)`) · 한 줄 요약 · Highlights · Under the hood · Documentation · Known limitations · Downloads. 커밋 제목을 옮기지 말고 사용자가 얻는 것으로 쓴다. PR 번호는 남긴다.
+   - `docs/releases/<버전>.md`: 영어 Release 노트 + 맨 아래 `<details><summary><b>한국어</b></summary>` 로 접히는 한국어 번역(사용자 요청 2026-11-27). release 워크플로가 이 파일을 Release 본문으로 쓴다(없으면 git-cliff 로 대신). 구성: 제목(`## Tanager X.Y.Z — <영어 마일스톤 이름> (날짜)`) · 한 줄 요약 · Highlights · Under the hood · Documentation · Known limitations · Downloads. 커밋 제목을 옮기지 말고 사용자가 얻는 것으로 쓴다. PR 번호는 남긴다.
    - `README.md`(영어) · `README.ko.md`: 이번 릴리스 기준으로 갱신 — 맨 위 최신 릴리스 안내, Release 배지 버전(정적 배지 `badge/release-<버전>-blue`), "What works in <버전>", 로드맵 ✅. 다음 릴리스 내용은 "예정"으로만 쓴다. 빌드 안내에 dev 로 전환하라는 줄을 넣지 않는다.
 
 ## C. 릴리스 PR (dev → main)
@@ -37,9 +37,11 @@ argument-hint: "[vX.Y.Z]"
    ### 병합 후 (Claude 가 진행)  태그 → release 워크플로 → 마일스톤 닫기
    🤖 Generated with [Claude Code](https://claude.com/claude-code)
    ```
-9. CI 대기 → `gh pr review <번호> --comment` 로 릴리스 리뷰(권고: 릴리스 권장/보류 권장, 근거) → 멈추고 PR URL 보고.
+9. CI 대기(`.claude/scripts/pr-wait.sh <번호>`) → `gh pr review <번호> --comment` 로 릴리스 리뷰(권고: 릴리스 권장/보류 권장, 근거).
+9-1. **v1.0.0 미만**이고 CI green · "릴리스 권장"이면 `gh pr merge <번호> --merge` 로 병합하고 D 로 간다. 보류 권장이면 멈추고 보고한다.
+9-2. **v1.0.0 이상**이면 사용자에게 메일로 알리고(PR 링크 · 확인할 체크박스 · "Create a merge commit") 병합될 때까지 상태를 감시한 뒤 D 로 간다.
 
-## D. 사용자가 병합한 뒤
+## D. 병합한 뒤
 10. `git fetch origin && git switch main && git pull --ff-only`
 11. `git tag -a <버전> -m "<버전> — <마일스톤 제목>"` → `git push origin <버전>`
 12. `gh run watch` 로 release 워크플로를 본다. 실패하면 아래대로 고치고 결과를 보고한다.

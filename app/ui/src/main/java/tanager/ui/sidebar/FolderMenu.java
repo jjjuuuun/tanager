@@ -3,6 +3,7 @@ package tanager.ui.sidebar;
 import java.util.List;
 import java.util.Optional;
 import tanager.domain.history.VisitedDirectory;
+import tanager.ui.i18n.Msg;
 
 /** 노드 메뉴의 항목과 활성 규칙(순수, #86, SDD §8.4). 창을 열지 않는 동작만 — 열기는 M4(#94). */
 final class FolderMenu {
@@ -16,22 +17,26 @@ final class FolderMenu {
                 boolean pinned = visit.map(VisitedDirectory::pinned).orElse(false);
                 boolean hidden = visit.map(VisitedDirectory::hidden).orElse(false);
                 yield List.of(
-                        new MenuItem(MenuAction.COPY_PATH, "경로 복사", true),
+                        new MenuItem(MenuAction.COPY_PATH, Msg.MENU_COPY_PATH.text(), true),
                         pinned
-                                ? new MenuItem(MenuAction.UNPIN, "고정 해제", visited)
-                                : new MenuItem(MenuAction.PIN, "고정", visited),
-                        new MenuItem(MenuAction.ALIAS, "별칭…", visited),
+                                ? new MenuItem(MenuAction.UNPIN, Msg.MENU_UNPIN.text(), visited)
+                                : new MenuItem(MenuAction.PIN, Msg.MENU_PIN.text(), visited),
+                        new MenuItem(MenuAction.ALIAS, Msg.MENU_ALIAS.text(), visited),
                         hidden
-                                ? new MenuItem(MenuAction.UNHIDE, "숨김 해제", visited)
-                                : new MenuItem(MenuAction.HIDE, "숨기기", visited),
-                        new MenuItem(MenuAction.FORGET, "기록 삭제", visited));
+                                ? new MenuItem(MenuAction.UNHIDE, Msg.MENU_UNHIDE.text(), visited)
+                                : new MenuItem(MenuAction.HIDE, Msg.MENU_HIDE.text(), visited),
+                        new MenuItem(MenuAction.FORGET, Msg.MENU_FORGET.text(), visited));
             }
             case MenuTarget.Environment(var env, boolean showHidden) ->
                 List.of(
-                        new MenuItem(MenuAction.TOGGLE_HIDDEN, showHidden ? "숨긴 폴더 감추기" : "숨긴 폴더 보기", true),
-                        new MenuItem(MenuAction.EXPAND_ALL, "모두 펼치기", true),
-                        new MenuItem(MenuAction.COLLAPSE_ALL, "모두 접기", true));
-            case MenuTarget.Session(var cwd) -> List.of(new MenuItem(MenuAction.COPY_PATH, "경로 복사", cwd.isPresent()));
+                        new MenuItem(
+                                MenuAction.TOGGLE_HIDDEN,
+                                (showHidden ? Msg.MENU_CONCEAL_HIDDEN : Msg.MENU_SHOW_HIDDEN).text(),
+                                true),
+                        new MenuItem(MenuAction.EXPAND_ALL, Msg.MENU_EXPAND_ALL.text(), true),
+                        new MenuItem(MenuAction.COLLAPSE_ALL, Msg.MENU_COLLAPSE_ALL.text(), true));
+            case MenuTarget.Session(var pane, var cwd, boolean exited) ->
+                List.of(new MenuItem(MenuAction.COPY_PATH, Msg.MENU_COPY_PATH.text(), cwd.isPresent()));
         };
     }
 

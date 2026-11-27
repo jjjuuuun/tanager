@@ -32,16 +32,27 @@ public sealed interface ConfigError {
         }
     }
 
-    /** 디스크의 파일을 덮어쓰면 사용자의 내용을 잃는다(손상 · 상위 버전). 쓰지 않았다. */
-    record WouldOverwrite(String reason) implements ConfigError {
+    /** 디스크의 파일을 덮어쓰면 사용자의 내용을 잃는다. 쓰지 않았다. {@code detail} 은 손상 내용 · 파일의 schemaVersion. */
+    record WouldOverwrite(Risk risk, String detail) implements ConfigError {
         public WouldOverwrite {
-            Objects.requireNonNull(reason, "reason");
+            Objects.requireNonNull(risk, "risk");
+            Objects.requireNonNull(detail, "detail");
         }
 
         @Override
         public String describe() {
-            return "설정 파일을 덮어쓰지 않았다: " + reason;
+            return "설정 파일을 덮어쓰지 않았다(" + risk + "): " + detail;
         }
+    }
+
+    /** 덮어쓰면 잃는 것. */
+    enum Risk {
+        /** 손상된 파일 — 사용자가 고칠 수 있게 둔다. */
+        CORRUPT_FILE,
+        /** 이 앱보다 새 버전이 쓴 파일. */
+        NEWER_VERSION,
+        /** schemaVersion 을 해석할 수 없다. */
+        UNREADABLE_VERSION
     }
 
     /** 쓰다가 실패했다. 원래 파일은 그대로다. */

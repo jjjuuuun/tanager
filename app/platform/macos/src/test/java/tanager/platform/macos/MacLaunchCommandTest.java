@@ -32,7 +32,8 @@ class MacLaunchCommandTest {
                 .value()
                 .orElseThrow());
 
-        assertThatThrownBy(() -> new MacPlatformModule().launchCommand(zsh, cwd, new Integration.Unavailable("M7 전")))
+        assertThatThrownBy(() -> new MacPlatformModule()
+                        .launchCommand(zsh, cwd, new Integration.Unavailable(new Integration.Problem.NotSupported())))
                 .isInstanceOf(UnsupportedOperationException.class);
     }
 
