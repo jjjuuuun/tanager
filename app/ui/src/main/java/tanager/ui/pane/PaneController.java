@@ -136,6 +136,19 @@ public final class PaneController {
         return root;
     }
 
+    /**
+     * 터미널 칸 밖에 쓰는 픽셀 — 테두리 · 머리줄 · 스크롤바(#150, 창 최소 크기). 창 크기에서 터미널 패널 크기를 뺀다. 패널은 칸에 딱 맞지 않아
+     * 칸 하나 미만만큼 크게 잡힐 수 있다(최소 크기 쪽으로 안전하다). 아직 배치되지 않았으면 0.
+     */
+    public Dimension chrome() {
+        Dimension pane = root.getSize();
+        Dimension cells = widget.getTerminalPanel().getSize();
+        if (cells.width == 0 || cells.height == 0) {
+            return new Dimension(0, 0);
+        }
+        return new Dimension(Math.max(0, pane.width - cells.width), Math.max(0, pane.height - cells.height));
+    }
+
     /** 기억한 셸을 띄운다. 창이 화면에 놓인 뒤 부른다(위젯 크기로 PTY 크기를 정한다). */
     public void start() {
         start(PaneSpec.remembered(id));

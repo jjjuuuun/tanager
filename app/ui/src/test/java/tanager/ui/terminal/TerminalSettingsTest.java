@@ -3,10 +3,13 @@ package tanager.ui.terminal;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.jediterm.terminal.ui.TerminalActionPresentation;
+import java.awt.Dimension;
+import java.awt.FontMetrics;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.util.ArrayList;
 import java.util.List;
+import javax.swing.JPanel;
 import javax.swing.KeyStroke;
 import javax.swing.LookAndFeel;
 import javax.swing.UIManager;
@@ -114,5 +117,21 @@ class TerminalSettingsTest {
 
         assertThat(settings.getFoundPatternColor()).isEqualTo(colors.foundPattern());
         assertThat(settings.getHyperlinkColor()).isEqualTo(colors.hyperlink());
+    }
+
+    @Test
+    @DisplayName("열 · 행 칸의 픽셀은 JediTerm 과 같이 'W' 폭 × 열, 글꼴 높이 × 줄 간격(올림) × 행이다")
+    void cellArea() {
+        // given
+        JPanel component = new JPanel();
+        FontMetrics metrics = component.getFontMetrics(settings.getTerminalFont());
+        int rowHeight = (int) Math.ceil(metrics.getHeight() * TerminalSettings.LINE_SPACING);
+
+        // when
+        Dimension area = settings.cellArea(component, 20, 5);
+
+        // then
+        assertThat(area).isEqualTo(new Dimension(20 * metrics.charWidth('W'), 5 * rowHeight));
+        assertThat(area.width).isPositive();
     }
 }

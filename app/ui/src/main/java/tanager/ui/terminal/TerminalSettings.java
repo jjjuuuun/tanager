@@ -7,7 +7,10 @@ import com.jediterm.terminal.model.StyleState;
 import com.jediterm.terminal.model.TerminalTypeAheadSettings;
 import com.jediterm.terminal.ui.TerminalActionPresentation;
 import com.jediterm.terminal.ui.settings.DefaultSettingsProvider;
+import java.awt.Component;
+import java.awt.Dimension;
 import java.awt.Font;
+import java.awt.FontMetrics;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.util.List;
@@ -41,6 +44,16 @@ public final class TerminalSettings extends DefaultSettingsProvider {
     /** 위젯이 굵은 글자를 그릴 때 쓰는 14pt 글꼴 한 벌. */
     TerminalFontSet fonts() {
         return fonts;
+    }
+
+    /**
+     * {@code columns} 열 × {@code rows} 행 칸이 차지하는 픽셀(#150 — 창 최소 크기). JediTerm 과 같은 기준이다: 칸 폭은 'W' 의 폭, 칸 높이는
+     * 글꼴 높이 × 줄 간격(올림).
+     */
+    public Dimension cellArea(Component component, int columns, int rows) {
+        FontMetrics metrics = component.getFontMetrics(getTerminalFont());
+        int rowHeight = (int) Math.ceil(metrics.getHeight() * LINE_SPACING);
+        return new Dimension(columns * metrics.charWidth('W'), rows * rowHeight);
     }
 
     @Override
