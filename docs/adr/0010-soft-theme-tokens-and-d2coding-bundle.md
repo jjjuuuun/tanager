@@ -19,7 +19,7 @@ ADR-0006 과 SDD §8.5 의 색 토큰 12개를 실제 FlatLaf 테마로 만든�
 | (c) IntelliJ theme json | 테마 생태계 호환 | IntelliJ 키 체계로 한 번 더 변환됨, 우리 토큰과 1:1 이 아님 |
 
 ## 결정
-- **(a')**. `dev.tanager.ui.theme.SoftDarkLaf extends FlatDarkLaf`, `SoftLightLaf extends FlatLightLaf`(값만, 전환은 M5).
+- **(a')**. `tanager.ui.theme.SoftDarkLaf extends FlatDarkLaf`, `SoftLightLaf extends FlatLightLaf`(값만, 전환은 M5).
 - 파일: `app/ui/src/main/resources/themes/soft-dark.properties` · `soft-light.properties`. 한 파일이 **유일한 색 원본**이다. 터미널 팔레트(전경 · 배경 · 커서 · 선택 · ANSI 16색)도 같은 파일에 `@term*` · `@ansi0`~`@ansi15` 변수로 둔다(코드에 색 값 없음).
 - 파일 구조: ① 토큰 변수 `@window = #1B1E26` … ② FlatLaf 기반 변수 연결 `@background = @window`, `@foreground = @text`, `@accentColor = @accent`(OS 강조색 `systemColor(accent)` 무시), `@selectionBackground = @select`, `@selectionForeground = @text` ③ 컴포넌트 키 `TitlePane.background = @header`, `Component.borderColor = @border`, `Component.focusColor = @accent`, 모양 `Component.arc` · `Button.arc` · `TextComponent.arc` · `Popup.borderCornerRadius` = 8, `ScrollBar.thumbArc = 999` ④ 코드용 사용자 정의 키 `Tanager.<token> = @<token>`, `Tanager.pane.arc = 6`, `Tanager.focusBorder.width = 2`, `Tanager.term.*`.
 - FlatLaf 는 잘못된 값을 예외 없이 로그만 남기고 `null` 로 둔다(3.8 에서 확인). 그래서 모든 `Tanager.*` 키가 null 이 아닌지 테스트로 막는다.
@@ -33,7 +33,7 @@ ADR-0006 과 SDD §8.5 의 색 토큰 12개를 실제 FlatLaf 테마로 만든�
   - 고지: 루트 `THIRD-PARTY-NOTICES.md`. app-image 에는 jpackage `--app-content` 로 이 파일과 `licenses/D2Coding-OFL.txt`(ui 리소스의 OFL.txt 를 빌드가 복사)를 넣는다. 원본은 저장소에 하나만 둔다.
 
 ## 결과
-- UI 코드는 색을 `ColorToken` 열거형 → `UIManager.getColor("Tanager.…")` 으로만 얻는다. `java.awt.Color` 생성은 `dev.tanager.ui.theme` 에서만 한다(ArchUnit).
+- UI 코드는 색을 `ColorToken` 열거형 → `UIManager.getColor("Tanager.…")` 으로만 얻는다. `java.awt.Color` 생성은 `tanager.ui.theme` 에서만 한다(ArchUnit).
 - 대비 검사는 Swing 없이 토큰 파일을 직접 파싱해 계산한다. FlatLaf 가 같은 값을 읽는지는 headless `getDefaults()` 로 한 번 더 확인한다.
 - 글꼴을 바꾸거나 갱신하면 SHA256SUMS · 이 ADR · THIRD-PARTY-NOTICES 를 같은 PR 에서 바꾼다. 부분 집합 추출 등 수정본은 RFN 때문에 이름을 바꿔야 하므로 하지 않는다.
 - 저장소가 약 8.5MB 커진다. Git LFS 는 쓰지 않는다(클론 · CI 설정이 늘어나는 비용이 더 크다).

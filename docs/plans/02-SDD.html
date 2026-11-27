@@ -435,7 +435,7 @@ public record CpuWindow(List&lt;Double&gt; recent) {                            
     boolean supports(ShellEnvironment env);
     Result&lt;List&lt;ToolkitItem&gt;, ToolkitError&gt; scan(ToolkitQuery query);   // query = (경로, 환경 홈, 실제 파일 접근기)
 }
-// app/adapter/toolkit/claude/src/main/resources/META-INF/services/dev.tanager.application.port.out.ToolkitProvider</code></pre>
+// app/adapter/toolkit/claude/src/main/resources/META-INF/services/tanager.application.port.out.ToolkitProvider</code></pre>
 <p>공급자가 여럿이면 도구함 상단에 공급자 선택 칩이 생긴다. 새 공급자는 모듈 하나 + 서비스 등록 + 픽스처 테스트로 끝나야 한다.</p>
 </section><section id="iface"><h2><span class="no">8.</span>인터페이스 설계</h2>
 <h3>8.1 포트</h3>
