@@ -49,7 +49,7 @@ class KeymapTest {
     @DisplayName("표의 키는 그 동작이다(SDD §8.2)")
     void tableKeys(int keyCode, int modifiers, LayoutAction expected) {
         // when
-        Optional<LayoutAction> action = Keymap.actionFor(keyCode, modifiers);
+        Optional<KeyAction> action = Keymap.defaults().actionFor(keyCode, modifiers);
 
         // then
         assertThat(action).contains(expected);
@@ -59,7 +59,7 @@ class KeymapTest {
     @DisplayName("마우스 버튼을 누른 채여도 키보드 수식키만 본다")
     void mouseButtonsIgnored() {
         // when
-        Optional<LayoutAction> action = Keymap.actionFor(KeyEvent.VK_LEFT, ALT_DOWN_MASK | BUTTON1_DOWN_MASK);
+        Optional<KeyAction> action = Keymap.defaults().actionFor(KeyEvent.VK_LEFT, ALT_DOWN_MASK | BUTTON1_DOWN_MASK);
 
         // then
         assertThat(action).contains(new LayoutAction.Focus(Direction.LEFT));
@@ -95,7 +95,7 @@ class KeymapTest {
     @DisplayName("표에 없는 키는 비어 셸로 간다")
     void otherKeysAreEmpty(int keyCode, int modifiers) {
         // when
-        Optional<LayoutAction> action = Keymap.actionFor(keyCode, modifiers);
+        Optional<KeyAction> action = Keymap.defaults().actionFor(keyCode, modifiers);
 
         // then
         assertThat(action).isEmpty();
@@ -118,7 +118,7 @@ class KeymapTest {
     @DisplayName("툴팁에 보일 키 이름")
     void keyLabel(LayoutAction action, String expected) {
         // when
-        Optional<String> label = Keymap.keyOf(action);
+        Optional<String> label = Keymap.defaults().keyOf(action);
 
         // then
         assertThat(label).contains(expected);
@@ -128,7 +128,7 @@ class KeymapTest {
     @DisplayName("키가 없는 동작(위아래 교환)은 키 이름이 비어 있다")
     void noKeyForVerticalSwap() {
         // when
-        Optional<String> label = Keymap.keyOf(new LayoutAction.Swap(Direction.UP));
+        Optional<String> label = Keymap.defaults().keyOf(new LayoutAction.Swap(Direction.UP));
 
         // then
         assertThat(label).isEmpty();
@@ -139,10 +139,10 @@ class KeymapTest {
     @DisplayName("키 이름이 있는 동작은 그 키로 돌아온다(표와 이름이 어긋나지 않게)")
     void bindingRoundTrip(LayoutAction action, String label) {
         // given
-        Keymap.Binding binding = Keymap.bindingOf(action).orElseThrow();
+        Keymap.Binding binding = Keymap.defaults().bindingOf(action).orElseThrow();
 
         // when
-        Optional<LayoutAction> back = Keymap.actionFor(binding.keyCode(), binding.modifiers());
+        Optional<KeyAction> back = Keymap.defaults().actionFor(binding.keyCode(), binding.modifiers());
 
         // then
         assertThat(back).contains(action);

@@ -75,15 +75,14 @@
       "key": "M5",
       "title": "M5 복원 · 탭 · 설정",
       "release": "v0.5.0",
-      "scope": "저장·복원, 탭, config, prefix 모드, 사라진 경로 표시·기록 제외 규칙, 시스템/다크/라이트 테마, 리소스 표시",
-      "done": "FR-RES-*, FR-LAY-07/08, FR-CFG-*, FR-HIS-08/09, FR-UI-01/05, FR-MON-* 인수 조건 통과",
+      "scope": "저장·복원, 탭, config, 사라진 경로 표시·기록 제외 규칙, 시스템/다크/라이트 테마, 리소스 표시",
+      "done": "FR-RES-*, FR-LAY-07, FR-CFG-*, FR-HIS-08/09, FR-UI-01/05, FR-MON-* 인수 조건 통과",
       "requirements": [
         "FR-RES-01",
         "FR-RES-02",
         "FR-RES-03",
         "FR-RES-04",
         "FR-LAY-07",
-        "FR-LAY-08",
         "FR-CFG-01",
         "FR-CFG-02",
         "FR-CFG-03",
@@ -101,8 +100,8 @@
       "key": "M6",
       "title": "M6 도구함",
       "release": "v1.0.0",
-      "scope": "Claude Code 공급자, 도구함 패널, 이력 가져오기, 안정화 (중간 점검은 v1.0.0-rc.N 프리릴리스)",
-      "done": "FR-TK-01~09 인수 조건 통과, NFR 전체 측정",
+      "scope": "Claude Code 공급자, 도구함 패널, 이력 가져오기, prefix 모드, 안정화 (중간 점검은 v1.0.0-rc.N 프리릴리스)",
+      "done": "FR-TK-01~09 · FR-LAY-08 인수 조건 통과, NFR 전체 측정",
       "requirements": [
         "FR-TK-01",
         "FR-TK-02",
@@ -112,7 +111,8 @@
         "FR-TK-06",
         "FR-TK-07",
         "FR-TK-08",
-        "FR-TK-09"
+        "FR-TK-09",
+        "FR-LAY-08"
       ]
     },
     {

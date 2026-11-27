@@ -52,6 +52,7 @@ public final class TanagerApp {
                         assembly.historyManager(),
                         PaneCommands.of(assembly.panes()),
                         assembly.panes(),
+                        assembly.settings(),
                         events,
                         appearance,
                         assembly::shutdown);

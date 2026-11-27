@@ -3,12 +3,15 @@ package tanager.ui;
 import com.formdev.flatlaf.FlatClientProperties;
 import java.awt.BorderLayout;
 import java.awt.Component;
+import java.awt.Desktop;
 import java.awt.Dimension;
 import java.awt.KeyEventDispatcher;
 import java.awt.KeyboardFocusManager;
 import java.awt.event.KeyEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.io.IOException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -21,6 +24,8 @@ import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import javax.swing.BorderFactory;
+import javax.swing.Box;
+import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
@@ -36,7 +41,10 @@ import tanager.application.port.in.ListProfilesUseCase;
 import tanager.application.port.in.ManageHistoryUseCase;
 import tanager.application.port.in.OpenPaneUseCase;
 import tanager.application.port.in.QueryHistoryTreeUseCase;
+import tanager.application.port.in.SettingsUseCase;
 import tanager.application.port.in.StartSessionUseCase;
+import tanager.application.port.out.AppConfig;
+import tanager.application.port.out.ConfigError;
 import tanager.domain.history.WorkspacePath;
 import tanager.domain.layout.DropZone;
 import tanager.domain.layout.LayoutError;
@@ -47,9 +55,14 @@ import tanager.domain.shared.PaneId;
 import tanager.domain.shared.Result;
 import tanager.domain.workspace.Workspace;
 import tanager.ui.i18n.Msg;
+import tanager.ui.i18n.NoticeText;
+import tanager.ui.keys.KeyAction;
 import tanager.ui.keys.KeyHelp;
+import tanager.ui.keys.KeyProblem;
+import tanager.ui.keys.KeyProblemText;
 import tanager.ui.keys.Keymap;
 import tanager.ui.keys.LayoutAction;
+import tanager.ui.keys.LiveKeymap;
 import tanager.ui.layout.LayoutView;
 import tanager.ui.layout.PaneDiff;
 import tanager.ui.layout.PaneMenu;
@@ -89,6 +102,9 @@ final class MainWindow {
     private final JLabel tab = new JLabel("Tanager");
     private final JLabel statusLeft = new JLabel();
     private final JLabel statusRight = new JLabel();
+    private final JButton settingsButton = new JButton();
+    // 지금 쓰는 키 표. 설정이 바뀌면 다시 시작하지 않고 바꾼다(#183)
+    private final LiveKeymap keys = new LiveKeymap();
     private Notices notices = new Notices(List.of());
     // 창 ID → 컨트롤러(트리의 창 순서). 작업 공간(StateActor)의 사본만 들고, 바꾸는 일은 유스케이스로 한다(#89)
     private final Map<PaneId, PaneController> panes = new LinkedHashMap<>();
@@ -102,6 +118,7 @@ final class MainWindow {
     private final Runnable onShutdown;
     private final StartSessionUseCase sessions;
     private final ListProfilesUseCase profiles;
+    private final SettingsUseCase settingsFile;
     private final PaneCommands commands;
     private final TerminalSettings settings;
     private final Motion motion;
@@ -118,11 +135,13 @@ final class MainWindow {
             ManageHistoryUseCase historyManager,
             PaneCommands commands,
             OpenPaneUseCase open,
+            SettingsUseCase settingsFile,
             Runnable onShutdown,
             TerminalSettings settings,
             Motion motion,
             Executor background) {
         this.onShutdown = Objects.requireNonNull(onShutdown, "onShutdown");
+        this.settingsFile = Objects.requireNonNull(settingsFile, "settingsFile");
         this.sessions = Objects.requireNonNull(sessions, "sessions");
         this.profiles = Objects.requireNonNull(profiles, "profiles");
         this.commands = Objects.requireNonNull(commands, "commands");
@@ -212,6 +231,26 @@ final class MainWindow {
         showStatusOf(next.tab().focused());
     }
 
+    /**
+     * 설정을 (다시) 읽었다(FR-CFG-03). 키 표를 새 재정의로 바꾸고 툴팁 · 키 도움말을 다시 쓰며, 키 설정 문제는 상태줄에 알린다(#183). EDT 에서
+     * 부른다.
+     */
+    void settingsChanged(AppConfig config) {
+        if (closing) {
+            return;
+        }
+        List<KeyProblem> problems = keys.apply(config);
+        Keymap keymap = keys.current();
+        for (PaneController pane : panes.values()) {
+            pane.keysChanged(keymap);
+        }
+        statusLeft.setToolTipText(keysTooltip(keymap));
+        settingsButton.setToolTipText(KeyHelp.withKey(keymap, Msg.SETTINGS_OPEN.text(), new KeyAction.OpenSettings()));
+        if (!problems.isEmpty()) {
+            notify(problems.stream().map(KeyProblemText::of).toList());
+        }
+    }
+
     /** 마지막 창을 닫았다 — 앱을 끝낸다(ADR-0011 · 0016). EDT 에서 부른다. */
     void lastPaneClosed() {
         exit();
@@ -240,12 +279,46 @@ final class MainWindow {
         if (event.getKeyCode() == KeyEvent.VK_ESCAPE && event.getModifiersEx() == 0 && layout.cancelDrag()) {
             return true;
         }
-        Optional<LayoutAction> action = Keymap.actionFor(event.getKeyCode(), event.getModifiersEx());
-        if (action.isPresent()) {
-            run(action.get());
-            return true;
+        Optional<KeyAction> action = keys.current().actionFor(event.getKeyCode(), event.getModifiersEx());
+        action.ifPresent(this::run);
+        return action.isPresent();
+    }
+
+    // Ctrl+Shift+E: 사이드바 보이기 · 숨기기(밀어 넣고 빼는 전환, FR-UI-04), Ctrl+Shift+F: 사이드바 검색, Ctrl+,: 설정 열기(SDD §8.2 기본값)
+    private void run(KeyAction action) {
+        switch (action) {
+            case LayoutAction layout -> run(layout);
+            case KeyAction.ToggleSidebar toggle -> sidebarSlot.toggle();
+            case KeyAction.SearchTree search -> {
+                sidebarSlot.show();
+                sidebar.focusSearch();
+            }
+            case KeyAction.OpenSettings open -> openSettings();
         }
-        return sidebarShortcut(event);
+    }
+
+    // 파일 만들기 · Desktop.open 은 블로킹될 수 있어 백그라운드에서. 열지 못하면 경로를 알려 직접 열게 한다(FR-CFG-03)
+    private void openSettings() {
+        background.execute(() -> {
+            Result<Path, ConfigError> file = settingsFile.file();
+            Optional<String> problem = file.fold(
+                    MainWindow::open,
+                    error -> Optional.of(Msg.SETTINGS_FILE_FAILED.text(NoticeText.DEFAULT.of(error))));
+            problem.ifPresent(message -> ui.execute(() -> notify(List.of(message))));
+        });
+    }
+
+    private static Optional<String> open(Path file) {
+        try {
+            if (!Desktop.isDesktopSupported() || !Desktop.getDesktop().isSupported(Desktop.Action.OPEN)) {
+                return Optional.of(Msg.SETTINGS_OPEN_FAILED.text(file));
+            }
+            Desktop.getDesktop().open(file.toFile());
+            return Optional.empty();
+        } catch (IOException | RuntimeException e) {
+            LOG.log(System.Logger.Level.WARNING, "설정 파일을 OS 편집기로 열지 못했다", e);
+            return Optional.of(Msg.SETTINGS_OPEN_FAILED.text(file));
+        }
     }
 
     // 결과(이웃 없음 · 마지막 창 등)는 무시한다 — 바뀐 배치는 LayoutChanged 로, 마지막 창 닫기는 LastPaneClosed 로 온다
@@ -276,8 +349,8 @@ final class MainWindow {
                 if (closing || !panes.containsKey(id) || !invoker.isShowing()) {
                     return;
                 }
-                List<PaneMenu.Entry> entries =
-                        PaneMenu.entries(workspace.tab().root(), id, layout.area(), layout.gap(), shell, found);
+                List<PaneMenu.Entry> entries = PaneMenu.entries(
+                        workspace.tab().root(), id, layout.area(), layout.gap(), shell, found, keys.current());
                 JPopupMenu menu = new JPopupMenu();
                 for (PaneMenu.Entry entry : entries) {
                     menu.add(menuItem(id, entry));
@@ -331,21 +404,6 @@ final class MainWindow {
         }
     }
 
-    // Ctrl+Shift+E: 사이드바 보이기 · 숨기기(밀어 넣고 빼는 전환, FR-UI-04), Ctrl+Shift+F: 사이드바 검색(SDD §8.2)
-    private boolean sidebarShortcut(KeyEvent event) {
-        boolean ours = event.isControlDown() && event.isShiftDown() && !event.isAltDown();
-        if (ours && event.getKeyCode() == KeyEvent.VK_E) {
-            sidebarSlot.toggle();
-            return true;
-        }
-        if (ours && event.getKeyCode() == KeyEvent.VK_F) {
-            sidebarSlot.show();
-            sidebar.focusSearch();
-            return true;
-        }
-        return false;
-    }
-
     /** 셸 통합이 알린 경로를 그 창에 넘긴다(#82). 모르는 창이면 버린다. EDT 에서 부른다. */
     void cwdChanged(PaneId paneId, WorkspacePath cwd) {
         PaneController pane = panes.get(paneId);
@@ -371,6 +429,7 @@ final class MainWindow {
         for (JComponent handle : pane.dragHandles()) {
             layout.addDragHandle(handle);
         }
+        pane.keysChanged(keys.current());
         return pane;
     }
 
@@ -537,7 +596,23 @@ final class MainWindow {
                 new EmptyBorder(0, 14, 0, 14)));
         tab.putClientProperty(FlatClientProperties.COMPONENT_TITLE_BAR_CAPTION, true);
         bar.add(tab);
+        bar.add(Box.createHorizontalGlue());
+        bar.add(settingsButton());
         return bar;
+    }
+
+    // 설정 열기의 마우스 경로(FR-LAY-09 와 같은 원칙). 포커스를 받지 않아 눌러도 키보드 포커스가 터미널에 남는다
+    private JButton settingsButton() {
+        settingsButton.setText(Msg.SETTINGS_OPEN.text());
+        settingsButton.setToolTipText(
+                KeyHelp.withKey(keys.current(), Msg.SETTINGS_OPEN.text(), new KeyAction.OpenSettings()));
+        settingsButton.setForeground(ThemeColors.get(ColorToken.MUTED));
+        settingsButton.setFocusable(false);
+        settingsButton.setContentAreaFilled(false);
+        settingsButton.setBorderPainted(false);
+        settingsButton.setBorder(new EmptyBorder(0, 10, 0, 10));
+        settingsButton.addActionListener(e -> openSettings());
+        return settingsButton;
     }
 
     private JPanel paneArea() {
@@ -556,26 +631,31 @@ final class MainWindow {
                 BorderFactory.createMatteBorder(1, 0, 0, 0, ThemeColors.get(ColorToken.BORDER)),
                 new EmptyBorder(0, 10, 0, 10)));
         statusLeft.setForeground(ThemeColors.get(ColorToken.MUTED));
-        statusLeft.setToolTipText(keysTooltip());
+        statusLeft.setToolTipText(keysTooltip(keys.current()));
         statusRight.setForeground(ThemeColors.get(ColorToken.WARN));
         bar.add(statusLeft, BorderLayout.WEST);
         bar.add(statusRight, BorderLayout.EAST);
         return bar;
     }
 
-    // 레이아웃 키 도움말(#148): 상태줄 왼쪽에 마우스를 올리면 보인다
-    private static String keysTooltip() {
-        StringBuilder html = new StringBuilder("<html><b>")
-                .append(escape(Msg.LAYOUT_KEYS_TITLE.text()))
-                .append("</b><table>");
-        for (KeyHelp.Row row : KeyHelp.rows()) {
+    // 키 도움말(#148): 상태줄 왼쪽에 마우스를 올리면 보인다. 지금 쓰는 키(재정의 반영, #183)다
+    private static String keysTooltip(Keymap keymap) {
+        StringBuilder html = new StringBuilder("<html>");
+        appendKeys(html, Msg.LAYOUT_KEYS_TITLE, KeyHelp.rows(keymap));
+        appendKeys(html, Msg.KEYS_OTHER_TITLE, KeyHelp.appRows(keymap));
+        return html.append("</html>").toString();
+    }
+
+    private static void appendKeys(StringBuilder html, Msg title, List<KeyHelp.Row> rows) {
+        html.append("<b>").append(escape(title.text())).append("</b><table>");
+        for (KeyHelp.Row row : rows) {
             html.append("<tr><td>")
                     .append(escape(row.action()))
                     .append("</td><td>")
                     .append(escape(row.keys()))
                     .append("</td></tr>");
         }
-        return html.append("</table></html>").toString();
+        html.append("</table>");
     }
 
     private static String tooltip(List<String> messages) {

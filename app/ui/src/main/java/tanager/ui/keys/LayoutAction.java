@@ -5,7 +5,7 @@ import tanager.domain.layout.Direction;
 import tanager.domain.layout.Orientation;
 
 /** 키보드 · 마우스가 부르는 레이아웃 조작 하나(SDD §8.2, FR-LAY-01~06). 대상은 포커스 창이다. */
-public sealed interface LayoutAction {
+public sealed interface LayoutAction extends KeyAction {
 
     /** 포커스 창을 나눈다 — ROW 오른쪽, COLUMN 아래. */
     record Split(Orientation orientation) implements LayoutAction {
