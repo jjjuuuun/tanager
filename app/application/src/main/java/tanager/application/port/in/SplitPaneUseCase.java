@@ -3,6 +3,7 @@ package tanager.application.port.in;
 import java.util.concurrent.CompletionStage;
 import tanager.domain.layout.LayoutError;
 import tanager.domain.layout.Orientation;
+import tanager.domain.session.ShellProfile;
 import tanager.domain.shared.Result;
 import tanager.domain.workspace.Workspace;
 
@@ -22,4 +23,10 @@ public interface SplitPaneUseCase {
      * 응답은 바뀐 작업 공간이고 {@code LayoutChanged} 가 한 번 나간다. 줌은 풀린다.
      */
     CompletionStage<Result<Workspace, LayoutError>> split(Orientation orientation);
+
+    /**
+     * 다른 프로파일로 분할(#149, FR-LAY-10). {@link #split(Orientation)} 과 같되 새 창은 {@code shell} 로 뜬다. 경로는 포커스 창이 따르는 경로를
+     * 그 셸의 환경으로 바꾼 것이다 — 같은 환경이면 그대로, 바꿀 수 없거나 모르면 비어 그 셸의 시작 경로 → 홈.
+     */
+    CompletionStage<Result<Workspace, LayoutError>> split(Orientation orientation, ShellProfile shell);
 }

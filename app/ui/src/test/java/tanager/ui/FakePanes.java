@@ -18,6 +18,7 @@ import tanager.domain.layout.Orientation;
 import tanager.domain.layout.Ratio;
 import tanager.domain.layout.Rect;
 import tanager.domain.layout.SplitPath;
+import tanager.domain.session.ShellProfile;
 import tanager.domain.shared.PaneId;
 import tanager.domain.shared.Result;
 import tanager.domain.workspace.Workspace;
@@ -46,6 +47,11 @@ final class FakePanes
     @Override
     public CompletionStage<Result<Workspace, LayoutError>> split(Orientation orientation) {
         return record("split " + orientation);
+    }
+
+    @Override
+    public CompletionStage<Result<Workspace, LayoutError>> split(Orientation orientation, ShellProfile shell) {
+        return record("split " + orientation + " " + shell.id().value());
     }
 
     @Override

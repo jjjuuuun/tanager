@@ -7,6 +7,7 @@ import java.awt.Dimension;
 import java.awt.FontMetrics;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.awt.KeyboardFocusManager;
 import java.awt.RenderingHints;
@@ -18,13 +19,16 @@ import java.awt.event.MouseEvent;
 import java.awt.geom.RoundRectangle2D;
 import java.beans.PropertyChangeListener;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
 import javax.swing.AbstractAction;
+import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
@@ -42,12 +46,16 @@ import tanager.application.port.in.StartedSession;
 import tanager.application.port.out.TerminalSize;
 import tanager.application.port.out.TerminalStream;
 import tanager.domain.history.WorkspacePath;
+import tanager.domain.layout.Orientation;
 import tanager.domain.session.ShellProfile;
 import tanager.domain.session.WorkingDir;
 import tanager.domain.shared.PaneId;
 import tanager.domain.shared.Result;
 import tanager.domain.workspace.PaneSpec;
+import tanager.ui.i18n.Msg;
 import tanager.ui.i18n.NoticeText;
+import tanager.ui.keys.KeyHelp;
+import tanager.ui.keys.LayoutAction;
 import tanager.ui.terminal.StreamTtyConnector;
 import tanager.ui.terminal.TanagerTermWidget;
 import tanager.ui.terminal.TerminalSettings;
@@ -62,6 +70,7 @@ public final class PaneController {
     private static final System.Logger LOG = System.getLogger(PaneController.class.getName());
     private static final int HEADER_HEIGHT = 32;
     private static final int BAND_HEIGHT = 28;
+    private static final int BUTTON_PAD = 3;
     private static final String ENTER = "tanager.pane.enter";
     private static final String ESCAPE = "tanager.pane.escape";
     private static final String TAB = "tanager.pane.tab";
@@ -81,6 +90,16 @@ public final class PaneController {
 
         /** 이 창 안으로 키보드 포커스가 들어왔다(클릭 · Tab 이동, #89). */
         void focusGained();
+
+        /** 머리줄 버튼 · 더블클릭(줌)으로 이 창에 {@code action} 을 하려 한다(#149). 포커스를 먼저 이 창으로 옮기는 일은 받는 쪽 몫이다. */
+        void layoutRequested(LayoutAction action);
+
+        /**
+         * 머리줄 우클릭(#149). {@code invoker} 의 ({@code x}, {@code y})에 이 창의 메뉴를 띄운다.
+         *
+         * @param shell 이 창의 셸. 모르면(선택 화면 · 기동 중) 비어 있다
+         */
+        void menuRequested(Optional<ShellProfile> shell, Component invoker, int x, int y);
     }
 
     private final PaneId id;
@@ -94,6 +113,8 @@ public final class PaneController {
     private final JLabel header = new JLabel();
     private final JLabel warning = new JLabel(WARNING_MARK);
     private final JPanel headerBar = new JPanel(new BorderLayout());
+    // 머리줄 오른쪽 버튼(#149): 오른쪽 분할 · 아래 분할 · 줌 · 닫기
+    private final Map<LayoutAction, JButton> headerButtons = new LinkedHashMap<>();
     private final RoundedPane root = new RoundedPane(headerBar);
     private final JPanel body = new JPanel(new BorderLayout());
     private final Notice notice = new Notice();
@@ -218,6 +239,25 @@ public final class PaneController {
     /** 머리줄 글자(테스트용). */
     JLabel header() {
         return header;
+    }
+
+    /** 머리줄 버튼(테스트용). */
+    JButton headerButton(LayoutAction action) {
+        return Optional.ofNullable(headerButtons.get(action)).orElseThrow();
+    }
+
+    // 메뉴의 "다른 프로파일로 분할" 후보를 정하려고 이 창의 셸을 알린다
+    private Optional<ShellProfile> shell() {
+        return switch (state) {
+            case PaneState.Running running ->
+                Optional.of(running.session().session().profile());
+            case PaneState.Exited exited -> Optional.of(exited.session().profile());
+            case PaneState.Launching _,
+                    PaneState.Failed _,
+                    PaneState.Errored _,
+                    PaneState.Picking _,
+                    PaneState.Closed _ -> Optional.empty();
+        };
     }
 
     /** 셸 선택 화면(테스트용 — 키 바인딩을 실행하려고). */
@@ -448,7 +488,12 @@ public final class PaneController {
         warning.setForeground(ThemeColors.get(ColorToken.WARN));
         warning.setVisible(false);
         headerBar.add(header, BorderLayout.CENTER);
-        headerBar.add(warning, BorderLayout.EAST);
+        headerBar.add(headerRight(), BorderLayout.EAST);
+        // 라벨은 툴팁 때문에 마우스 사건을 직접 받는다 — 머리줄 어디를 눌러도 같게 셋 모두에 단다
+        MouseAdapter headerMouse = headerMouse();
+        headerBar.addMouseListener(headerMouse);
+        header.addMouseListener(headerMouse);
+        warning.addMouseListener(headerMouse);
         // 폭이 바뀌면 경로 줄임을 다시 계산한다
         header.addComponentListener(new ComponentAdapter() {
             @Override
@@ -478,6 +523,68 @@ public final class PaneController {
                 notice.requestFocusInWindow();
             }
         });
+    }
+
+    // 경고 표시 · 버튼. 버튼은 포커스를 받지 않는다 — 눌러도 키보드 포커스가 터미널에 남는다
+    private JPanel headerRight() {
+        // GridBagLayout 은 한 줄로 놓고 세로 가운데에 맞춘다
+        JPanel right = new JPanel(new GridBagLayout());
+        right.setOpaque(false);
+        right.add(warning);
+        addButton(right, new LayoutAction.Split(Orientation.ROW), HeaderIcon.Shape.SPLIT_RIGHT, Msg.LAYOUT_SPLIT_RIGHT);
+        addButton(
+                right, new LayoutAction.Split(Orientation.COLUMN), HeaderIcon.Shape.SPLIT_DOWN, Msg.LAYOUT_SPLIT_DOWN);
+        addButton(right, new LayoutAction.Zoom(), HeaderIcon.Shape.ZOOM, Msg.LAYOUT_ZOOM);
+        addButton(right, new LayoutAction.Close(), HeaderIcon.Shape.CLOSE, Msg.LAYOUT_CLOSE);
+        return right;
+    }
+
+    private void addButton(JPanel bar, LayoutAction action, HeaderIcon.Shape shape, Msg name) {
+        JButton button = new JButton(new HeaderIcon(shape, ColorToken.MUTED));
+        button.setRolloverIcon(new HeaderIcon(shape, ColorToken.TEXT));
+        button.setToolTipText(KeyHelp.withKey(name.text(), action));
+        button.setFocusable(false);
+        button.setContentAreaFilled(false);
+        button.setBorderPainted(false);
+        button.setRolloverEnabled(true);
+        button.setBorder(new EmptyBorder(BUTTON_PAD, BUTTON_PAD, BUTTON_PAD, BUTTON_PAD));
+        button.addActionListener(e -> host.layoutRequested(action));
+        headerButtons.put(action, button);
+        bar.add(button);
+    }
+
+    // 클릭 = 이 창에 포커스, 더블클릭 = 줌, 우클릭 = 메뉴(#149). 팝업 트리거는 OS 마다 누를 때 · 뗄 때가 달라 둘 다 본다
+    private MouseAdapter headerMouse() {
+        return new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                if (e.isPopupTrigger()) {
+                    menu(e);
+                } else if (SwingUtilities.isLeftMouseButton(e)) {
+                    focus();
+                }
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                if (e.isPopupTrigger()) {
+                    menu(e);
+                }
+            }
+
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                if (SwingUtilities.isLeftMouseButton(e) && e.getClickCount() == 2) {
+                    host.layoutRequested(new LayoutAction.Zoom());
+                }
+            }
+
+            private void menu(MouseEvent e) {
+                if (!(state instanceof PaneState.Closed)) {
+                    host.menuRequested(shell(), e.getComponent(), e.getX(), e.getY());
+                }
+            }
+        };
     }
 
     // 창(root) 안 어디에 포커스가 있든 받는다. 실행 중에는 터미널 패널이 키를 직접 먹고, 상태 기계도 무시한다

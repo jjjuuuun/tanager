@@ -37,6 +37,9 @@ import tanager.ui.theme.ThemeColors;
  * JComponent#contains}) 나머지 마우스는 그대로 터미널이 받는다. 끄는 동안에는 미리보기 선만 그리고 레이아웃 · 창 크기(= 셸 크기)는 바꾸지
  * 않는다. 놓을 때 {@code onResize} 를 한 번 부른다 — 실제 변경은 유스케이스 → {@code LayoutChanged} → {@link #show} 로 돌아온다. 두 번
  * 누르면 반반이다.
+ *
+ * <p>줌(#149, FR-LAY-05): 줌한 창만 영역을 혼자 채우고 다른 창은 숨긴다(떼지 않아 셸 · 크기 그대로). 줌한 동안에는 경계선이 보이지 않으므로
+ * 잡을 경계선도 없다.
  */
 public final class LayoutView {
     /** 경계선을 잡는 띠 폭(px). 크기 테마 토큰이 없어 상수로 둔다 — 창 사이 간격(6px)과 같아 터미널 글자를 거의 가리지 않으면서 잡기 쉽다. */
@@ -56,6 +59,7 @@ public final class LayoutView {
     private final BiConsumer<SplitPath, Ratio> onResize;
     private LayoutNode tree;
     private Map<PaneId, JComponent> panes = Map.of();
+    private Optional<PaneId> zoomed = Optional.empty();
     private Optional<Drag> drag = Optional.empty();
 
     /**
@@ -97,7 +101,16 @@ public final class LayoutView {
      * 띄운다. 끄는 중이던 경계선은 버린다 — 옛 트리의 경계선으로 크기를 바꾸지 않게.
      */
     public void show(LayoutNode next, Map<PaneId, JComponent> components) {
+        show(next, Optional.empty(), components);
+    }
+
+    /**
+     * {@link #show(LayoutNode, Map)} 과 같되 {@code zoom} 이 있으면 그 창만 영역을 혼자 채우고 다른 창은 숨긴다(#149, FR-LAY-05). 숨긴 창은
+     * 떼지 않아 셸 · 크기가 그대로이고, 줌을 풀면 원래 자리로 돌아온다. 줌한 동안에는 경계선 드래그가 없다.
+     */
+    public void show(LayoutNode next, Optional<PaneId> zoom, Map<PaneId, JComponent> components) {
         Objects.requireNonNull(next, "next");
+        Objects.requireNonNull(zoom, "zoom");
         for (Map.Entry<PaneId, JComponent> old : panes.entrySet()) {
             if (components.get(old.getKey()) != old.getValue()) {
                 panel.remove(old.getValue());
@@ -110,6 +123,11 @@ public final class LayoutView {
         }
         this.tree = next;
         this.panes = new LinkedHashMap<>(components);
+        // 모르는 창의 줌은 무시한다 — 모든 창을 보인다
+        this.zoomed = zoom.filter(components::containsKey);
+        for (Map.Entry<PaneId, JComponent> entry : components.entrySet()) {
+            entry.getValue().setVisible(zoomed.isEmpty() || zoomed.get().equals(entry.getKey()));
+        }
         drag = Optional.empty();
         panel.revalidate();
         panel.validate();
@@ -127,6 +145,9 @@ public final class LayoutView {
     }
 
     private Optional<Divider> dividerAt(int x, int y) {
+        if (zoomed.isPresent()) {
+            return Optional.empty();
+        }
         return DividerDrags.at(LayoutGeometry.dividers(tree, area(), gap, HIT_PX), x, y);
     }
 
@@ -246,6 +267,11 @@ public final class LayoutView {
         @Override
         public void layoutContainer(Container parent) {
             layer.setBounds(0, 0, parent.getWidth(), parent.getHeight());
+            if (zoomed.isPresent()) {
+                Rect r = area();
+                panes.get(zoomed.get()).setBounds(r.x(), r.y(), r.width(), r.height());
+                return;
+            }
             Map<PaneId, Rect> rects = LayoutGeometry.rects(tree, area(), gap);
             rects.forEach((pane, r) -> {
                 JComponent component = panes.get(pane);

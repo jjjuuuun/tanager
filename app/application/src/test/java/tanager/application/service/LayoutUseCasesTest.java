@@ -52,6 +52,20 @@ class LayoutUseCasesTest {
             new LaunchTemplate("cmd.exe", List.of()),
             IntegrationMode.NONE);
     private static final ProfileId PWSH = new ProfileId("powershell");
+    private static final ShellProfile POWERSHELL = new ShellProfile(
+            PWSH,
+            "powershell",
+            ShellKind.WINDOWS_POWERSHELL,
+            WIN,
+            new LaunchTemplate("powershell.exe", List.of()),
+            IntegrationMode.NONE);
+    private static final ShellProfile UBUNTU = new ShellProfile(
+            new ProfileId("wsl:Ubuntu"),
+            "Ubuntu",
+            ShellKind.BASH,
+            new ShellEnvironment.Wsl("Ubuntu"),
+            new LaunchTemplate("wsl.exe", List.of("-d", "Ubuntu")),
+            IntegrationMode.OSC7);
     private static final PaneId P1 = new PaneId("p1");
     private static final PaneId P2 = new PaneId("p2");
     private static final PaneId P3 = new PaneId("p3");
@@ -141,6 +155,49 @@ class LayoutUseCasesTest {
         assertThat(split.tab().focused()).isEqualTo(P2);
         assertThat(workspace()).isEqualTo(split);
         assertThat(events).containsExactly(new AppEvent.LayoutChanged(split));
+    }
+
+    @Test
+    @DisplayName("다른 프로파일로 분할(#149): p1(cmd, C:\\a) 옆에 powershell 창 — 경로는 그대로, 포커스 새 창, LayoutChanged 한 번")
+    void splitWithOtherProfileKeepsCwd() {
+        // given
+        givenRunning(START);
+        givenReported(A);
+
+        // when
+        Workspace split = ok(panes.split(Orientation.ROW, POWERSHELL));
+
+        // then
+        assertThat(split.spec(P2)).contains(new PaneSpec(P2, Optional.of(PWSH), Optional.of(A)));
+        assertThat(split.tab().focused()).isEqualTo(P2);
+        assertThat(events).containsExactly(new AppEvent.LayoutChanged(split));
+    }
+
+    @Test
+    @DisplayName("다른 환경의 셸로 분할하면 경로를 그 환경으로 바꾼다(C:\\a → /mnt/c/a)")
+    void splitWithOtherEnvironmentTranslatesCwd() {
+        // given
+        givenRunning(START);
+        givenReported(A);
+
+        // when
+        Workspace split = ok(panes.split(Orientation.COLUMN, UBUNTU));
+
+        // then
+        WorkspacePath translated =
+                WorkspacePath.of(UBUNTU.env(), "/mnt/c/a").value().orElseThrow();
+        assertThat(split.spec(P2)).contains(new PaneSpec(P2, Optional.of(UBUNTU.id()), Optional.of(translated)));
+    }
+
+    @Test
+    @DisplayName("포커스 창의 경로를 모르면(첫 창) 경로를 비워 그 셸의 시작 경로(→ 홈)에서 연다")
+    void splitWithUntranslatableCwdOpensAtStart() {
+        // given: p1 의 명세는 기억한 셸 · 경로 없음
+        // when
+        Workspace split = ok(panes.split(Orientation.ROW, UBUNTU));
+
+        // then
+        assertThat(split.spec(P2)).contains(new PaneSpec(P2, Optional.of(UBUNTU.id()), Optional.empty()));
     }
 
     @Test

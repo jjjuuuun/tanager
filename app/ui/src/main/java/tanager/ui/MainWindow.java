@@ -2,6 +2,7 @@ package tanager.ui;
 
 import com.formdev.flatlaf.FlatClientProperties;
 import java.awt.BorderLayout;
+import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.KeyEventDispatcher;
 import java.awt.KeyboardFocusManager;
@@ -23,9 +24,12 @@ import javax.swing.BorderFactory;
 import javax.swing.JComponent;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
+import javax.swing.JMenu;
 import javax.swing.JMenuBar;
+import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.SwingUtilities;
 import javax.swing.border.EmptyBorder;
 import tanager.application.port.in.ListProfilesUseCase;
@@ -34,9 +38,12 @@ import tanager.application.port.in.OpenPaneUseCase;
 import tanager.application.port.in.QueryHistoryTreeUseCase;
 import tanager.application.port.in.StartSessionUseCase;
 import tanager.domain.history.WorkspacePath;
+import tanager.domain.layout.LayoutError;
 import tanager.domain.layout.Ratio;
 import tanager.domain.layout.SplitPath;
+import tanager.domain.session.ShellProfile;
 import tanager.domain.shared.PaneId;
+import tanager.domain.shared.Result;
 import tanager.domain.workspace.Workspace;
 import tanager.ui.i18n.Msg;
 import tanager.ui.keys.KeyHelp;
@@ -44,6 +51,7 @@ import tanager.ui.keys.Keymap;
 import tanager.ui.keys.LayoutAction;
 import tanager.ui.layout.LayoutView;
 import tanager.ui.layout.PaneDiff;
+import tanager.ui.layout.PaneMenu;
 import tanager.ui.layout.PaneMinimum;
 import tanager.ui.pane.PaneController;
 import tanager.ui.sidebar.SidebarPanel;
@@ -147,7 +155,7 @@ final class MainWindow {
         if (!warnings.isEmpty()) {
             notify(warnings);
         }
-        layout.show(workspace.tab().root(), components());
+        layout.show(workspace.tab().root(), workspace.tab().zoomed(), components());
         for (PaneId id : workspace.tab().root().panes()) {
             panes.get(id).start(workspace.spec(id).orElseThrow());
         }
@@ -179,7 +187,7 @@ final class MainWindow {
         for (PaneId id : diff.added()) {
             panes.put(id, newPane(id));
         }
-        layout.show(next.tab().root(), components());
+        layout.show(next.tab().root(), next.tab().zoomed(), components());
         for (PaneId id : diff.added()) {
             panes.get(id).start(next.spec(id).orElseThrow());
         }
@@ -223,12 +231,69 @@ final class MainWindow {
 
     // 결과(이웃 없음 · 마지막 창 등)는 무시한다 — 바뀐 배치는 LayoutChanged 로, 마지막 창 닫기는 LastPaneClosed 로 온다
     private void run(LayoutAction action) {
-        commands.run(action, workspace.tab().focused(), layout.area(), layout.gap())
-                .whenComplete((result, failure) -> {
-                    if (failure != null) {
-                        LOG.log(System.Logger.Level.WARNING, "레이아웃 조작이 예외로 끝났다", failure);
-                    }
-                });
+        logFailure(commands.run(action, workspace.tab().focused(), layout.area(), layout.gap()));
+    }
+
+    private static void logFailure(CompletionStage<Result<Workspace, LayoutError>> stage) {
+        stage.whenComplete((result, failure) -> {
+            if (failure != null) {
+                LOG.log(System.Logger.Level.WARNING, "레이아웃 조작이 예외로 끝났다", failure);
+            }
+        });
+    }
+
+    // 머리줄 우클릭(#149): 셸 목록은 블로킹될 수 있어 백그라운드에서 읽고 EDT 에서 메뉴를 띄운다
+    private void showMenu(PaneId id, Optional<ShellProfile> shell, Component invoker, int x, int y) {
+        background.execute(() -> {
+            List<ShellProfile> shells;
+            try {
+                shells = profiles.list();
+            } catch (RuntimeException e) {
+                LOG.log(System.Logger.Level.WARNING, "셸 목록을 읽지 못했다 — 다른 프로파일로 분할 없이 메뉴를 띄운다", e);
+                shells = List.of();
+            }
+            List<ShellProfile> found = shells;
+            ui.execute(() -> {
+                if (closing || !panes.containsKey(id) || !invoker.isShowing()) {
+                    return;
+                }
+                List<PaneMenu.Entry> entries =
+                        PaneMenu.entries(workspace.tab().root(), id, layout.area(), layout.gap(), shell, found);
+                JPopupMenu menu = new JPopupMenu();
+                for (PaneMenu.Entry entry : entries) {
+                    menu.add(menuItem(id, entry));
+                }
+                menu.show(invoker, x, y);
+            });
+        });
+    }
+
+    private JMenuItem menuItem(PaneId id, PaneMenu.Entry entry) {
+        return switch (entry) {
+            case PaneMenu.Item item -> {
+                JMenuItem row = new JMenuItem(item.label());
+                row.setEnabled(item.enabled());
+                row.addActionListener(e -> execute(id, item.command()));
+                yield row;
+            }
+            case PaneMenu.Submenu submenu -> {
+                JMenu sub = new JMenu(submenu.label());
+                sub.setEnabled(submenu.enabled());
+                for (PaneMenu.Item item : submenu.items()) {
+                    sub.add(menuItem(id, item));
+                }
+                yield sub;
+            }
+        };
+    }
+
+    private void execute(PaneId id, PaneMenu.Command command) {
+        switch (command) {
+            case PaneMenu.Command.Act(LayoutAction action) ->
+                logFailure(commands.runOn(id, action, layout.area(), layout.gap()));
+            case PaneMenu.Command.SplitBefore(var orientation) -> logFailure(commands.splitBefore(id, orientation));
+            case PaneMenu.Command.SplitWith(ShellProfile profile) -> logFailure(commands.splitWith(id, profile));
+        }
     }
 
     // 경계선을 놓았거나 두 번 눌렀다(#150). 놓을 때 한 번만 바꾼다 — 화면 · 셸 크기는 LayoutChanged 로 따라온다
@@ -372,6 +437,21 @@ final class MainWindow {
         @Override
         public void removed() {
             commands.close().close(id);
+        }
+
+        // 머리줄 버튼 · 더블클릭(#149): 그 창에 포커스한 뒤 키보드와 같은 유스케이스
+        @Override
+        public void layoutRequested(LayoutAction action) {
+            if (!closing && panes.containsKey(id)) {
+                logFailure(commands.runOn(id, action, layout.area(), layout.gap()));
+            }
+        }
+
+        @Override
+        public void menuRequested(Optional<ShellProfile> shell, Component invoker, int x, int y) {
+            if (!closing && panes.containsKey(id)) {
+                showMenu(id, shell, invoker, x, y);
+            }
         }
 
         @Override
