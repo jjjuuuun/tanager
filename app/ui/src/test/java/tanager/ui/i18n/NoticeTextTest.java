@@ -115,7 +115,7 @@ class NoticeTextTest {
     }
 
     @Test
-    @DisplayName("열기 실패: 지운 배포판 · Windows 셸 없음 · 바꿀 수 없는 경로 · 모르는 셸(#91)")
+    @DisplayName("열기 실패: 지운 배포판 · Windows 셸 없음 · 바꿀 수 없는 경로 · 모르는 셸(#91) · 세션 없는 창(#92)")
     void openErrors() {
         var home = tanager.domain.history.WorkspacePath.of(
                         new tanager.domain.history.ShellEnvironment.Wsl("U"), "/home/me")
@@ -130,5 +130,9 @@ class NoticeTextTest {
         assertThat(EN.of(new OpenError.EnvironmentMismatch(new ProfileId("powershell"), home)))
                 .isEqualTo("/home/me cannot be opened with powershell");
         assertNoHangul(EN.of(new OpenError.UnknownProfile(new ProfileId("gone"))));
+        assertThat(KO.of(new OpenError.UnknownPane(new tanager.domain.shared.PaneId("p9"))))
+                .isEqualTo("창 p9 에 세션이 없다");
+        assertThat(EN.of(new OpenError.UnknownPane(new tanager.domain.shared.PaneId("p9"))))
+                .isEqualTo("Pane p9 has no session");
     }
 }

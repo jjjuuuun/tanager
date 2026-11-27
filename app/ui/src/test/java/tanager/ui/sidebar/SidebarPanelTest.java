@@ -31,11 +31,14 @@ import tanager.domain.history.DirectoryTree;
 import tanager.domain.history.HistoryError;
 import tanager.domain.history.HistoryPolicy;
 import tanager.domain.history.HistoryTree;
+import tanager.domain.history.SessionLeaf;
+import tanager.domain.history.SessionStatus;
 import tanager.domain.history.ShellEnvironment;
 import tanager.domain.history.TreeQuery;
 import tanager.domain.history.VisitedDirectory;
 import tanager.domain.history.WorkHistory;
 import tanager.domain.history.WorkspacePath;
+import tanager.domain.shared.PaneId;
 import tanager.domain.shared.Result;
 import tanager.ui.theme.SoftDarkLaf;
 
@@ -50,6 +53,7 @@ class SidebarPanelTest {
     private final AtomicReference<WorkHistory> searchable = new AtomicReference<>();
     private final AtomicInteger queries = new AtomicInteger();
     private final AtomicReference<Boolean> lastShowHidden = new AtomicReference<>(false);
+    private final AtomicReference<List<SessionLeaf>> live = new AtomicReference<>(List.of());
     private final RecordingManage manage = new RecordingManage();
     private final FakeInteractions interactions = new FakeInteractions();
     private final QueryHistoryTreeUseCase query = (text, showHidden) -> {
@@ -57,7 +61,7 @@ class SidebarPanelTest {
         lastShowHidden.set(showHidden);
         return searchable.get() == null
                 ? current.get()
-                : DirectoryTree.project(searchable.get(), List.of(), new TreeQuery(text, showHidden, List.of(UBUNTU)));
+                : DirectoryTree.project(searchable.get(), live.get(), new TreeQuery(text, showHidden, List.of(UBUNTU)));
     };
     private LookAndFeel previous;
 
@@ -101,6 +105,21 @@ class SidebarPanelTest {
             }
         }
         throw new AssertionError("행 없음: " + label + " in " + visibleRows(tree));
+    }
+
+    // 행 위를 왼쪽 버튼으로 count 번 누른다
+    private static void click(JTree tree, TreePath path, int count) {
+        java.awt.Rectangle bounds = tree.getPathBounds(path);
+        tree.dispatchEvent(new java.awt.event.MouseEvent(
+                tree,
+                java.awt.event.MouseEvent.MOUSE_CLICKED,
+                0,
+                0,
+                bounds.x + 2,
+                bounds.y + 2,
+                count,
+                false,
+                java.awt.event.MouseEvent.BUTTON1));
     }
 
     @BeforeEach
@@ -392,9 +411,114 @@ class SidebarPanelTest {
         }
 
         @Override
+        public void openSame(PaneId pane, tanager.application.port.out.OpenPlacement placement) {
+            opened.add("same " + pane.value() + " " + placement.name());
+        }
+
+        @Override
         public void choices(
                 tanager.domain.history.WorkspacePath path,
                 java.util.function.Consumer<tanager.application.port.in.OpenChoices> onEdt) {}
+    }
+
+    /** 사이드바가 세션 창에 부탁한 것을 적어 둔다(#92). */
+    private static final class RecordingSessions implements SidebarSessions {
+        final List<String> calls = new java.util.ArrayList<>();
+
+        @Override
+        public void focus(PaneId pane) {
+            calls.add("focus " + pane.value());
+        }
+
+        @Override
+        public void restart(PaneId pane) {
+            calls.add("restart " + pane.value());
+        }
+
+        @Override
+        public void close(PaneId pane) {
+            calls.add("close " + pane.value());
+        }
+    }
+
+    private static final SessionLeaf RUNNING = new SessionLeaf(
+            new PaneId("p1"), 1, "bash", UBUNTU, Optional.of(wsl("/home/me/a")), new SessionStatus.Running());
+    private static final SessionLeaf EXITED =
+            new SessionLeaf(new PaneId("p2"), 2, "bash", UBUNTU, Optional.empty(), new SessionStatus.Exited(0));
+
+    @Test
+    @DisplayName("세션 노드를 한 번 누르거나 Enter 를 누르면 그 창에 포커스한다(#92)")
+    void clickSessionFocusesPane() {
+        // given
+        live.set(List.of(RUNNING));
+        SidebarPanel panel = expandedPanel(history("/home/me/a"));
+        RecordingSessions sessions = new RecordingSessions();
+
+        // when
+        onEdt(() -> {
+            panel.sessions(sessions);
+            JTree tree = panel.tree();
+            TreePath session = pathOf(tree, SidebarText.session(RUNNING));
+            tree.setSelectionPath(session);
+            click(tree, session, 1);
+            Object name = tree.getInputMap(javax.swing.JComponent.WHEN_FOCUSED).get(KeyStroke.getKeyStroke("ENTER"));
+            tree.getActionMap().get(name).actionPerformed(null);
+            return null;
+        });
+
+        // then
+        assertThat(sessions.calls).containsExactly("focus p1", "focus p1");
+    }
+
+    @Test
+    @DisplayName("폴더를 한 번 누르면 아무것도 열지 않는다 — 여는 것은 더블클릭이다(#92)")
+    void singleClickOnFolderDoesNotOpen() {
+        // given
+        SidebarPanel panel = expandedPanel(history("/home/me/a", "/home/me/b"));
+        RecordingOpener opener = new RecordingOpener();
+        RecordingSessions sessions = new RecordingSessions();
+
+        // when
+        onEdt(() -> {
+            panel.opener(opener);
+            panel.sessions(sessions);
+            JTree tree = panel.tree();
+            click(tree, pathOf(tree, "a"), 1);
+            return null;
+        });
+
+        // then
+        assertThat(opener.opened).isEmpty();
+        assertThat(sessions.calls).isEmpty();
+    }
+
+    @Test
+    @DisplayName("세션 메뉴: 포커스 · 같은 경로에 새 창 · 재시작(끝난 세션만) · 닫기를 그 창으로 부른다(#92)")
+    void sessionMenuActions() {
+        // given
+        live.set(List.of(RUNNING, EXITED));
+        SidebarPanel panel = expandedPanel(history("/home/me/a"));
+        RecordingOpener opener = new RecordingOpener();
+        RecordingSessions sessions = new RecordingSessions();
+
+        // when
+        onEdt(() -> {
+            panel.opener(opener);
+            panel.sessions(sessions);
+            SidebarItem running = item(panel.tree(), SidebarText.session(RUNNING));
+            SidebarItem exited = item(panel.tree(), SidebarText.session(EXITED));
+            panel.open(new MenuItem(MenuAction.FOCUS, "포커스", true), running);
+            panel.open(new MenuItem(MenuAction.OPEN_RIGHT, "오른쪽", true), running);
+            panel.open(new MenuItem(MenuAction.OPEN_DOWN, "아래", true), exited);
+            panel.open(new MenuItem(MenuAction.RESTART, "재시작", true), running);
+            panel.open(new MenuItem(MenuAction.RESTART, "재시작", true), exited);
+            panel.open(new MenuItem(MenuAction.CLOSE, "닫기", true), running);
+            return null;
+        });
+
+        // then
+        assertThat(opener.opened).containsExactly("same p1 RIGHT", "same p2 DOWN");
+        assertThat(sessions.calls).containsExactly("focus p1", "restart p2", "close p1");
     }
 
     @Test
@@ -410,17 +534,7 @@ class SidebarPanelTest {
             JTree tree = panel.tree();
             TreePath a = pathOf(tree, "a");
             tree.setSelectionPath(a);
-            java.awt.Rectangle bounds = tree.getPathBounds(a);
-            tree.dispatchEvent(new java.awt.event.MouseEvent(
-                    tree,
-                    java.awt.event.MouseEvent.MOUSE_CLICKED,
-                    0,
-                    0,
-                    bounds.x + 2,
-                    bounds.y + 2,
-                    2,
-                    false,
-                    java.awt.event.MouseEvent.BUTTON1));
+            click(tree, a, 2);
             Object name = tree.getInputMap(javax.swing.JComponent.WHEN_FOCUSED).get(KeyStroke.getKeyStroke("ENTER"));
             tree.getActionMap().get(name).actionPerformed(null);
             return null;

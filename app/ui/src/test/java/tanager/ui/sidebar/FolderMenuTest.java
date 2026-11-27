@@ -85,9 +85,11 @@ class FolderMenuTest {
     @Test
     @DisplayName("세션 메뉴는 경로를 알 때만 경로 복사가 활성이다")
     void sessionMenu() {
-        assertThat(enabled(FolderMenu.items(new MenuTarget.Session(Optional.of(INFRA)))))
+        assertThat(enabled(FolderMenu.items(
+                        new MenuTarget.Session(new tanager.domain.shared.PaneId("p1"), Optional.of(INFRA), false))))
                 .containsExactly(MenuAction.COPY_PATH);
-        assertThat(enabled(FolderMenu.items(new MenuTarget.Session(Optional.empty()))))
+        assertThat(enabled(FolderMenu.items(
+                        new MenuTarget.Session(new tanager.domain.shared.PaneId("p1"), Optional.empty(), true))))
                 .isEmpty();
     }
 

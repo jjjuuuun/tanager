@@ -9,7 +9,7 @@ import tanager.domain.session.ShellProfile;
 import tanager.ui.i18n.Msg;
 import tanager.ui.i18n.NoticeText;
 
-/** 노드의 열기 메뉴 항목(순수, #91, SDD §8.4). 기존 메뉴(경로 복사 · 고정 …) 위에 놓인다. */
+/** 노드의 열기 메뉴 항목(순수, #91 · #92, SDD §8.4). 기존 메뉴(경로 복사 · 고정 …) 위에 놓인다. */
 final class OpenMenu {
     private OpenMenu() {}
 
@@ -36,7 +36,18 @@ final class OpenMenu {
                 yield List.of(here, new Submenu(Msg.MENU_OPEN_WITH.text(), others, noOther));
             }
             case MenuTarget.Environment _ -> List.of(new MenuItem(MenuAction.NEW_PANE, Msg.MENU_NEW_PANE.text(), true));
-            case MenuTarget.Session _ -> List.of();
+            case MenuTarget.Session session ->
+                List.of(
+                        new MenuItem(MenuAction.FOCUS, Msg.MENU_FOCUS.text(), true),
+                        // 경로를 모르는 세션(홈)도 연다 — 그 프로파일의 시작 경로(→ 홈)에서 뜬다
+                        new Submenu(
+                                Msg.MENU_OPEN_SAME.text(),
+                                List.of(
+                                        new MenuItem(MenuAction.OPEN_RIGHT, Msg.MENU_OPEN_RIGHT.text(), true),
+                                        new MenuItem(MenuAction.OPEN_DOWN, Msg.MENU_OPEN_DOWN.text(), true)),
+                                Optional.empty()),
+                        new MenuItem(MenuAction.RESTART, Msg.MENU_RESTART.text(), session.exited()),
+                        new MenuItem(MenuAction.CLOSE, Msg.MENU_CLOSE.text(), true));
         };
     }
 }

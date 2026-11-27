@@ -42,6 +42,7 @@ import tanager.ui.layout.LayoutView;
 import tanager.ui.layout.PaneDiff;
 import tanager.ui.pane.PaneController;
 import tanager.ui.sidebar.SidebarPanel;
+import tanager.ui.sidebar.SidebarSessions;
 import tanager.ui.terminal.TerminalSettings;
 import tanager.ui.theme.ColorToken;
 import tanager.ui.theme.ThemeColors;
@@ -113,6 +114,7 @@ final class MainWindow {
         this.sidebar = new SidebarPanel(historyTree, historyManager, ui);
         sidebar.onLeave(() -> focused().focus());
         sidebar.opener(new PaneOpener(Objects.requireNonNull(open, "open"), background, ui, this::notify));
+        sidebar.sessions(new Sessions());
         frame.getContentPane().add(sidebar.component(), BorderLayout.WEST);
         // 터미널(JediTerm)이 키를 먼저 먹지 않게 포커스와 상관없이 가로챈다
         KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher(shortcuts);
@@ -320,6 +322,41 @@ final class MainWindow {
         public void focusGained() {
             if (!closing && !workspace.tab().focused().equals(id) && panes.containsKey(id)) {
                 focusPane.focus(id);
+            }
+        }
+    }
+
+    /** 사이드바 세션 노드의 포커스 · 재시작 · 닫기(#92). 바꾸는 일은 유스케이스로 하고 화면은 LayoutChanged 로 따라온다. */
+    private final class Sessions implements SidebarSessions {
+        // 포커스가 바뀌면 LayoutChanged 가 키보드 포커스를 옮긴다. 이미 포커스 창이면 이벤트가 없으니 직접 옮긴다
+        @Override
+        public void focus(PaneId pane) {
+            PaneController target = panes.get(pane);
+            if (closing || target == null) {
+                return;
+            }
+            if (workspace.tab().focused().equals(pane)) {
+                target.focus();
+            } else {
+                focusPane.focus(pane);
+            }
+        }
+
+        @Override
+        public void restart(PaneId pane) {
+            PaneController target = panes.get(pane);
+            if (closing || target == null) {
+                return;
+            }
+            target.restart();
+            focus(pane);
+        }
+
+        // 실행 중인 셸도 묻지 않는다(명시적 선택). 셸은 LayoutChanged 에서 창을 뗄 때 닫히고, 마지막 창이면 LastPaneClosed 로 앱이 끝난다
+        @Override
+        public void close(PaneId pane) {
+            if (!closing && panes.containsKey(pane)) {
+                closePane.close(pane);
             }
         }
     }

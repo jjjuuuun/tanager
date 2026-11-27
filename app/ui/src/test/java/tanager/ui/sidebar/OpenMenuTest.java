@@ -14,6 +14,8 @@ import tanager.domain.session.LaunchTemplate;
 import tanager.domain.session.ProfileId;
 import tanager.domain.session.ShellKind;
 import tanager.domain.session.ShellProfile;
+import tanager.domain.shared.PaneId;
+import tanager.ui.i18n.Msg;
 
 /** 노드의 열기 메뉴 항목(순수, #91, SDD §8.4). */
 class OpenMenuTest {
@@ -85,13 +87,58 @@ class OpenMenuTest {
     }
 
     @Test
-    @DisplayName("환경 노드는 새 창 하나, 세션 노드는 열기 항목이 없다(세션 메뉴는 #92)")
-    void environmentAndSession() {
+    @DisplayName("환경 노드는 새 창 하나")
+    void environment() {
         assertThat(OpenMenu.entries(
                         new MenuTarget.Environment(WIN, false), new OpenChoices(Optional.empty(), List.of())))
-                .containsExactly(new MenuItem(MenuAction.NEW_PANE, tanager.ui.i18n.Msg.MENU_NEW_PANE.text(), true));
-        assertThat(OpenMenu.entries(
-                        new MenuTarget.Session(Optional.of(WORK)), new OpenChoices(Optional.empty(), List.of())))
-                .isEmpty();
+                .containsExactly(new MenuItem(MenuAction.NEW_PANE, Msg.MENU_NEW_PANE.text(), true));
+    }
+
+    private static List<MenuEntry> sessionMenu(Optional<WorkspacePath> cwd, boolean exited) {
+        return OpenMenu.entries(
+                new MenuTarget.Session(new PaneId("p2"), cwd, exited), new OpenChoices(Optional.empty(), List.of()));
+    }
+
+    @Test
+    @DisplayName("실행 중인 세션: 포커스 · 같은 경로에 새 창 ▸ 오른쪽 · 아래 · 재시작(비활성) · 닫기(#92)")
+    void runningSession() {
+        // when
+        List<MenuEntry> entries = sessionMenu(Optional.of(WORK), false);
+
+        // then
+        assertThat(entries)
+                .containsExactly(
+                        new MenuItem(MenuAction.FOCUS, Msg.MENU_FOCUS.text(), true),
+                        new Submenu(
+                                Msg.MENU_OPEN_SAME.text(),
+                                List.of(
+                                        new MenuItem(MenuAction.OPEN_RIGHT, Msg.MENU_OPEN_RIGHT.text(), true),
+                                        new MenuItem(MenuAction.OPEN_DOWN, Msg.MENU_OPEN_DOWN.text(), true)),
+                                Optional.empty()),
+                        new MenuItem(MenuAction.RESTART, Msg.MENU_RESTART.text(), false),
+                        new MenuItem(MenuAction.CLOSE, Msg.MENU_CLOSE.text(), true));
+    }
+
+    @Test
+    @DisplayName("끝난 세션은 재시작이 활성이다(#92)")
+    void exitedSessionCanRestart() {
+        // when
+        List<MenuEntry> entries = sessionMenu(Optional.of(WORK), true);
+
+        // then
+        assertThat(entries).contains(new MenuItem(MenuAction.RESTART, Msg.MENU_RESTART.text(), true));
+    }
+
+    @Test
+    @DisplayName("경로를 모르는 세션(홈)도 같은 경로에 새 창을 열 수 있다 — 그 프로파일의 홈에서 연다(#92)")
+    void sessionWithoutCwdCanOpenSame() {
+        // when
+        List<MenuEntry> entries = sessionMenu(Optional.empty(), false);
+
+        // then
+        assertThat(entries)
+                .filteredOn(Submenu.class::isInstance)
+                .singleElement()
+                .satisfies(entry -> assertThat(((Submenu) entry).enabled()).isTrue());
     }
 }

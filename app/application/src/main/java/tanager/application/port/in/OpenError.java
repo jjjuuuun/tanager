@@ -4,6 +4,7 @@ import java.util.Objects;
 import tanager.domain.history.ShellEnvironment;
 import tanager.domain.history.WorkspacePath;
 import tanager.domain.session.ProfileId;
+import tanager.domain.shared.PaneId;
 
 /** 경로에서 창을 열 수 없는 이유(#88). */
 public sealed interface OpenError {
@@ -27,6 +28,13 @@ public sealed interface OpenError {
     record UnknownProfile(ProfileId profile) implements OpenError {
         public UnknownProfile {
             Objects.requireNonNull(profile, "profile");
+        }
+    }
+
+    /** 그 창에 세션이 없다(이미 닫혔거나 셸이 아직 뜨지 않았다, #92). */
+    record UnknownPane(PaneId pane) implements OpenError {
+        public UnknownPane {
+            Objects.requireNonNull(pane, "pane");
         }
     }
 }

@@ -14,6 +14,7 @@ import tanager.application.port.out.OpenPlacement;
 import tanager.domain.history.ShellEnvironment;
 import tanager.domain.history.WorkspacePath;
 import tanager.domain.session.ProfileId;
+import tanager.domain.shared.PaneId;
 import tanager.domain.shared.Result;
 import tanager.domain.workspace.PaneSpec;
 import tanager.ui.i18n.NoticeText;
@@ -46,6 +47,11 @@ final class PaneOpener implements SidebarOpener {
     @Override
     public void openHome(ShellEnvironment env) {
         run(() -> useCase.openHome(env, Optional.empty()));
+    }
+
+    @Override
+    public void openSame(PaneId pane, OpenPlacement placement) {
+        run(() -> useCase.openSame(pane, Optional.of(placement)));
     }
 
     @Override

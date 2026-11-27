@@ -35,7 +35,7 @@ final class FolderMenu {
                                 true),
                         new MenuItem(MenuAction.EXPAND_ALL, Msg.MENU_EXPAND_ALL.text(), true),
                         new MenuItem(MenuAction.COLLAPSE_ALL, Msg.MENU_COLLAPSE_ALL.text(), true));
-            case MenuTarget.Session(var cwd) ->
+            case MenuTarget.Session(var pane, var cwd, boolean exited) ->
                 List.of(new MenuItem(MenuAction.COPY_PATH, Msg.MENU_COPY_PATH.text(), cwd.isPresent()));
         };
     }

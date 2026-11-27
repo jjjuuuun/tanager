@@ -169,6 +169,13 @@ public final class PaneController {
         return exited;
     }
 
+    /** 사이드바의 재시작(#92): 끝난 창이면 Enter 와 같이 같은 경로에서 다시 띄운다. 다른 상태면 아무것도 하지 않는다. EDT 에서 부른다. */
+    public void restart() {
+        if (state instanceof PaneState.Exited) {
+            dispatch(new PaneEvent.EnterPressed());
+        }
+    }
+
     /** 지금 상태(테스트용). */
     PaneState state() {
         return state;
