@@ -4,10 +4,11 @@ import java.util.List;
 import java.util.Objects;
 import tanager.application.port.in.StartFailure;
 import tanager.application.port.in.StartedSession;
+import tanager.domain.history.WorkspacePath;
 import tanager.domain.session.ShellProfile;
 import tanager.domain.session.TerminalSession;
 
-/** 창 하나에 일어나는 일(셸 기동 결과 · 종료 · 키 · 셸 목록 · 닫기 요청). */
+/** 창 하나에 일어나는 일(셸 기동 결과 · 종료 · 키 · 셸 목록 · 닫기 요청 · 경로 보고). */
 sealed interface PaneEvent {
 
     /** 셸이 떴다. 받은 쪽이 스트림을 소유한다. */
@@ -64,6 +65,13 @@ sealed interface PaneEvent {
     record ShellsListed(List<ShellProfile> shells) implements PaneEvent {
         public ShellsListed {
             shells = List.copyOf(shells);
+        }
+    }
+
+    /** 셸 통합이 이 창의 셸이 지금 있는 경로를 알렸다(#82). 실행 중인 창만 받아들인다. */
+    record CwdReported(WorkspacePath path) implements PaneEvent {
+        public CwdReported {
+            Objects.requireNonNull(path, "path");
         }
     }
 }

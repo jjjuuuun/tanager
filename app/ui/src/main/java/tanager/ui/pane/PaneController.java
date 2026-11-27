@@ -4,11 +4,15 @@ import java.awt.BasicStroke;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Dimension;
+import java.awt.FontMetrics;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.Insets;
 import java.awt.KeyboardFocusManager;
 import java.awt.RenderingHints;
 import java.awt.event.ActionEvent;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.geom.RoundRectangle2D;
@@ -37,6 +41,7 @@ import tanager.application.port.in.StartSessionUseCase;
 import tanager.application.port.in.StartedSession;
 import tanager.application.port.out.TerminalSize;
 import tanager.application.port.out.TerminalStream;
+import tanager.domain.history.WorkspacePath;
 import tanager.domain.session.ShellProfile;
 import tanager.domain.shared.PaneId;
 import tanager.domain.shared.Result;
@@ -57,6 +62,7 @@ public final class PaneController {
     private static final String ENTER = "tanager.pane.enter";
     private static final String ESCAPE = "tanager.pane.escape";
     private static final String TAB = "tanager.pane.tab";
+    private static final String WARNING_MARK = "⚠";
 
     /** 창을 품은 쪽(메인 창). */
     public interface Host {
@@ -80,7 +86,9 @@ public final class PaneController {
     private final Host host;
 
     private final JLabel header = new JLabel();
-    private final RoundedPane root = new RoundedPane(header);
+    private final JLabel warning = new JLabel(WARNING_MARK);
+    private final JPanel headerBar = new JPanel(new BorderLayout());
+    private final RoundedPane root = new RoundedPane(headerBar);
     private final JPanel body = new JPanel(new BorderLayout());
     private final Notice notice = new Notice();
     private final ShellPickerPanel picker = new ShellPickerPanel(this::dispatch);
@@ -149,6 +157,18 @@ public final class PaneController {
     /** 지금 놓인 위젯(테스트용). */
     TanagerTermWidget widget() {
         return widget;
+    }
+
+    /**
+     * 셸 통합이 이 창의 셸이 지금 있는 경로를 알렸다(#82). 머리줄 · 상태줄이 그 경로를 보인다. EDT 에서 부른다.
+     */
+    public void cwdReported(WorkspacePath path) {
+        dispatch(new PaneEvent.CwdReported(path));
+    }
+
+    /** 머리줄 글자(테스트용). */
+    JLabel header() {
+        return header;
     }
 
     /** 셸 선택 화면(테스트용 — 키 바인딩을 실행하려고). */
@@ -279,7 +299,7 @@ public final class PaneController {
             return;
         }
         PaneView view = PaneView.of(state);
-        header.setText(view.header());
+        renderHeader(view);
         host.viewChanged(PaneView.tabTitle(state), view.status());
         body.removeAll();
         switch (state) {
@@ -318,12 +338,56 @@ public final class PaneController {
         }
     }
 
+    // 경로는 폭에 맞게 가운데를 줄이고(PathEllipsis) 전체 경로는 툴팁으로 보인다. 아직 배치 전(폭 0)이면 그대로 둔다
+    private void renderHeader(PaneView view) {
+        header.setToolTipText(view.path().orElse(null));
+        header.setText(fitted(view));
+        warning.setVisible(view.warning().isPresent());
+        warning.setToolTipText(view.warning().orElse(null));
+    }
+
+    private String fitted(PaneView view) {
+        String full = view.header();
+        Insets insets = header.getInsets();
+        int available = header.getWidth() - insets.left - insets.right;
+        if (view.path().isEmpty() || available <= 0) {
+            return full;
+        }
+        FontMetrics metrics = header.getFontMetrics(header.getFont());
+        if (metrics.stringWidth(full) <= available) {
+            return full;
+        }
+        String path = view.path().orElseThrow();
+        String prefix = full.substring(0, full.length() - path.length());
+        for (int width = path.codePointCount(0, path.length()) - 1; width > 1; width--) {
+            String candidate = prefix + PathEllipsis.fit(path, width);
+            if (metrics.stringWidth(candidate) <= available) {
+                return candidate;
+            }
+        }
+        return prefix + PathEllipsis.fit(path, 1);
+    }
+
     private void layoutPane() {
-        header.setPreferredSize(new Dimension(0, HEADER_HEIGHT));
-        header.setBorder(new EmptyBorder(0, 10, 0, 10));
+        headerBar.setOpaque(false);
+        headerBar.setPreferredSize(new Dimension(0, HEADER_HEIGHT));
+        headerBar.setBorder(new EmptyBorder(0, 10, 0, 10));
         header.setForeground(ThemeColors.get(ColorToken.MUTED));
+        warning.setForeground(ThemeColors.get(ColorToken.WARN));
+        warning.setVisible(false);
+        headerBar.add(header, BorderLayout.CENTER);
+        headerBar.add(warning, BorderLayout.EAST);
+        // 폭이 바뀌면 경로 줄임을 다시 계산한다
+        header.addComponentListener(new ComponentAdapter() {
+            @Override
+            public void componentResized(ComponentEvent e) {
+                if (!(state instanceof PaneState.Closed)) {
+                    renderHeader(PaneView.of(state));
+                }
+            }
+        });
         body.setOpaque(false);
-        root.add(header, BorderLayout.NORTH);
+        root.add(headerBar, BorderLayout.NORTH);
         root.add(body, BorderLayout.CENTER);
 
         bind(KeyStroke.getKeyStroke("ENTER"), ENTER, () -> dispatch(new PaneEvent.EnterPressed()));

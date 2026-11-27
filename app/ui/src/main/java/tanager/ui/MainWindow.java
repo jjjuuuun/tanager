@@ -19,6 +19,7 @@ import javax.swing.SwingUtilities;
 import javax.swing.border.EmptyBorder;
 import tanager.application.port.in.ListProfilesUseCase;
 import tanager.application.port.in.StartSessionUseCase;
+import tanager.domain.history.WorkspacePath;
 import tanager.domain.shared.PaneId;
 import tanager.ui.pane.PaneController;
 import tanager.ui.terminal.TerminalSettings;
@@ -87,6 +88,13 @@ final class MainWindow implements PaneController.Host {
             notify(warnings);
         }
         pane.start();
+    }
+
+    /** 셸 통합이 알린 경로를 그 창에 넘긴다(#82). 모르는 창이면 버린다. EDT 에서 부른다. */
+    void cwdChanged(PaneId paneId, WorkspacePath cwd) {
+        if (ONLY_PANE.equals(paneId)) {
+            pane.cwdReported(cwd);
+        }
     }
 
     @Override

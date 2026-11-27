@@ -53,7 +53,7 @@ class PaneViewTest {
     }
 
     @Test
-    @DisplayName("실행 중이면 머리줄은 셸 · 경로, 상태줄은 환경 · 셸이고 덮는 글자는 없다")
+    @DisplayName("실행 중이면 머리줄은 셸 · 경로, 상태줄은 환경 · 셸 · 경로이고 덮는 글자는 없다")
     void runningHeaderAndStatus() {
         // given
         var wsl = new tanager.application.port.in.StartedSession(
@@ -69,10 +69,12 @@ class PaneViewTest {
 
         // then
         assertThat(windows.header()).isEqualTo("cmd · ~");
-        assertThat(windows.status()).isEqualTo("Windows · cmd");
+        assertThat(windows.status()).isEqualTo("Windows · cmd · ~");
         assertThat(windows.overlay()).isEqualTo(Optional.empty());
         assertThat(ubuntu.header()).isEqualTo("bash · ~");
-        assertThat(ubuntu.status()).isEqualTo("WSL · Ubuntu · bash");
+        assertThat(ubuntu.status()).isEqualTo("WSL · Ubuntu · bash · ~");
+        assertThat(ubuntu.path()).contains("~");
+        assertThat(ubuntu.warning()).isEmpty();
     }
 
     @Test
@@ -162,5 +164,31 @@ class PaneViewTest {
         assertThat(view.header()).isEqualTo(PaneView.STARTING);
         assertThat(view.status()).isEqualTo("WSL · Ubuntu · bash");
         assertThat(PaneView.tabTitle(launching)).isEqualTo("Ubuntu");
+    }
+
+    @Test
+    @DisplayName("셸 통합 없이 띄운 창은 머리줄 경고를 보인다(#82)")
+    void integrationUnavailableShowsWarning() {
+        // given
+        var session = PaneFixtures.started(
+                new ScriptedTerminalStream(1),
+                List.of(new tanager.application.port.in.StartNotice.IntegrationUnavailable("설치 실패")));
+
+        // when
+        PaneView view = PaneView.of(new PaneState.Running(session));
+
+        // then
+        assertThat(view.warning()).contains(PaneView.NO_INTEGRATION);
+    }
+
+    @Test
+    @DisplayName("기동 중 · 선택 화면에는 경로가 없다")
+    void noPathWithoutSession() {
+        // when
+        PaneView launching = PaneView.of(new PaneState.Launching(new Attempt.Fresh()));
+
+        // then
+        assertThat(launching.path()).isEmpty();
+        assertThat(launching.warning()).isEmpty();
     }
 }
