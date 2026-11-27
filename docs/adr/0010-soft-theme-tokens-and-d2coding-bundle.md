@@ -44,3 +44,16 @@ ADR-0006 과 SDD §8.5 의 색 토큰 12개를 실제 FlatLaf 테마로 만든�
   - headless 리눅스(CI)에서도 `registerBundled()` 와 한글 판정이 통과한다.
   - #22 에서 app-content 에 저장소의 `LICENSE`(MIT)를 `LICENSE.txt` 로 더했다. zip 과 MSI 설치 폴더 모두에 들어가고 `verifyAppImage` 가 검사한다(SDD §11).
   - #67 에서 저장소 루트 `licenses/`(제3자 라이선스 전문 · NOTICE)를 app-content 의 `licenses/` 에 함께 넣었다. D2Coding OFL 은 지금처럼 ui 리소스에서 복사되어 같은 폴더의 `licenses/D2Coding-OFL.txt` 에 있다. `verifyAppImage` 는 `THIRD-PARTY-NOTICES.md` 에 적힌 파일 · jar 목록과 이미지를 양쪽으로 대조한다.
+
+## 개정 — ANSI 배경 위 글자 대비 보정 (#113, 2026-11-27)
+- **문제**: WSL 에서 `/mnt/c` 아래 폴더를 `ls` 하면 GNU ls 기본 `ow=34;42`(파랑 글자 + 초록 배경)로 나온다. 소프트 팔레트에서 이 조합은 1.28 : 1 이라 글자가 안 보였다. `st=37;44` · `su=37;41` 도 1.3 : 1 안팎이다.
+- **원인**: 소프트 팔레트는 글자색으로 쓰기 좋게 밝고 부드럽게 맞췄다. 그런데 같은 색을 배경으로 쓰면 글자와 배경이 모두 밝아진다.
+- **결정**: 팔레트 토큰은 바꾸지 않는다. 그리는 순간 글자색만 보정한다(Windows Terminal 의 adjustIndistinguishableColors 와 같은 방식).
+  - 보정 조건: 글자색과 배경색이 모두 ANSI 16색이고(글자색은 기본 전경 포함) 대비가 **4.5 : 1(WCAG AA)** 보다 낮을 때.
+  - 보정 방법: 글자색을 배경과 더 대비되는 극(검정 · 흰색) 쪽으로 섞어 기준에 맞춘다(`ReadableForeground`, 결정적).
+  - 보정하지 않는 경우: truecolor · 256색 · 기본 배경 · 반전(INVERSE). 사용자가 직접 고른 색으로 본다.
+- **방식**: JediTerm 3.76 의 글자색 계산은 `TerminalPanel` 의 private 메서드라 끼어들 수 없다.
+  - 그래서 SGR 마다 거치는 `StyleState.setCurrent` 를 바꾼 `ReadableStyleState` 를 위젯의 `createDefaultStyle()` 로 넣는다.
+  - 에뮬레이터는 `getCurrent()` 에서 다음 스타일을 만든다. 보정이 쌓이지 않도록 보정한 색은 원래 색을 기억하는 `TerminalColor` 하위 타입으로 두고, 다음 `setCurrent` 에서 되돌린 뒤 다시 판단한다.
+- **대안(버림)**: 배경용 색을 따로 두는 방법은 하나의 배경으로 해결되지 않는다.
+  - 파랑 글자(`ow`)에는 어두운 배경이, 검정 글자(`tw=30;42`)에는 밝은 배경이 필요하다. 한 배경색으로는 두 조합을 함께 맞출 수 없다.
