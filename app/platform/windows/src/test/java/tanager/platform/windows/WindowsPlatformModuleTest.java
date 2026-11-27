@@ -94,4 +94,23 @@ class WindowsPlatformModuleTest {
         assertThat(expected.resolve("tanager.ps1")).isRegularFile();
         assertThat(expected.resolve("tanager.bash")).isRegularFile();
     }
+
+    @Test
+    @DisplayName("paths() 는 WSL 기본 마운트(/mnt/)로 /mnt/c/x ↔ C:\\x 를 바꾼다(#90)")
+    void pathsUseDefaultMount() {
+        // given
+        var mnt = tanager.domain.history.WorkspacePath.of(
+                        new tanager.domain.history.ShellEnvironment.Wsl("U"), "/mnt/c/x")
+                .value()
+                .orElseThrow();
+
+        // when
+        var windows = new WindowsPlatformModule()
+                .paths()
+                .translate(mnt, new tanager.domain.history.ShellEnvironment.Windows());
+
+        // then
+        org.assertj.core.api.Assertions.assertThat(windows.map(tanager.domain.history.WorkspacePath::path))
+                .contains("C:\\x");
+    }
 }

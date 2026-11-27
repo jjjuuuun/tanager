@@ -15,7 +15,7 @@ public sealed interface OpenError {
         }
     }
 
-    /** 지정한 프로파일의 환경이 경로의 환경과 다르다. 경로 변환(#90) 전까지는 열지 않는다. */
+    /** 지정한 프로파일의 환경이 경로의 환경과 다르고, 그 환경의 경로로 바꿀 수도 없다(예: WSL 홈을 PowerShell 로, #90). */
     record EnvironmentMismatch(ProfileId profile, WorkspacePath path) implements OpenError {
         public EnvironmentMismatch {
             Objects.requireNonNull(profile, "profile");

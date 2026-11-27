@@ -102,7 +102,7 @@ final class Assembly {
         VisitRecorder visits = new VisitRecorder(state, InstantSource.system());
         SessionStarter starter = new SessionStarter(
                 catalog, config, platform, integration, launcher, new DefaultProfileMemory(config), state, visits);
-        PaneManager panes = new PaneManager(catalog, config, state);
+        PaneManager panes = new PaneManager(catalog, config, platform.paths(), state);
         return new Assembly(catalog, starter, state, stateExecutor, saver, scheduler, history, panes);
     }
 

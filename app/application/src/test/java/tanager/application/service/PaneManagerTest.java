@@ -18,9 +18,11 @@ import tanager.application.state.AppState;
 import tanager.application.state.StateActor;
 import tanager.application.state.Transition;
 import tanager.domain.history.HistoryPolicy;
+import tanager.domain.history.PathTranslator;
 import tanager.domain.history.ShellEnvironment;
 import tanager.domain.history.WorkHistory;
 import tanager.domain.history.WorkspacePath;
+import tanager.domain.history.WslMount;
 import tanager.domain.layout.LayoutError;
 import tanager.domain.layout.LayoutNode;
 import tanager.domain.layout.Orientation;
@@ -52,7 +54,11 @@ class PaneManagerTest {
     private final StateActor state =
             new StateActor(AppState.initial(WorkHistory.empty(HistoryPolicy.DEFAULT)), Runnable::run);
     private final List<AppEvent> events = new ArrayList<>();
-    private final PaneManager panes = new PaneManager(() -> List.of(WSL_A, POWERSHELL, CMD), config, state);
+    private final PaneManager panes = new PaneManager(
+            () -> List.of(WSL_A, POWERSHELL, CMD),
+            config,
+            (from, to) -> PathTranslator.translate(from, to, WslMount.DEFAULT),
+            state);
 
     PaneManagerTest() {
         state.subscribe(events::add);
@@ -157,10 +163,29 @@ class PaneManagerTest {
     }
 
     @Test
-    @DisplayName("지정한 프로파일의 환경이 경로와 다르면 EnvironmentMismatch, 모르는 프로파일이면 UnknownProfile")
+    @DisplayName("지정한 프로파일의 환경이 달라도 경로를 바꿀 수 있으면 바꾼 경로로 연다(#90)")
+    void translatesPathForOtherEnvironment() {
+        // given
+        WorkspacePath mnt = WorkspacePath.of(new ShellEnvironment.Wsl("A"), "/mnt/c/work")
+                .value()
+                .orElseThrow();
+
+        // when
+        PaneSpec spec = ok(panes.open(mnt, Optional.of(POWERSHELL.id())));
+
+        // then
+        WorkspacePath windows = WorkspacePath.of(WIN, "C:\\work").value().orElseThrow();
+        assertThat(spec).isEqualTo(new PaneSpec(P2, Optional.of(POWERSHELL.id()), Optional.of(windows)));
+    }
+
+    @Test
+    @DisplayName("바꿀 수 없는 경로(WSL 홈)를 다른 환경 프로파일로 열면 EnvironmentMismatch, 모르는 프로파일이면 UnknownProfile")
     void profileErrors() {
-        assertThat(err(panes.open(A, Optional.of(WSL_A.id()))))
-                .isEqualTo(new OpenError.EnvironmentMismatch(WSL_A.id(), A));
+        WorkspacePath home = WorkspacePath.of(new ShellEnvironment.Wsl("A"), "/home/me")
+                .value()
+                .orElseThrow();
+        assertThat(err(panes.open(home, Optional.of(POWERSHELL.id()))))
+                .isEqualTo(new OpenError.EnvironmentMismatch(POWERSHELL.id(), home));
         assertThat(err(panes.open(A, Optional.of(new ProfileId("gone")))))
                 .isEqualTo(new OpenError.UnknownProfile(new ProfileId("gone")));
         assertThat(workspace()).isEqualTo(Workspace.initial());
