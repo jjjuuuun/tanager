@@ -229,6 +229,21 @@ public final class PaneManager
     }
 
     @Override
+    public CompletionStage<Result<Workspace, LayoutError>> split(Orientation orientation, ShellProfile shell) {
+        Objects.requireNonNull(orientation, "orientation");
+        Objects.requireNonNull(shell, "shell");
+        return state.submit(current -> {
+            // 경로 바꾸기는 순수 계산이다(PathTranslation) — 액터 안에서 해도 막히지 않는다
+            Optional<WorkspacePath> dir =
+                    besideFocused(current).dir().flatMap(path -> paths.translate(path, shell.env()));
+            Workspace next = current.workspace()
+                    .split(orientation, Optional.of(shell.id()), dir)
+                    .workspace();
+            return changed(current, next);
+        });
+    }
+
+    @Override
     public CompletionStage<Result<Workspace, LayoutError>> resize(Direction direction) {
         Objects.requireNonNull(direction, "direction");
         return changeLayout(workspace -> workspace.resize(direction));

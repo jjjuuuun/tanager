@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import javax.swing.JComponent;
 import javax.swing.JPanel;
 import org.junit.jupiter.api.DisplayName;
@@ -226,5 +227,77 @@ class LayoutViewTest {
         // then
         assertThat(resizes).isEmpty();
         assertThat(view.preview()).isEmpty();
+    }
+
+    /** p1 | p2(606 × 400)를 {@code zoom} 으로 다시 놓고 배치를 돌린다. */
+    private void showZoomed(LayoutView view, Optional<PaneId> zoom) {
+        LayoutNode tree =
+                new LayoutNode.Split(Orientation.ROW, Ratio.HALF, new LayoutNode.Leaf(P1), new LayoutNode.Leaf(P2));
+        Map<PaneId, JComponent> components = new LinkedHashMap<>();
+        components.put(P1, left);
+        components.put(P2, right);
+        view.show(tree, zoom, components);
+        // 화면에 놓지 않은 컨테이너는 validate 가 배치하지 않는다(peer 없음) — 배치를 직접 돌린다
+        view.component().doLayout();
+    }
+
+    @Test
+    @DisplayName("줌하면 그 창만 영역을 혼자 채우고 다른 창은 숨긴다 — 떼지 않는다(셸은 그대로, #149)")
+    void zoomedPaneFillsArea() {
+        // given
+        LayoutView view = view(Orientation.ROW);
+
+        // when
+        showZoomed(view, Optional.of(P2));
+
+        // then
+        assertThat(right.isVisible()).isTrue();
+        assertThat(right.getBounds()).isEqualTo(new Rectangle(0, 0, 606, 400));
+        assertThat(left.isVisible()).isFalse();
+        assertThat(left.getParent()).isSameAs(view.component());
+    }
+
+    @Test
+    @DisplayName("줌한 동안에는 경계선이 없다 — 경계선 자리에서도 마우스를 받지 않고 끌어도 크기를 바꾸지 않는다(#149)")
+    void zoomedHasNoDividers() {
+        // given
+        LayoutView view = view(Orientation.ROW);
+        showZoomed(view, Optional.of(P2));
+        JComponent layer = view.dividerLayer();
+
+        // when
+        send(layer, MouseEvent.MOUSE_MOVED, 303, 100, 0);
+        send(layer, MouseEvent.MOUSE_PRESSED, 303, 100, 1);
+        send(layer, MouseEvent.MOUSE_DRAGGED, 400, 100, 0);
+        send(layer, MouseEvent.MOUSE_RELEASED, 400, 100, 1);
+
+        // then
+        assertThat(layer.contains(303, 100)).isFalse();
+        assertThat(layer.getCursor().getType()).isEqualTo(Cursor.DEFAULT_CURSOR);
+        assertThat(resizes).isEmpty();
+        assertThat(view.preview()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("줌을 풀면 숨긴 창이 다시 보이고 원래 배치 · 경계선으로 돌아간다")
+    void unzoomRestoresLayout() {
+        // given
+        LayoutView view = view(Orientation.ROW);
+        showZoomed(view, Optional.of(P2));
+
+        // when
+        showZoomed(view, Optional.empty());
+
+        // then
+        Rect first = LayoutGeometry.rects(
+                        new LayoutNode.Split(
+                                Orientation.ROW, Ratio.HALF, new LayoutNode.Leaf(P1), new LayoutNode.Leaf(P2)),
+                        view.area(),
+                        GAP)
+                .get(P1);
+        assertThat(left.isVisible()).isTrue();
+        assertThat(left.getBounds()).isEqualTo(new Rectangle(first.x(), first.y(), first.width(), first.height()));
+        assertThat(right.getBounds().width).isLessThan(606);
+        assertThat(view.dividerLayer().contains(303, 100)).isTrue();
     }
 }

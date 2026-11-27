@@ -2,6 +2,8 @@ package tanager.ui.pane;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.awt.Component;
+import java.awt.event.InputEvent;
 import java.awt.event.MouseEvent;
 import java.util.List;
 import java.util.Optional;
@@ -31,6 +33,7 @@ import tanager.application.port.out.ScriptedTerminalStream;
 import tanager.application.port.out.TerminalSize;
 import tanager.domain.history.ShellEnvironment;
 import tanager.domain.history.WorkspacePath;
+import tanager.domain.layout.Orientation;
 import tanager.domain.session.ProfileResolution;
 import tanager.domain.session.ShellProfile;
 import tanager.domain.session.TerminalSession;
@@ -39,6 +42,7 @@ import tanager.domain.shared.PaneId;
 import tanager.domain.shared.Result;
 import tanager.domain.workspace.PaneSpec;
 import tanager.ui.font.TerminalFontSet;
+import tanager.ui.keys.LayoutAction;
 import tanager.ui.terminal.TanagerTermWidget;
 import tanager.ui.terminal.TerminalSettings;
 import tanager.ui.theme.JediTermColors;
@@ -620,6 +624,80 @@ class PaneControllerTest {
         assertThat(onEdt(() -> controller.notice().getParent())).isNotNull();
     }
 
+    @Test
+    @DisplayName("머리줄 버튼(오른쪽 분할 · 아래 분할 · 줌 · 닫기)을 누르면 Host 에 그 동작을 알린다 — 툴팁에 키, 포커스는 받지 않는다(#149)")
+    void headerButtonsRequestLayoutActions() {
+        // given
+        List<LayoutAction> actions = List.of(
+                new LayoutAction.Split(Orientation.ROW),
+                new LayoutAction.Split(Orientation.COLUMN),
+                new LayoutAction.Zoom(),
+                new LayoutAction.Close());
+
+        // when
+        onEdt(() -> {
+            for (LayoutAction action : actions) {
+                controller.headerButton(action).doClick();
+            }
+            return null;
+        });
+
+        // then
+        assertThat(host.layout).containsExactlyElementsOf(actions);
+        assertThat(onEdt(() -> controller
+                        .headerButton(new LayoutAction.Split(Orientation.ROW))
+                        .getToolTipText()))
+                .isEqualTo("오른쪽으로 분할 (Alt+Shift+=)");
+        assertThat(onEdt(() -> controller.headerButton(new LayoutAction.Close()).getToolTipText()))
+                .isEqualTo("창 닫기 (Ctrl+Shift+W)");
+        assertThat(onEdt(() -> controller.headerButton(new LayoutAction.Zoom()).isFocusable()))
+                .isFalse();
+    }
+
+    @Test
+    @DisplayName("머리줄 더블클릭은 줌을 알린다, 한 번 클릭은 알리지 않는다(#149)")
+    void headerDoubleClickRequestsZoom() {
+        // when
+        onEdt(() -> {
+            click(controller.header(), 1, MouseEvent.BUTTON1, false);
+            click(controller.header(), 2, MouseEvent.BUTTON1, false);
+            return null;
+        });
+
+        // then
+        assertThat(host.layout).containsExactly(new LayoutAction.Zoom());
+    }
+
+    @Test
+    @DisplayName("머리줄 우클릭은 이 창의 셸과 함께 메뉴를 요청한다 — 실행 중이면 그 셸, 기동 전이면 비어 있다(#149)")
+    void headerRightClickRequestsMenu() {
+        // given: 기동 전
+        onEdt(() -> {
+            click(controller.header(), 1, MouseEvent.BUTTON3, true);
+            return null;
+        });
+
+        // when: 셸이 뜬 뒤
+        startAndConnect();
+        onEdt(() -> {
+            click(controller.header(), 1, MouseEvent.BUTTON3, true);
+            return null;
+        });
+
+        // then
+        assertThat(host.menus).containsExactly(Optional.empty(), Optional.of(PaneFixtures.CMD));
+        assertThat(host.layout).isEmpty();
+    }
+
+    // 누름 · 뗌 · 클릭을 차례로 보낸다. 팝업 트리거는 누름에만 싣는다(뗌에서 또 띄우지 않게)
+    private static void click(JComponent target, int count, int button, boolean popup) {
+        long now = System.currentTimeMillis();
+        int mask = button == MouseEvent.BUTTON3 ? InputEvent.BUTTON3_DOWN_MASK : InputEvent.BUTTON1_DOWN_MASK;
+        target.dispatchEvent(new MouseEvent(target, MouseEvent.MOUSE_PRESSED, now, mask, 5, 5, count, popup, button));
+        target.dispatchEvent(new MouseEvent(target, MouseEvent.MOUSE_RELEASED, now, 0, 5, 5, count, false, button));
+        target.dispatchEvent(new MouseEvent(target, MouseEvent.MOUSE_CLICKED, now, 0, 5, 5, count, false, button));
+    }
+
     private void startAndConnect() {
         onEdt(() -> {
             controller.start();
@@ -756,6 +834,18 @@ class PaneControllerTest {
     private static final class RecordingHost implements PaneController.Host {
         final AtomicInteger removed = new AtomicInteger();
         final AtomicInteger focusGained = new AtomicInteger();
+        final List<LayoutAction> layout = new CopyOnWriteArrayList<>();
+        final List<Optional<ShellProfile>> menus = new CopyOnWriteArrayList<>();
+
+        @Override
+        public void layoutRequested(LayoutAction action) {
+            layout.add(action);
+        }
+
+        @Override
+        public void menuRequested(Optional<ShellProfile> shell, Component invoker, int x, int y) {
+            menus.add(shell);
+        }
 
         @Override
         public void focusGained() {
