@@ -15,7 +15,9 @@ import tanager.application.port.in.ListProfilesUseCase;
 import tanager.application.port.in.ManageHistoryUseCase;
 import tanager.application.port.in.OpenPaneUseCase;
 import tanager.application.port.in.QueryHistoryTreeUseCase;
+import tanager.application.port.in.SettingsUseCase;
 import tanager.application.port.in.StartSessionUseCase;
+import tanager.application.port.out.AppConfig;
 import tanager.application.port.out.SystemAppearance;
 import tanager.domain.history.WorkspacePath;
 import tanager.domain.shared.PaneId;
@@ -41,6 +43,7 @@ public final class SwingUi {
      * EDT 에서 메인 창을 띄우고 기억한 셸 하나를 연다(없으면 셸 선택 화면). {@code events} 의 저장소 알림은 상태줄에 보인다.
      *
      * @param panes 창 닫기 · 포커스 · 분할 · 크기 · 줌 · 교환(키보드 · 마우스, #148)
+     * @param settings 지금 설정과 설정 파일 — "설정 열기"(Ctrl+,)가 연다(FR-CFG-03). 바뀐 설정은 {@code events} 의 SettingsChanged 로 온다
      * @param appearance OS 외관 설정. 애니메이션을 껐으면 전환 효과 없이 바로 바뀐다(FR-UI-04)
      * @param onShutdown 앱을 끝낼 때 셸을 닫은 뒤 EDT 밖에서 한 번 부른다(미저장 이력 저장 등, ADR-0011). 끝나면 프로세스를 끝낸다
      */
@@ -51,6 +54,7 @@ public final class SwingUi {
             ManageHistoryUseCase historyManager,
             PaneCommands panes,
             OpenPaneUseCase open,
+            SettingsUseCase settings,
             AppEvents events,
             SystemAppearance appearance,
             Runnable onShutdown) {
@@ -59,6 +63,8 @@ public final class SwingUi {
         events.subscribeOnUi(event -> Notices.messageOf(event).ifPresent(inbox::accept));
         // 셸이 알린 경로를 그 창의 머리줄 · 상태줄로(#82). 콜백과 창 만들기 모두 EDT 에서 돈다 — 창이 생기기 전 보고는 받을 창이 없다
         AtomicReference<MainWindow> shown = new AtomicReference<>();
+        // 창이 생기기 전에 온 설정은 들고 있다가 창을 만들 때 넣는다(#183)
+        AtomicReference<AppConfig> latestSettings = new AtomicReference<>();
         events.subscribeOnUi(event -> {
             // 창 배치는 StateActor 가 정하고 화면은 따라 그린다(#89). 마지막 창이 닫히면 앱을 끝낸다
             if (event instanceof AppEvent.LayoutChanged(Workspace workspace)) {
@@ -66,6 +72,11 @@ public final class SwingUi {
             }
             if (event instanceof AppEvent.LastPaneClosed) {
                 Optional.ofNullable(shown.get()).ifPresent(MainWindow::lastPaneClosed);
+            }
+            // 키 재정의는 다시 시작하지 않고 바로 쓴다(#183)
+            if (event instanceof AppEvent.SettingsChanged(AppConfig config)) {
+                latestSettings.set(config);
+                Optional.ofNullable(shown.get()).ifPresent(window -> window.settingsChanged(config));
             }
             if (event instanceof AppEvent.SessionCwdChanged(PaneId pane, WorkspacePath cwd)) {
                 Optional.ofNullable(shown.get()).ifPresent(window -> window.cwdChanged(pane, cwd));
@@ -89,7 +100,7 @@ public final class SwingUi {
                 showFatalAndExit(Msg.APP_THEME_FAILED.text());
                 return;
             }
-            TerminalSettings settings = new TerminalSettings(fonts, JediTermColors.current());
+            TerminalSettings terminal = new TerminalSettings(fonts, JediTermColors.current());
             Motion motion = Motion.fromTheme(appearance.animations());
             Executor background =
                     task -> Thread.ofVirtual().name("tanager-session-start").start(task);
@@ -100,11 +111,13 @@ public final class SwingUi {
                     historyManager,
                     panes,
                     open,
-                    onShutdown,
                     settings,
+                    onShutdown,
+                    terminal,
                     motion,
                     background);
             shown.set(window);
+            Optional.ofNullable(latestSettings.get()).ifPresent(window::settingsChanged);
             window.show(warnings);
             inbox.attach(window::notify);
         });

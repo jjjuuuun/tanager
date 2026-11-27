@@ -13,6 +13,7 @@ import tanager.domain.session.ShellProfile;
 import tanager.domain.shared.PaneId;
 import tanager.ui.i18n.Msg;
 import tanager.ui.keys.KeyHelp;
+import tanager.ui.keys.Keymap;
 import tanager.ui.keys.LayoutAction;
 
 /**
@@ -85,7 +86,20 @@ public final class PaneMenu {
             int gap,
             Optional<ShellProfile> shell,
             List<ShellProfile> profiles) {
+        return entries(tree, pane, area, gap, shell, profiles, Keymap.defaults());
+    }
+
+    /** {@link #entries(LayoutNode, PaneId, Rect, int, Optional, List)} 와 같고, 항목의 키 이름은 {@code keymap}(지금 쓰는 키)에서 온다. */
+    public static List<Entry> entries(
+            LayoutNode tree,
+            PaneId pane,
+            Rect area,
+            int gap,
+            Optional<ShellProfile> shell,
+            List<ShellProfile> profiles,
+            Keymap keymap) {
         Objects.requireNonNull(tree, "tree");
+        Objects.requireNonNull(keymap, "keymap");
         Objects.requireNonNull(pane, "pane");
         Objects.requireNonNull(shell, "shell");
         if (!tree.panes().contains(pane)) {
@@ -95,9 +109,9 @@ public final class PaneMenu {
                 Msg.PANE_MENU_SPLIT.text(),
                 List.of(
                         new Item(Msg.PANE_MENU_UP.text(), true, new Command.SplitBefore(Orientation.COLUMN)),
-                        act(Msg.PANE_MENU_DOWN, new LayoutAction.Split(Orientation.COLUMN), true),
+                        act(keymap, Msg.PANE_MENU_DOWN, new LayoutAction.Split(Orientation.COLUMN), true),
                         new Item(Msg.PANE_MENU_LEFT.text(), true, new Command.SplitBefore(Orientation.ROW)),
-                        act(Msg.PANE_MENU_RIGHT, new LayoutAction.Split(Orientation.ROW), true)));
+                        act(keymap, Msg.PANE_MENU_RIGHT, new LayoutAction.Split(Orientation.ROW), true)));
         List<Item> others = new ArrayList<>();
         for (ShellProfile other : profiles) {
             if (shell.isPresent()
@@ -110,17 +124,17 @@ public final class PaneMenu {
         for (Direction direction : DIRECTIONS) {
             boolean neighbor =
                     LayoutGeometry.neighbor(tree, pane, direction, area, gap).isPresent();
-            swaps.add(act(label(direction), new LayoutAction.Swap(direction), neighbor));
+            swaps.add(act(keymap, label(direction), new LayoutAction.Swap(direction), neighbor));
         }
         return List.of(
                 split,
                 new Submenu(Msg.PANE_MENU_SPLIT_WITH.text(), others),
                 new Submenu(Msg.PANE_MENU_SWAP.text(), swaps),
-                act(Msg.LAYOUT_CLOSE, new LayoutAction.Close(), true));
+                act(keymap, Msg.LAYOUT_CLOSE, new LayoutAction.Close(), true));
     }
 
-    private static Item act(Msg name, LayoutAction action, boolean enabled) {
-        return new Item(KeyHelp.withKey(name.text(), action), enabled, new Command.Act(action));
+    private static Item act(Keymap keymap, Msg name, LayoutAction action, boolean enabled) {
+        return new Item(KeyHelp.withKey(keymap, name.text(), action), enabled, new Command.Act(action));
     }
 
     private static Msg label(Direction direction) {

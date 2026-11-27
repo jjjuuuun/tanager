@@ -56,6 +56,7 @@ import tanager.domain.workspace.PaneSpec;
 import tanager.ui.i18n.Msg;
 import tanager.ui.i18n.NoticeText;
 import tanager.ui.keys.KeyHelp;
+import tanager.ui.keys.Keymap;
 import tanager.ui.keys.LayoutAction;
 import tanager.ui.motion.Animator;
 import tanager.ui.motion.Lerp;
@@ -121,6 +122,7 @@ public final class PaneController {
     private final JPanel headerBar = new JPanel(new BorderLayout());
     // 머리줄 오른쪽 버튼(#149): 오른쪽 분할 · 아래 분할 · 줌 · 닫기
     private final Map<LayoutAction, JButton> headerButtons = new LinkedHashMap<>();
+    private final Map<LayoutAction, Msg> buttonNames = new LinkedHashMap<>();
     private final RoundedPane root = new RoundedPane(headerBar);
     private final JPanel body = new JPanel(new BorderLayout());
     private final Notice notice = new Notice();
@@ -160,6 +162,13 @@ public final class PaneController {
         this.widget = new TanagerTermWidget(settings);
         layoutPane();
         KeyboardFocusManager.getCurrentKeyboardFocusManager().addPropertyChangeListener("focusOwner", focusListener);
+    }
+
+    /** 머리줄 버튼 툴팁의 키 이름을 {@code keymap}(지금 쓰는 키)으로 바꾼다(#183). EDT 에서 부른다. */
+    public void keysChanged(Keymap keymap) {
+        Objects.requireNonNull(keymap, "keymap");
+        headerButtons.forEach((action, button) -> button.setToolTipText(
+                KeyHelp.withKey(keymap, buttonNames.get(action).text(), action)));
     }
 
     /** 메인 창에 넣을 컴포넌트. */
@@ -570,7 +579,8 @@ public final class PaneController {
     private void addButton(JPanel bar, LayoutAction action, HeaderIcon.Shape shape, Msg name) {
         JButton button = new JButton(new HeaderIcon(shape, ColorToken.MUTED));
         button.setRolloverIcon(new HeaderIcon(shape, ColorToken.TEXT));
-        button.setToolTipText(KeyHelp.withKey(name.text(), action));
+        button.setToolTipText(KeyHelp.withKey(Keymap.defaults(), name.text(), action));
+        buttonNames.put(action, name);
         button.setFocusable(false);
         button.setContentAreaFilled(false);
         button.setBorderPainted(false);
