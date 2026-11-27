@@ -14,12 +14,14 @@ import tanager.domain.layout.Orientation;
 import tanager.domain.layout.Ratio;
 import tanager.domain.session.ProfileId;
 import tanager.domain.shared.PaneId;
+import tanager.domain.shared.TabId;
 
-/** 탭 하나의 작업 공간: 열기 · 닫기 · 포커스(#88, SDD §5.4). */
+/** 작업 공간의 창 열기 · 닫기 · 포커스(#88, SDD §5.4). */
 class WorkspaceTest {
     private static final PaneId P1 = new PaneId("p1");
     private static final PaneId P2 = new PaneId("p2");
     private static final PaneId P3 = new PaneId("p3");
+    private static final TabId T1 = new TabId("t1");
     private static final ProfileId PWSH = new ProfileId("powershell");
     private static final WorkspacePath A =
             WorkspacePath.of(new ShellEnvironment.Windows(), "C:\\a").value().orElseThrow();
@@ -112,7 +114,7 @@ class WorkspaceTest {
     @Test
     @DisplayName("탭의 포커스는 트리 안의 창이어야 한다")
     void tabInvariant() {
-        assertThatIllegalArgumentException().isThrownBy(() -> new Tab(new LayoutNode.Leaf(P1), P2));
+        assertThatIllegalArgumentException().isThrownBy(() -> new Tab(T1, new LayoutNode.Leaf(P1), P2));
     }
 
     @Test
@@ -123,10 +125,11 @@ class WorkspaceTest {
                 new LayoutNode.Split(Orientation.ROW, Ratio.HALF, new LayoutNode.Leaf(P1), new LayoutNode.Leaf(P2));
 
         // then
-        assertThat(new Tab(two, P1).zoomed()).isEmpty();
+        assertThat(new Tab(T1, two, P1).zoomed()).isEmpty();
         assertThat(Workspace.initial().tab().zoomed()).isEmpty();
-        assertThat(new Tab(two, P1, Optional.of(P2)).zoomed()).contains(P2);
-        assertThatIllegalArgumentException().isThrownBy(() -> new Tab(two, P1, Optional.of(P3)));
+        assertThat(new Tab(T1, Optional.empty(), two, P1, Optional.of(P2)).zoomed())
+                .contains(P2);
+        assertThatIllegalArgumentException().isThrownBy(() -> new Tab(T1, Optional.empty(), two, P1, Optional.of(P3)));
     }
 
     @Test
@@ -149,11 +152,11 @@ class WorkspaceTest {
     @Test
     @DisplayName("명세와 트리의 창이 다르거나, 명세의 창이 키와 다르거나, 다음 번호가 0 이면 만들 수 없다")
     void workspaceInvariants() {
-        Tab one = new Tab(new LayoutNode.Leaf(P1), P1);
-        assertThatIllegalArgumentException().isThrownBy(() -> new Workspace(one, java.util.Map.of(), 2));
+        Tab one = new Tab(T1, new LayoutNode.Leaf(P1), P1);
+        assertThatIllegalArgumentException().isThrownBy(() -> Workspace.single(one, java.util.Map.of(), 2));
         assertThatIllegalArgumentException()
-                .isThrownBy(() -> new Workspace(one, java.util.Map.of(P1, PaneSpec.remembered(P2)), 2));
+                .isThrownBy(() -> Workspace.single(one, java.util.Map.of(P1, PaneSpec.remembered(P2)), 2));
         assertThatIllegalArgumentException()
-                .isThrownBy(() -> new Workspace(one, java.util.Map.of(P1, PaneSpec.remembered(P1)), 0));
+                .isThrownBy(() -> Workspace.single(one, java.util.Map.of(P1, PaneSpec.remembered(P1)), 0));
     }
 }
