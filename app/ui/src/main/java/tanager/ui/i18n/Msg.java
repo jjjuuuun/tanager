@@ -52,6 +52,8 @@ public enum Msg {
     APP_FONT_FALLBACK("app.fontFallback"),
     APP_THEME_FAILED("app.themeFailed"),
     APP_CANNOT_START("app.cannotStart"),
+    EXIT_CONFIRM("exit.confirm"),
+    EXIT_CONFIRM_TITLE("exit.confirm.title"),
     START_CONFIG_UNREADABLE("start.configUnreadable"),
     START_DIR_INVALID("start.dirInvalid"),
     START_DIR_MISSING("start.dirMissing"),

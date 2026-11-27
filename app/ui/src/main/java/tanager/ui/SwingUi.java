@@ -11,12 +11,15 @@ import javax.swing.SwingUtilities;
 import tanager.application.platform.PlatformSelectionError;
 import tanager.application.port.in.AppEvent;
 import tanager.application.port.in.AppEvents;
+import tanager.application.port.in.ClosePaneUseCase;
+import tanager.application.port.in.FocusPaneUseCase;
 import tanager.application.port.in.ListProfilesUseCase;
 import tanager.application.port.in.ManageHistoryUseCase;
 import tanager.application.port.in.QueryHistoryTreeUseCase;
 import tanager.application.port.in.StartSessionUseCase;
 import tanager.domain.history.WorkspacePath;
 import tanager.domain.shared.PaneId;
+import tanager.domain.workspace.Workspace;
 import tanager.ui.font.TerminalFontSet;
 import tanager.ui.font.TerminalFonts;
 import tanager.ui.i18n.Msg;
@@ -43,6 +46,8 @@ public final class SwingUi {
             ListProfilesUseCase profiles,
             QueryHistoryTreeUseCase historyTree,
             ManageHistoryUseCase historyManager,
+            ClosePaneUseCase closePane,
+            FocusPaneUseCase focusPane,
             AppEvents events,
             Runnable onShutdown) {
         // 창을 만들기 전에 구독한다 — 이력 불러오기 알림이 창보다 먼저 올 수 있다. 창은 앱과 수명이 같아 해제하지 않는다
@@ -51,6 +56,13 @@ public final class SwingUi {
         // 셸이 알린 경로를 그 창의 머리줄 · 상태줄로(#82). 콜백과 창 만들기 모두 EDT 에서 돈다 — 창이 생기기 전 보고는 받을 창이 없다
         AtomicReference<MainWindow> shown = new AtomicReference<>();
         events.subscribeOnUi(event -> {
+            // 창 배치는 StateActor 가 정하고 화면은 따라 그린다(#89). 마지막 창이 닫히면 앱을 끝낸다
+            if (event instanceof AppEvent.LayoutChanged(Workspace workspace)) {
+                Optional.ofNullable(shown.get()).ifPresent(window -> window.layoutChanged(workspace));
+            }
+            if (event instanceof AppEvent.LastPaneClosed) {
+                Optional.ofNullable(shown.get()).ifPresent(MainWindow::lastPaneClosed);
+            }
             if (event instanceof AppEvent.SessionCwdChanged(PaneId pane, WorkspacePath cwd)) {
                 Optional.ofNullable(shown.get()).ifPresent(window -> window.cwdChanged(pane, cwd));
             }
@@ -76,8 +88,16 @@ public final class SwingUi {
             TerminalSettings settings = new TerminalSettings(fonts, JediTermColors.current());
             Executor background =
                     task -> Thread.ofVirtual().name("tanager-session-start").start(task);
-            MainWindow window =
-                    new MainWindow(sessions, profiles, historyTree, historyManager, onShutdown, settings, background);
+            MainWindow window = new MainWindow(
+                    sessions,
+                    profiles,
+                    historyTree,
+                    historyManager,
+                    closePane,
+                    focusPane,
+                    onShutdown,
+                    settings,
+                    background);
             shown.set(window);
             window.show(warnings);
             inbox.attach(window::notify);

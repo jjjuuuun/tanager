@@ -43,8 +43,10 @@ import tanager.application.port.out.TerminalSize;
 import tanager.application.port.out.TerminalStream;
 import tanager.domain.history.WorkspacePath;
 import tanager.domain.session.ShellProfile;
+import tanager.domain.session.WorkingDir;
 import tanager.domain.shared.PaneId;
 import tanager.domain.shared.Result;
+import tanager.domain.workspace.PaneSpec;
 import tanager.ui.i18n.NoticeText;
 import tanager.ui.terminal.StreamTtyConnector;
 import tanager.ui.terminal.TanagerTermWidget;
@@ -76,6 +78,9 @@ public final class PaneController {
 
         /** 이 창이 닫혔다(Esc). */
         void removed();
+
+        /** 이 창 안으로 키보드 포커스가 들어왔다(클릭 · Tab 이동, #89). */
+        void focusGained();
     }
 
     private final PaneId id;
@@ -128,10 +133,21 @@ public final class PaneController {
         return root;
     }
 
-    /** 첫 셸을 띄운다. 창이 화면에 놓인 뒤 부른다(위젯 크기로 PTY 크기를 정한다). */
+    /** 기억한 셸을 띄운다. 창이 화면에 놓인 뒤 부른다(위젯 크기로 PTY 크기를 정한다). */
     public void start() {
+        start(PaneSpec.remembered(id));
+    }
+
+    /** 명세대로 첫 셸을 띄운다(트리에서 연 창, #89). 창이 화면에 놓인 뒤 부른다. */
+    public void start(PaneSpec spec) {
+        Objects.requireNonNull(spec, "spec");
         render();
-        launch(new Attempt.Fresh());
+        launch(new Attempt.Fresh(spec.profile(), spec.dir()));
+    }
+
+    /** 셸이 실행 중이다(앱 창 닫기 확인, #89). */
+    public boolean running() {
+        return state instanceof PaneState.Running;
     }
 
     /**
@@ -277,7 +293,8 @@ public final class PaneController {
 
     private Result<StartedSession, StartFailure> start(Attempt attempt, TerminalSize size) {
         return switch (attempt) {
-            case Attempt.Fresh _ -> sessions.start(StartRequest.remembered(id, size));
+            case Attempt.Fresh(var profile, var dir) ->
+                sessions.start(new StartRequest(id, profile, false, dir.map(WorkingDir.At::new), size));
             case Attempt.Restart(var exited) -> sessions.restart(id, exited, size);
             case Attempt.Chosen(ShellProfile profile, boolean remember) ->
                 sessions.start(StartRequest.chosen(id, profile.id(), remember, size));
@@ -431,10 +448,17 @@ public final class PaneController {
 
     private void updateFocus() {
         Component owner = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
-        boolean focused = owner != null && SwingUtilities.isDescendingFrom(owner, root);
+        focusChanged(owner != null && SwingUtilities.isDescendingFrom(owner, root));
+    }
+
+    /** 창 안에 키보드 포커스가 있는지 바뀌었다 — 테두리를 다시 그리고, 들어왔으면 Host 에 알린다. */
+    void focusChanged(boolean focused) {
         if (focused != root.focused) {
             root.focused = focused;
             root.repaint();
+            if (focused) {
+                host.focusGained();
+            }
         }
     }
 
