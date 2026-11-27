@@ -31,3 +31,16 @@
 - 맥락: 셸 통합을 주입하려면 `bash --rcfile <tanager.bash> -i` 로 띄워야 하고, `--rcfile` 은 `-l` 과 함께 쓸 수 없다. 그러면 `~/.profile` 이 읽히지 않아 PATH 가 그냥 `wsl.exe` 를 띄울 때(로그인 셸)와 달라진다.
 - 결정: rcfile 이 bash 로그인 셸 순서를 흉내 낸다 — `/etc/profile` → `~/.bash_profile` | `~/.bash_login` | `~/.profile` 중 처음 있는 것 → 셋 다 없으면 `~/.bashrc`. 그 뒤에 프롬프트 훅을 덧붙인다(위 "사용자 rc 를 먼저 source" 그대로). 세부(Debian `/etc/bash.bashrc` 이중 실행 회피, bash-completion 보충)와 실측은 ADR-0014.
 - 결과: `~/.profile` 에서 늘린 PATH 가 로그인 셸과 같고, `~/.profile` 이 `~/.bashrc` 를 읽어도 `.bashrc` 는 한 번만 돈다(wsl 통합 테스트).
+
+## M3 확인 결과 (#93, 2026-11-27)
+- **프롬프트 테마 공존**: 테마가 하는 일을 흉내 낸 자동 테스트로 확인했다. 실제 oh-my-posh(winget) · starship 설치 확인은 사용자 PC 에 서드파티 프로그램을 깔아야 해서 v0.3.0 릴리스 수동 확인 항목으로 넘긴다.
+  - PowerShell: oh-my-posh 처럼 `prompt` 를 먼저 정의해도 테마 출력이 유지되고, OSC 9;9 와 직전 명령의 `$?` · `$LASTEXITCODE` 가 그대로다. `Set-StrictMode -Version Latest` 에서도 같다(`WindowsPowerShellCmdShellIntegrationTest`).
+  - bash: starship · bash-preexec 처럼 `PROMPT_COMMAND` 를 문자열 · 배열 · export 된 값으로 써도 사용자 훅과 우리 훅이 모두 돌고, 사용자 훅이 직전 명령의 `$?` 를 본다(`WindowsWslShellIntegrationTest`).
+  - cmd: 사용자 `PROMPT` 가 유지된다.
+- **큰 출력 중 비용**: 50MB(색 이스케이프가 섞인 `ls` 모양 출력, 16KB 조각)를 추적기에 먹인 처리량을 쟀다.
+  - 처음에는 230MB/s 였다. 스캐너가 이스케이프 사이의 평문도 한 바이트씩 상태 기계로 돌렸기 때문이다.
+  - 평문은 다음 ESC 로 바로 건너뛰게 바꿔 2,230MB/s 가 됐다(이 PC, WSL).
+  - 화면 쪽(ConPTY + JediTerm) 처리량을 넉넉히 40MB/s 로 잡으면 추적 비용은 2% 안이다. `CwdTrackerThroughputTest` 가 800MB/s(= 5%) 아래로 떨어지면 실패한다.
+  - 화면 처리량은 추정값이다. 실제 파이프라인에서 추적을 켜고 끈 비교는 릴리스 수동 확인 항목이다.
+- **한글 · 공백 · `'` 가 든 경로**: 세 셸 모두 확인했다. 대상은 시작 경로 · `cd` 한 경로 · 앱 데이터(셸 통합 스크립트) 경로다(wsl · windows 태그 통합 테스트).
+- **패키지**: 설치한 앱에서 스크립트 설치 위치(`%APPDATA%\Tanager\shell-integration\`)와 이력 저장(`state.json`)을 확인했다. 세 셸의 OSC 가 모두 기록됐다(#81 · #55 PR 의 수동 확인).

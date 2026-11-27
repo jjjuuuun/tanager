@@ -85,6 +85,16 @@ public final class OscScanner {
         boolean skip = discarding;
         List<CwdReport> reports = new ArrayList<>();
         for (int i = from; i < chunk.length; i++) {
+            if (m == Mode.GROUND) {
+                // 출력 대부분은 이스케이프 사이의 글자다 — 다음 ESC 로 바로 건너뛴다(#93, 50MB 출력 중 비용)
+                int esc = indexOf(chunk, i, chunk.length, ESC);
+                if (esc < 0) {
+                    break;
+                }
+                i = esc;
+                m = Mode.ESCAPE;
+                continue;
+            }
             byte b = chunk[i];
             switch (m) {
                 case GROUND -> {
