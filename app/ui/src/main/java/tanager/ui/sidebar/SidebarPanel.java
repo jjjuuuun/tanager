@@ -44,6 +44,7 @@ import tanager.domain.history.TreeNode;
 import tanager.domain.history.VisitedDirectory;
 import tanager.domain.history.WorkspacePath;
 import tanager.domain.shared.Result;
+import tanager.ui.i18n.Msg;
 import tanager.ui.theme.ColorToken;
 import tanager.ui.theme.ThemeColors;
 
@@ -55,7 +56,7 @@ public final class SidebarPanel {
     /** 기본 폭(저장은 M5). */
     public static final int DEFAULT_WIDTH = 280;
     /** 검색 결과가 없을 때 보이는 글자. */
-    static final String NO_MATCH = "맞는 폴더 없음";
+    static final String NO_MATCH = Msg.SIDEBAR_NO_MATCH.text();
 
     /** 고른 항목의 기록 삭제(Delete). */
     static final String FORGET_KEY = "tanager.sidebar.forget";
@@ -151,7 +152,7 @@ public final class SidebarPanel {
 
     // 입력마다 다시 거른다(2000개 기준 수 ms, 한 틱에 한 번으로 합친다). ↓ 는 트리의 첫 결과로
     private void layoutSearch() {
-        search.putClientProperty("JTextField.placeholderText", "폴더 검색  Ctrl+Shift+F");
+        search.putClientProperty("JTextField.placeholderText", Msg.SIDEBAR_SEARCH_PLACEHOLDER.text());
         search.getDocument().addDocumentListener(new DocumentListener() {
             @Override
             public void insertUpdate(DocumentEvent e) {

@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Objects;
 import javax.swing.KeyStroke;
 import tanager.ui.font.TerminalFontSet;
+import tanager.ui.i18n.Msg;
 import tanager.ui.theme.JediTermColors;
 
 /**
@@ -76,7 +77,7 @@ public final class TerminalSettings extends DefaultSettingsProvider {
     @Override
     public TerminalActionPresentation getCopyActionPresentation() {
         return new TerminalActionPresentation(
-                "복사",
+                Msg.TERMINAL_COPY.text(),
                 List.of(
                         ctrlShift(KeyEvent.VK_C),
                         KeyStroke.getKeyStroke(KeyEvent.VK_INSERT, InputEvent.CTRL_DOWN_MASK)));
@@ -85,7 +86,7 @@ public final class TerminalSettings extends DefaultSettingsProvider {
     @Override
     public TerminalActionPresentation getPasteActionPresentation() {
         return new TerminalActionPresentation(
-                "붙여넣기",
+                Msg.TERMINAL_PASTE.text(),
                 List.of(
                         ctrlShift(KeyEvent.VK_V),
                         KeyStroke.getKeyStroke(KeyEvent.VK_INSERT, InputEvent.SHIFT_DOWN_MASK)));
@@ -93,37 +94,37 @@ public final class TerminalSettings extends DefaultSettingsProvider {
 
     @Override
     public TerminalActionPresentation getFindActionPresentation() {
-        return new TerminalActionPresentation("찾기", ctrlShift(KeyEvent.VK_F));
+        return new TerminalActionPresentation(Msg.TERMINAL_FIND.text(), ctrlShift(KeyEvent.VK_F));
     }
 
     @Override
     public TerminalActionPresentation getClearBufferActionPresentation() {
-        return new TerminalActionPresentation("화면 지우기", List.of());
+        return new TerminalActionPresentation(Msg.TERMINAL_CLEAR.text(), List.of());
     }
 
     @Override
     public TerminalActionPresentation getPageUpActionPresentation() {
-        return new TerminalActionPresentation("한 쪽 위로", ctrlShift(KeyEvent.VK_PAGE_UP));
+        return new TerminalActionPresentation(Msg.TERMINAL_PAGE_UP.text(), ctrlShift(KeyEvent.VK_PAGE_UP));
     }
 
     @Override
     public TerminalActionPresentation getPageDownActionPresentation() {
-        return new TerminalActionPresentation("한 쪽 아래로", ctrlShift(KeyEvent.VK_PAGE_DOWN));
+        return new TerminalActionPresentation(Msg.TERMINAL_PAGE_DOWN.text(), ctrlShift(KeyEvent.VK_PAGE_DOWN));
     }
 
     @Override
     public TerminalActionPresentation getLineUpActionPresentation() {
-        return new TerminalActionPresentation("한 줄 위로", ctrlShift(KeyEvent.VK_UP));
+        return new TerminalActionPresentation(Msg.TERMINAL_LINE_UP.text(), ctrlShift(KeyEvent.VK_UP));
     }
 
     @Override
     public TerminalActionPresentation getLineDownActionPresentation() {
-        return new TerminalActionPresentation("한 줄 아래로", ctrlShift(KeyEvent.VK_DOWN));
+        return new TerminalActionPresentation(Msg.TERMINAL_LINE_DOWN.text(), ctrlShift(KeyEvent.VK_DOWN));
     }
 
     @Override
     public TerminalActionPresentation getSelectAllActionPresentation() {
-        return new TerminalActionPresentation("모두 선택", List.of());
+        return new TerminalActionPresentation(Msg.TERMINAL_SELECT_ALL.text(), List.of());
     }
 
     @Override
