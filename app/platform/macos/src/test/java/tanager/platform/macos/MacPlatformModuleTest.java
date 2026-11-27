@@ -88,10 +88,11 @@ class MacPlatformModuleTest {
     }
 
     @Test
-    @DisplayName("appearance() 는 애니메이션을 켠다(M7 에서 OS 설정을 읽는다)")
+    @DisplayName("appearance() 는 테마를 모르고 애니메이션을 켠다(M7 에서 OS 설정을 읽는다)")
     void appearanceEnablesAnimations() {
         // when / then
         assertThat(new MacPlatformModule().appearance().animations()).isTrue();
+        assertThat(new MacPlatformModule().appearance().theme()).isEmpty();
     }
 
     @Test

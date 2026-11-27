@@ -18,6 +18,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import tanager.application.port.in.AppEvent;
+import tanager.application.port.in.ResolvedAppearance;
 import tanager.application.port.in.ResourceReport;
 import tanager.application.port.in.StartFailure;
 import tanager.application.port.in.StartNotice;
@@ -27,7 +28,9 @@ import tanager.application.port.out.DirectUiDispatcher;
 import tanager.application.port.out.FakePlatformModule;
 import tanager.application.port.out.FakeShellIntegration;
 import tanager.application.port.out.ScriptedPtyLauncher;
+import tanager.application.port.out.SystemAppearance;
 import tanager.application.port.out.TerminalSize;
+import tanager.application.port.out.Theme;
 import tanager.application.state.HistoryStore;
 import tanager.application.state.PendingVisit;
 import tanager.application.state.Transition;
@@ -459,5 +462,29 @@ class AssemblyTest {
         await().atMost(Duration.ofSeconds(2)).until(() -> !reports.isEmpty());
         assertThat(platform.resources().hostCalls()).isPositive();
         assertThat(platform.resources().wslCalls()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("시작 때 OS 외관을 한 번 읽어 current() 가 되고, 설정 theme 이 DARK 면 OS 가 라이트여도 다크가 된다(#184)")
+    void appearanceFollowsOsThenSettings() throws Exception {
+        // given
+        FakePlatformModule platform = new FakePlatformModule(List.of(CMD))
+                .withAppData(appData)
+                .withAppearance(new SystemAppearance(Optional.of(Theme.LIGHT), false));
+        Files.writeString(
+                appData.resolve("config.json"),
+                "{\"schemaVersion\":1,\"appearance\":{\"theme\":\"DARK\"}}",
+                StandardCharsets.UTF_8);
+        Assembly assembly = assemble(platform, new ScriptedPtyLauncher());
+
+        // when
+        ResolvedAppearance initial = assembly.readAppearance();
+        assembly.startSettings();
+
+        // then
+        assertThat(initial).isEqualTo(new ResolvedAppearance(Theme.LIGHT, false));
+        await().atMost(Duration.ofSeconds(3))
+                .until(() -> assembly.appearance().current().equals(new ResolvedAppearance(Theme.DARK, false)));
+        assertThat(platform.appearanceCalls()).isEqualTo(1);
     }
 }

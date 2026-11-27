@@ -154,23 +154,26 @@ class WindowsPlatformModuleTest {
     }
 
     @Test
-    @DisplayName("appearance() 는 레지스트리의 '애니메이션 효과' 설정을 읽는다(#152)")
-    void appearanceReadsAnimationSetting() {
+    @DisplayName("appearance() 는 레지스트리의 다크/라이트(#184)와 '애니메이션 효과'(#152) 설정을 읽는다")
+    void appearanceReadsThemeAndAnimationSettings() {
         // given
         WindowsShellCatalog catalog = new WindowsShellCatalog(
                 new FakeCommandRunner(new CommandOutcome.NotStarted("x")),
                 key -> Optional.empty(),
                 Duration.ofSeconds(1));
         FakeCommandRunner reg = new FakeCommandRunner(new CommandOutcome.Exited(
-                0, "    MinAnimate    REG_SZ    0\r\n".getBytes(java.nio.charset.StandardCharsets.US_ASCII)));
+                0,
+                ("    MinAnimate    REG_SZ    0\r\n    AppsUseLightTheme    REG_DWORD    0x1\r\n")
+                        .getBytes(java.nio.charset.StandardCharsets.US_ASCII)));
         WindowsPlatformModule custom = new WindowsPlatformModule(catalog, key -> Optional.empty(), "C:\\Users\\u", reg);
 
         // when
-        boolean animations = custom.appearance().animations();
+        var appearance = custom.appearance();
 
         // then
-        assertThat(animations).isFalse();
-        assertThat(reg.commands()).hasSize(1);
-        assertThat(reg.commands().getFirst()).startsWith("reg.exe", "query");
+        assertThat(appearance.animations()).isFalse();
+        assertThat(appearance.theme()).contains(tanager.application.port.out.Theme.LIGHT);
+        assertThat(reg.commands()).hasSize(2);
+        assertThat(reg.commands()).allSatisfy(command -> assertThat(command).startsWith("reg.exe", "query"));
     }
 }

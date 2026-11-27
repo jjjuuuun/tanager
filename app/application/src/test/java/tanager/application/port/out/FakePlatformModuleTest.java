@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import tanager.domain.history.ShellEnvironment;
@@ -43,19 +44,22 @@ class FakePlatformModuleTest {
     }
 
     @Test
-    @DisplayName("appearance 는 기본으로 애니메이션을 켜고 withAppearance 로 바꿀 수 있다")
+    @DisplayName("appearance 는 기본으로 테마를 모르고 애니메이션을 켜며 withAppearance 로 바꿀 수 있다")
     void appearanceDefaultsToAnimationsOn() {
         // given
         FakePlatformModule platform = new FakePlatformModule(List.of(WSL));
 
         // when
         SystemAppearance initial = platform.appearance();
-        SystemAppearance changed =
-                platform.withAppearance(new SystemAppearance(false)).appearance();
+        SystemAppearance changed = platform.withAppearance(new SystemAppearance(Optional.of(Theme.LIGHT), false))
+                .appearance();
 
         // then
-        assertThat(initial.animations()).isTrue();
+        assertThat(initial).isEqualTo(SystemAppearance.DEFAULT);
+        assertThat(changed.theme()).contains(Theme.LIGHT);
         assertThat(changed.animations()).isFalse();
+        assertThat(platform.appearanceCalls()).isEqualTo(2);
+        assertThat(platform.maxConcurrentAppearanceCalls()).isEqualTo(1);
     }
 
     @Test
@@ -78,8 +82,22 @@ class FakePlatformModuleTest {
     }
 
     @Test
-    @DisplayName("SystemAppearance.DEFAULT 는 애니메이션을 켠다(OS 값을 못 읽었을 때)")
+    @DisplayName("appearance 는 failAppearanceWith 로 던지게 할 수 있고 빈 값으로 되돌린다")
+    void appearanceCanFail() {
+        // given
+        FakePlatformModule platform = new FakePlatformModule(List.of(WSL))
+                .failAppearanceWith(Optional.of(new IllegalStateException("계약 위반")));
+
+        // when / then
+        assertThatThrownBy(platform::appearance).isInstanceOf(IllegalStateException.class);
+        assertThat(platform.failAppearanceWith(Optional.empty()).appearance()).isEqualTo(SystemAppearance.DEFAULT);
+        assertThat(platform.appearanceCalls()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("SystemAppearance.DEFAULT 는 테마를 모르고 애니메이션을 켠다(OS 값을 못 읽었을 때)")
     void defaultAppearanceEnablesAnimations() {
+        assertThat(SystemAppearance.DEFAULT.theme()).isEmpty();
         assertThat(SystemAppearance.DEFAULT.animations()).isTrue();
     }
 }

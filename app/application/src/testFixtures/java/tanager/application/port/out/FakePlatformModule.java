@@ -36,6 +36,11 @@ public final class FakePlatformModule implements PlatformModule {
     private final FakeResourceProbe resources = new FakeResourceProbe();
     private final RecordingSystemTools systemTools = new RecordingSystemTools();
     private DirectoryProbe directories = new FakeDirectoryProbe();
+    private final AtomicInteger appearanceCalls = new AtomicInteger();
+    private final AtomicInteger appearanceInFlight = new AtomicInteger();
+    private final AtomicInteger maxAppearanceInFlight = new AtomicInteger();
+    private CountDownLatch appearanceGate;
+    private Optional<RuntimeException> appearanceFailure = Optional.empty();
 
     public FakePlatformModule(List<ShellProfile> shells) {
         this.shells = List.copyOf(shells);
@@ -73,9 +78,24 @@ public final class FakePlatformModule implements PlatformModule {
         return FakeShellIntegration.installedAt(appData.resolve("shell-integration"));
     }
 
-    /** {@code appearance()} 가 돌려줄 OS 외관 설정. 주지 않으면 {@link SystemAppearance#DEFAULT}(애니메이션 켬). */
+    /**
+     * {@code appearance()} 가 돌려줄 OS 외관 설정. 주지 않으면 {@link SystemAppearance#DEFAULT}(테마 모름 · 애니메이션 켬). 도중에 불러 OS 설정
+     * 변경을 흉내 낼 수 있다.
+     */
     public synchronized FakePlatformModule withAppearance(SystemAppearance appearance) {
         this.appearance = Objects.requireNonNull(appearance, "appearance");
+        return this;
+    }
+
+    /** {@code appearance()} 가 이 래치가 열릴 때까지 막힌다(호출 수는 막히기 전에 센다). 동시 호출 테스트용. */
+    public synchronized FakePlatformModule blockAppearanceUntil(CountDownLatch release) {
+        this.appearanceGate = Objects.requireNonNull(release, "release");
+        return this;
+    }
+
+    /** {@code appearance()} 가 이 예외를 던진다(포트 계약 위반 흉내 — 호출 수는 센다). 빈 값이면 다시 정상으로 돌려준다. */
+    public synchronized FakePlatformModule failAppearanceWith(Optional<RuntimeException> failure) {
+        this.appearanceFailure = Objects.requireNonNull(failure, "failure");
         return this;
     }
 
@@ -179,8 +199,42 @@ public final class FakePlatformModule implements PlatformModule {
     }
 
     @Override
-    public synchronized SystemAppearance appearance() {
-        return appearance;
+    public SystemAppearance appearance() {
+        appearanceCalls.incrementAndGet();
+        maxAppearanceInFlight.accumulateAndGet(appearanceInFlight.incrementAndGet(), Math::max);
+        try {
+            CountDownLatch gate;
+            Optional<RuntimeException> failure;
+            SystemAppearance current;
+            synchronized (this) {
+                gate = appearanceGate;
+                failure = appearanceFailure;
+                current = appearance;
+            }
+            if (gate != null) {
+                try {
+                    gate.await();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+            if (failure.isPresent()) {
+                throw failure.get();
+            }
+            return current;
+        } finally {
+            appearanceInFlight.decrementAndGet();
+        }
+    }
+
+    /** {@code appearance()} 가 불린 횟수. */
+    public int appearanceCalls() {
+        return appearanceCalls.get();
+    }
+
+    /** 동시에 돈 {@code appearance()} 호출 수의 최댓값. */
+    public int maxConcurrentAppearanceCalls() {
+        return maxAppearanceInFlight.get();
     }
 
     /** 기본 {@link FakeResourceProbe}(값을 바꾸려면 이것을 설정한다). */

@@ -11,6 +11,7 @@ import javax.swing.SwingUtilities;
 import tanager.application.platform.PlatformSelectionError;
 import tanager.application.port.in.AppEvent;
 import tanager.application.port.in.AppEvents;
+import tanager.application.port.in.ApplyThemeUseCase;
 import tanager.application.port.in.ListProfilesUseCase;
 import tanager.application.port.in.ManageHistoryUseCase;
 import tanager.application.port.in.OpenPaneUseCase;
@@ -19,7 +20,6 @@ import tanager.application.port.in.SettingsUseCase;
 import tanager.application.port.in.StartSessionUseCase;
 import tanager.application.port.in.WatchResourcesUseCase;
 import tanager.application.port.out.AppConfig;
-import tanager.application.port.out.SystemAppearance;
 import tanager.domain.history.WorkspacePath;
 import tanager.domain.shared.PaneId;
 import tanager.domain.workspace.Workspace;
@@ -46,7 +46,7 @@ public final class SwingUi {
      * @param panes 창 닫기 · 포커스 · 분할 · 크기 · 줌 · 교환(키보드 · 마우스, #148)
      * @param settings 지금 설정과 설정 파일 — "설정 열기"(Ctrl+,)가 연다(FR-CFG-03). 바뀐 설정은 {@code events} 의 SettingsChanged 로 온다
      * @param resources 상태줄의 리소스 표시(#187). 표시는 상태줄 이슈(#188)가 붙인다 — 지금은 받기만 하고 구독하지 않는다
-     * @param appearance OS 외관 설정. 애니메이션을 껐으면 전환 효과 없이 바로 바뀐다(FR-UI-04)
+     * @param appearance 지금 쓸 테마 · 움직임(설정 + OS, #184). 움직임을 끄면 전환 효과 없이 바로 바뀐다(FR-UI-04). 테마 적용과 변경 구독은 #185
      * @param onShutdown 앱을 끝낼 때 셸을 닫은 뒤 EDT 밖에서 한 번 부른다(미저장 이력 저장 등, ADR-0011). 끝나면 프로세스를 끝낸다
      */
     public static void showMainWindow(
@@ -59,7 +59,7 @@ public final class SwingUi {
             SettingsUseCase settings,
             AppEvents events,
             WatchResourcesUseCase resources,
-            SystemAppearance appearance,
+            ApplyThemeUseCase appearance,
             Runnable onShutdown) {
         // 창을 만들기 전에 구독한다 — 이력 불러오기 알림이 창보다 먼저 올 수 있다. 창은 앱과 수명이 같아 해제하지 않는다
         NoticeInbox inbox = new NoticeInbox();
@@ -104,7 +104,7 @@ public final class SwingUi {
                 return;
             }
             TerminalSettings terminal = new TerminalSettings(fonts, JediTermColors.current());
-            Motion motion = Motion.fromTheme(appearance.animations());
+            Motion motion = Motion.fromTheme(appearance.current().animations());
             Executor background =
                     task -> Thread.ofVirtual().name("tanager-session-start").start(task);
             MainWindow window = new MainWindow(
