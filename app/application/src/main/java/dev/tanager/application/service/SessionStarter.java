@@ -23,6 +23,7 @@ import dev.tanager.application.state.StateActor;
 import dev.tanager.application.state.Transition;
 import dev.tanager.domain.history.WorkspacePath;
 import dev.tanager.domain.session.IntegrationMode;
+import dev.tanager.domain.session.LiveSession;
 import dev.tanager.domain.session.LiveSessions;
 import dev.tanager.domain.session.ProfileResolution;
 import dev.tanager.domain.session.SessionState;
@@ -118,10 +119,24 @@ public final class SessionStarter implements StartSessionUseCase {
         Objects.requireNonNull(pane, "pane");
         Objects.requireNonNull(exited, "exited");
         Objects.requireNonNull(size, "size");
-        return exited.restart()
+        return latestOf(pane, exited)
+                .restart()
                 .fold(
                         starting -> launchTracked(pane, starting, size, new ArrayList<>()),
                         error -> Result.err(new StartFailure.Rejected(error)));
+    }
+
+    /**
+     * UI 가 가진 {@code exited} 는 처음 Running 에서 만들어져 시작 경로를 가리킨다. 상태에 등록된 그 창의 같은 셸이 이미 끝나 있으면,
+     * 셸이 마지막으로 알린 경로를 가진 그쪽에서 다시 띄운다(#104). 아직 종료가 상태에 반영되지 않았으면 받은 값을 그대로 쓴다 — 지금까지와
+     * 같은 동작으로 물러선다.
+     */
+    private TerminalSession latestOf(PaneId pane, TerminalSession exited) {
+        return Optional.ofNullable(state.snapshot().sessions().byPane().get(pane))
+                .map(LiveSession::session)
+                .filter(live -> live.state() instanceof SessionState.Exited)
+                .filter(live -> live.profile().equals(exited.profile()))
+                .orElse(exited);
     }
 
     private AppConfig loadConfig(List<StartNotice> notices) {

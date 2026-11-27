@@ -317,6 +317,66 @@ class SessionStarterTrackingTest {
     }
 
     @Test
+    @DisplayName("재시작은 처음 시작한 경로가 아니라 셸이 마지막으로 알린 경로에서 띄운다")
+    void restartStartsAtLastReportedPath() {
+        // given: /a 에서 시작해 셸이 /b 를 알린 뒤 끝났다. UI 가 가진 exited 는 처음 Running 에서 만들어 /a 를 가리킨다
+        StartedSession first = start(P1, BASH, Optional.of(new WorkingDir.At(wsl("/a"))));
+        first.stream().start();
+        streamOf(0).emit(osc7("/b"));
+        streamOf(0).exit(0);
+        TerminalSession exited = first.exited().toCompletableFuture().join();
+
+        // when
+        StartedSession second = starter.restart(P1, exited, SIZE).value().orElseThrow();
+
+        // then
+        assertThat(platform.launchRequests().getLast())
+                .isEqualTo(new FakePlatformModule.LaunchRequest(BASH, new WorkingDir.At(wsl("/b"))));
+        assertThat(second.session().knownCwd()).contains(wsl("/b"));
+    }
+
+    @Test
+    @DisplayName("셸이 경로를 알린 적이 없으면 재시작은 처음 시작한 경로에서 띄운다")
+    void restartWithoutReportsStartsAtOriginalPath() {
+        // given
+        StartedSession first = start(P1, BASH, Optional.of(new WorkingDir.At(wsl("/a"))));
+        first.stream().start();
+        streamOf(0).exit(0);
+        TerminalSession exited = first.exited().toCompletableFuture().join();
+
+        // when
+        starter.restart(P1, exited, SIZE).value().orElseThrow();
+
+        // then
+        assertThat(platform.launchRequests().getLast())
+                .isEqualTo(new FakePlatformModule.LaunchRequest(BASH, new WorkingDir.At(wsl("/a"))));
+    }
+
+    @Test
+    @DisplayName("마지막으로 알린 경로가 사라졌으면 재시작은 홈에서 띄우고 알린다")
+    void restartFallsBackToHomeWhenLastReportedPathIsMissing() {
+        // given
+        StartedSession first = start(P1, BASH, Optional.of(new WorkingDir.At(wsl("/a"))));
+        first.stream().start();
+        streamOf(0).emit(osc7("/b"));
+        streamOf(0).exit(0);
+        TerminalSession exited = first.exited().toCompletableFuture().join();
+        launcher.willFailFor(
+                command -> command.workingDirectory().equals(Optional.of("/b")),
+                new LaunchError.WorkingDirectoryNotFound("/b"));
+
+        // when
+        StartedSession second = starter.restart(P1, exited, SIZE).value().orElseThrow();
+
+        // then
+        assertThat(platform.launchRequests())
+                .endsWith(
+                        new FakePlatformModule.LaunchRequest(BASH, new WorkingDir.At(wsl("/b"))),
+                        new FakePlatformModule.LaunchRequest(BASH, new WorkingDir.Home()));
+        assertThat(second.notices()).contains(new StartNotice.StartDirMissing(wsl("/b")));
+    }
+
+    @Test
     @DisplayName("재시작한 새 세션 등록이 먼저 큐에 들어간 뒤 옛 셸의 종료가 오면 옛 종료는 버려 새 세션은 Running 이다")
     void lateExitOfOldShellAfterRestartIsIgnored() {
         // given: 상태 명령을 손으로 돌리는 액터 — 큐에 들어간 순서를 테스트가 정한다
