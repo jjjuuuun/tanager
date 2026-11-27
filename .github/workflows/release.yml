@@ -74,7 +74,7 @@ jobs:
         with:
           name: windows-dist
           path: dist
-      - name: CHANGELOG 생성 (Conventional Commits)
+      - name: CHANGELOG 생성 (Conventional Commits, 영어 노트가 없을 때 대신 씀)
         uses: orhun/git-cliff-action@v4
         with:
           config: cliff.toml
@@ -87,7 +87,10 @@ jobs:
         run: |
           pre=""
           [[ "$GITHUB_REF_NAME" == *-* ]] && pre="--prerelease"
+          # 배포 문서는 영어(#115): 릴리스 PR 에서 쓴 docs/releases/<태그>.md 가 있으면 그것을 노트로 쓴다
+          notes="docs/releases/$GITHUB_REF_NAME.md"
+          [[ -f "$notes" ]] || notes=RELEASE_NOTES.md
           gh release create "$GITHUB_REF_NAME" $pre \
             --title "Tanager $GITHUB_REF_NAME" \
-            --notes-file RELEASE_NOTES.md \
+            --notes-file "$notes" \
             $(find dist -type f \( -name '*.zip' -o -name '*.msi' \))
