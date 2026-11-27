@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import tanager.application.platform.OperatingSystem;
 import tanager.application.platform.PlatformSelectionError;
 import tanager.application.port.in.AppEvent;
+import tanager.application.port.in.OpenError;
 import tanager.application.port.in.StartNotice;
 import tanager.application.port.out.ConfigError;
 import tanager.application.port.out.ConfigWarning;
@@ -111,5 +112,23 @@ class NoticeTextTest {
                 .orElseThrow())));
         assertNoHangul(EN.of(
                 new PlatformSelectionError.NoMatch(new OperatingSystem("Plan9", "4", "mips"), List.of("windows"))));
+    }
+
+    @Test
+    @DisplayName("열기 실패: 지운 배포판 · Windows 셸 없음 · 바꿀 수 없는 경로 · 모르는 셸(#91)")
+    void openErrors() {
+        var home = tanager.domain.history.WorkspacePath.of(
+                        new tanager.domain.history.ShellEnvironment.Wsl("U"), "/home/me")
+                .value()
+                .orElseThrow();
+        assertThat(KO.of(new OpenError.NoProfileForEnvironment(new tanager.domain.history.ShellEnvironment.Wsl("Z"))))
+                .isEqualTo("배포판 Z 를 찾을 수 없다");
+        assertThat(EN.of(new OpenError.NoProfileForEnvironment(new tanager.domain.history.ShellEnvironment.Wsl("Z"))))
+                .isEqualTo("WSL distribution Z was not found");
+        assertNoHangul(
+                EN.of(new OpenError.NoProfileForEnvironment(new tanager.domain.history.ShellEnvironment.Windows())));
+        assertThat(EN.of(new OpenError.EnvironmentMismatch(new ProfileId("powershell"), home)))
+                .isEqualTo("/home/me cannot be opened with powershell");
+        assertNoHangul(EN.of(new OpenError.UnknownProfile(new ProfileId("gone"))));
     }
 }

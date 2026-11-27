@@ -3,6 +3,7 @@ package tanager.ui.layout;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import tanager.domain.history.ShellEnvironment;
@@ -21,7 +22,7 @@ class PaneDiffTest {
 
     private static Workspace two() {
         return Workspace.initial()
-                .openBeside(Orientation.ROW, new ProfileId("cmd"), A)
+                .openBeside(Orientation.ROW, new ProfileId("cmd"), Optional.of(A))
                 .workspace();
     }
 
@@ -43,7 +44,7 @@ class PaneDiffTest {
     @DisplayName("이름이 같아도 명세가 바뀐 창은 없애고 다시 만든다(닫은 번호는 다시 쓰지 않으므로 생기지 않지만 지킨다)")
     void sameIdDifferentSpec() {
         Workspace b = Workspace.initial()
-                .openBeside(Orientation.ROW, new ProfileId("powershell"), A)
+                .openBeside(Orientation.ROW, new ProfileId("powershell"), Optional.of(A))
                 .workspace();
         assertThat(PaneDiff.between(two(), b)).isEqualTo(new PaneDiff(List.of(P2), List.of(P2)));
     }

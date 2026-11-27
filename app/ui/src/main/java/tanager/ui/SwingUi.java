@@ -15,6 +15,7 @@ import tanager.application.port.in.ClosePaneUseCase;
 import tanager.application.port.in.FocusPaneUseCase;
 import tanager.application.port.in.ListProfilesUseCase;
 import tanager.application.port.in.ManageHistoryUseCase;
+import tanager.application.port.in.OpenPaneUseCase;
 import tanager.application.port.in.QueryHistoryTreeUseCase;
 import tanager.application.port.in.StartSessionUseCase;
 import tanager.domain.history.WorkspacePath;
@@ -48,6 +49,7 @@ public final class SwingUi {
             ManageHistoryUseCase historyManager,
             ClosePaneUseCase closePane,
             FocusPaneUseCase focusPane,
+            OpenPaneUseCase open,
             AppEvents events,
             Runnable onShutdown) {
         // 창을 만들기 전에 구독한다 — 이력 불러오기 알림이 창보다 먼저 올 수 있다. 창은 앱과 수명이 같아 해제하지 않는다
@@ -95,6 +97,7 @@ public final class SwingUi {
                     historyManager,
                     closePane,
                     focusPane,
+                    open,
                     onShutdown,
                     settings,
                     background);

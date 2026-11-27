@@ -56,8 +56,11 @@ public record Workspace(Tab tab, Map<PaneId, PaneSpec> specs, int nextPane) {
         return Optional.ofNullable(specs.get(pane));
     }
 
-    /** 포커스 창 옆({@code orientation} — ROW 오른쪽, COLUMN 아래)에 새 창을 열고 그 창에 포커스한다. */
-    public Opened openBeside(Orientation orientation, ProfileId profile, WorkspacePath dir) {
+    /**
+     * 포커스 창 옆({@code orientation} — ROW 오른쪽, COLUMN 아래)에 새 창을 열고 그 창에 포커스한다. {@code dir} 이 비면 그 셸의 시작 경로(→
+     * 홈)에서 뜬다.
+     */
+    public Opened openBeside(Orientation orientation, ProfileId profile, Optional<WorkspacePath> dir) {
         Objects.requireNonNull(orientation, "orientation");
         Objects.requireNonNull(profile, "profile");
         Objects.requireNonNull(dir, "dir");
@@ -68,7 +71,7 @@ public record Workspace(Tab tab, Map<PaneId, PaneSpec> specs, int nextPane) {
                 .value()
                 .orElseThrow(() -> new IllegalStateException("새 창 " + created + " 을 열 수 없다"));
         Map<PaneId, PaneSpec> next = new HashMap<>(specs);
-        next.put(created, new PaneSpec(created, Optional.of(profile), Optional.of(dir)));
+        next.put(created, new PaneSpec(created, Optional.of(profile), dir));
         return new Opened(new Workspace(new Tab(root, created), next, nextPane + 1), created);
     }
 
