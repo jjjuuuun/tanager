@@ -157,7 +157,32 @@ public enum Msg {
     ALIAS_INVISIBLE("alias.invisible"),
     ALIAS_NO_VISIBLE("alias.noVisible"),
     PLATFORM_NO_MATCH("platform.noMatch"),
-    PLATFORM_AMBIGUOUS("platform.ambiguous");
+    PLATFORM_AMBIGUOUS("platform.ambiguous"),
+    STATUS_CPU("status.cpu"),
+    STATUS_MEMORY("status.memory"),
+    STATUS_DISK("status.disk"),
+    STATUS_WSL_MEMORY("status.wslMemory"),
+    STATUS_WSL_DISK("status.wslDisk"),
+    STATUS_WSL_NONE("status.wslNone"),
+    STATUS_UNIT_GB("status.unit.gb"),
+    STATUS_UNIT_MB("status.unit.mb"),
+    STATUS_TIP_CORES("status.tip.cores"),
+    STATUS_TIP_AVAILABLE("status.tip.available"),
+    STATUS_TIP_DRIVE("status.tip.drive"),
+    STATUS_TIP_WSL_MEMORY("status.tip.wslMemory"),
+    STATUS_TIP_WSL_DISK("status.tip.wslDisk"),
+    STATUS_TIP_WARN("status.tip.warn"),
+    STATUS_TIP_UPDATED("status.tip.updated"),
+    STATUS_TIP_CLICK("status.tip.click"),
+    STATUS_WSL_UNAVAILABLE("status.wsl.unavailable"),
+    STATUS_WSL_TIMED_OUT("status.wsl.timedOut"),
+    STATUS_WSL_FAILED("status.wsl.failed"),
+    STATUS_WSL_UNREADABLE("status.wsl.unreadable"),
+    STATUS_WSL_UNSUPPORTED("status.wsl.unsupported"),
+    STATUS_MENU_CPU("status.menu.cpu"),
+    STATUS_MENU_MEMORY("status.menu.memory"),
+    STATUS_MENU_DISK("status.menu.disk"),
+    STATUS_MENU_WSL("status.menu.wsl");
 
     private final String key;
 
