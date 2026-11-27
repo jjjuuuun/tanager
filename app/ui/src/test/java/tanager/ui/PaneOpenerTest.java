@@ -163,6 +163,14 @@ class PaneOpenerTest {
         }
 
         @Override
+        public CompletionStage<Result<PaneSpec, OpenError>> openSame(PaneId pane, Optional<OpenPlacement> placement) {
+            failIfAsked();
+            calls.add(
+                    "openSame " + pane.value() + " " + placement.map(Enum::name).orElse("-"));
+            return CompletableFuture.completedFuture(next);
+        }
+
+        @Override
         public OpenChoices choices(WorkspacePath path) {
             failIfAsked();
             return choices;

@@ -321,4 +321,74 @@ class PaneManagerTest {
         assertThat(panes.choices(home)).isEqualTo(new OpenChoices(Optional.of(WSL_A), List.of()));
         assertThat(panes.choices(gone)).isEqualTo(new OpenChoices(Optional.empty(), List.of()));
     }
+
+    // pane 에 profile 셸이 dir 에서 떠 있다(Running)
+    private void launched(PaneId pane, ShellProfile profile, WorkingDir dir) {
+        TerminalSession running = TerminalSession.start(profile, dir)
+                .value()
+                .orElseThrow()
+                .launched(42)
+                .value()
+                .orElseThrow();
+        state.submit(current -> new Transition<>(
+                        current.withSessions(current.sessions().launched(pane, running)), List.of(), true))
+                .toCompletableFuture()
+                .join();
+    }
+
+    @Test
+    @DisplayName("같은 경로에 새 창: 그 세션 창 옆에 같은 프로파일 · 같은 경로로 열고 새 창에 포커스, LayoutChanged(#92)")
+    void openSameBesideSessionPane() {
+        // given — p1(cmd, C:\a) · p2 가 있고 포커스는 p2
+        configure(Optional.empty(), OpenPlacement.RIGHT);
+        ok(panes.open(A, Optional.empty(), Optional.empty()));
+        launched(P1, CMD, new WorkingDir.At(A));
+        events.clear();
+
+        // when
+        PaneSpec spec = ok(panes.openSame(P1, Optional.of(OpenPlacement.DOWN)));
+
+        // then
+        PaneId p3 = new PaneId("p3");
+        assertThat(spec).isEqualTo(new PaneSpec(p3, Optional.of(CMD.id()), Optional.of(A)));
+        assertThat(workspace().tab().root())
+                .isEqualTo(new LayoutNode.Split(
+                        Orientation.ROW,
+                        Ratio.HALF,
+                        new LayoutNode.Split(
+                                Orientation.COLUMN, Ratio.HALF, new LayoutNode.Leaf(P1), new LayoutNode.Leaf(p3)),
+                        new LayoutNode.Leaf(P2)));
+        assertThat(workspace().tab().focused()).isEqualTo(p3);
+        assertThat(events).containsExactly(new AppEvent.LayoutChanged(workspace()));
+    }
+
+    @Test
+    @DisplayName("같은 경로에 새 창: 경로를 모르는 세션(홈)은 그 프로파일의 시작 경로(→ 홈), 자리가 비면 설정 자리(#92)")
+    void openSameWithoutCwdUsesProfileHome() {
+        // given
+        configure(Optional.empty(), OpenPlacement.DOWN);
+        launched(P1, WSL_A, new WorkingDir.Home());
+
+        // when
+        PaneSpec spec = ok(panes.openSame(P1, Optional.empty()));
+
+        // then
+        assertThat(spec).isEqualTo(new PaneSpec(P2, Optional.of(WSL_A.id()), Optional.empty()));
+        assertThat(((LayoutNode.Split) workspace().tab().root()).orientation()).isEqualTo(Orientation.COLUMN);
+    }
+
+    @Test
+    @DisplayName("같은 경로에 새 창: 세션이 없는 창이면 UnknownPane 이고 레이아웃 · 이벤트는 그대로다(#92)")
+    void openSameUnknownPane() {
+        // given
+        configure(Optional.empty(), OpenPlacement.RIGHT);
+
+        // when
+        OpenError error = err(panes.openSame(P1, Optional.empty()));
+
+        // then
+        assertThat(error).isEqualTo(new OpenError.UnknownPane(P1));
+        assertThat(workspace()).isEqualTo(Workspace.initial());
+        assertThat(events).isEmpty();
+    }
 }

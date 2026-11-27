@@ -96,6 +96,30 @@ public final class PaneManager
     }
 
     @Override
+    public CompletionStage<Result<PaneSpec, OpenError>> openSame(PaneId pane, Optional<OpenPlacement> placement) {
+        Objects.requireNonNull(pane, "pane");
+        Objects.requireNonNull(placement, "placement");
+        Orientation orientation = orientationOf(placement.orElse(settings().openPlacement()));
+        return state.submit(current -> {
+            Optional<TerminalSession> session =
+                    Optional.ofNullable(current.sessions().byPane().get(pane)).map(LiveSession::session);
+            Optional<Workspace> beside = current.workspace().focus(pane).value();
+            if (session.isEmpty() || beside.isEmpty()) {
+                return new Transition<>(
+                        current, List.of(), Result.<PaneSpec, OpenError>err(new OpenError.UnknownPane(pane)));
+            }
+            // 그 세션 창 옆에 연다 — 포커스 창 옆이 아니다
+            return opened(
+                    current,
+                    beside.get()
+                            .openBeside(
+                                    orientation,
+                                    session.get().profile().id(),
+                                    session.get().knownCwd()));
+        });
+    }
+
+    @Override
     public OpenChoices choices(WorkspacePath path) {
         Objects.requireNonNull(path, "path");
         List<ShellProfile> available = profiles.list();
@@ -115,22 +139,28 @@ public final class PaneManager
 
     private CompletionStage<Result<PaneSpec, OpenError>> openWith(
             Result<Choice, OpenError> chosen, OpenPlacement placement) {
-        Orientation orientation = switch (placement) {
+        Orientation orientation = orientationOf(placement);
+        return state.submit(current -> chosen.fold(
+                choice -> opened(
+                        current,
+                        current.workspace()
+                                .openBeside(orientation, choice.shell().id(), choice.dir())),
+                error -> new Transition<>(current, List.of(), Result.<PaneSpec, OpenError>err(error))));
+    }
+
+    private static Orientation orientationOf(OpenPlacement placement) {
+        return switch (placement) {
             case RIGHT -> Orientation.ROW;
             case DOWN -> Orientation.COLUMN;
         };
-        return state.submit(current -> chosen.fold(
-                choice -> {
-                    Workspace.Opened opened = current.workspace()
-                            .openBeside(orientation, choice.shell().id(), choice.dir());
-                    Workspace next = opened.workspace();
-                    return new Transition<>(
-                            current.withWorkspace(next),
-                            List.of(new AppEvent.LayoutChanged(next)),
-                            Result.<PaneSpec, OpenError>ok(
-                                    next.spec(opened.pane()).orElseThrow()));
-                },
-                error -> new Transition<>(current, List.of(), Result.<PaneSpec, OpenError>err(error))));
+    }
+
+    private static Transition<Result<PaneSpec, OpenError>> opened(AppState current, Workspace.Opened opened) {
+        Workspace next = opened.workspace();
+        return new Transition<>(
+                current.withWorkspace(next),
+                List.of(new AppEvent.LayoutChanged(next)),
+                Result.ok(next.spec(opened.pane()).orElseThrow()));
     }
 
     private Result<Choice, OpenError> choose(

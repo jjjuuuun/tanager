@@ -174,6 +174,7 @@ public final class NoticeText {
             case OpenError.EnvironmentMismatch(var profile, var path) ->
                 t(Msg.OPEN_MISMATCH, profile.value(), path.path());
             case OpenError.UnknownProfile(var profile) -> t(Msg.OPEN_UNKNOWN_PROFILE, profile.value());
+            case OpenError.UnknownPane(var pane) -> t(Msg.OPEN_UNKNOWN_PANE, pane.value());
         };
     }
 

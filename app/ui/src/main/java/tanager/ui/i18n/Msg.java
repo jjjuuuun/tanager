@@ -46,6 +46,7 @@ public enum Msg {
     OPEN_NO_WINDOWS("open.noWindows"),
     OPEN_MISMATCH("open.mismatch"),
     OPEN_UNKNOWN_PROFILE("open.unknownProfile"),
+    OPEN_UNKNOWN_PANE("open.unknownPane"),
 
     FORGET_CONFIRM("forget.confirm"),
     FORGET_TITLE("forget.title"),

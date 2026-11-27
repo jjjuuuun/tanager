@@ -6,6 +6,7 @@ import tanager.application.port.out.OpenPlacement;
 import tanager.domain.history.ShellEnvironment;
 import tanager.domain.history.WorkspacePath;
 import tanager.domain.session.ProfileId;
+import tanager.domain.shared.PaneId;
 import tanager.domain.shared.Result;
 import tanager.domain.workspace.PaneSpec;
 
@@ -24,6 +25,13 @@ public interface OpenPaneUseCase {
 
     /** 환경 {@code env} 의 기본 셸을 그 셸의 시작 경로(→ 홈)에서 연다(환경 노드의 "새 창", #91). */
     CompletionStage<Result<PaneSpec, OpenError>> openHome(ShellEnvironment env, Optional<OpenPlacement> placement);
+
+    /**
+     * 세션 노드의 "같은 경로에 새 창"(#92). 창 {@code pane} 옆에 그 세션과 같은 프로파일로, 그 세션이 있는(끝났으면 마지막) 경로에서 연다 —
+     * 경로를 모르면 그 프로파일의 시작 경로(→ 홈). {@code placement} 가 비면 설정 {@code openPlacement}. 세션이 없는 창이면
+     * {@link OpenError.UnknownPane}.
+     */
+    CompletionStage<Result<PaneSpec, OpenError>> openSame(PaneId pane, Optional<OpenPlacement> placement);
 
     /** {@code path} 의 열기 메뉴 후보. 상태를 바꾸지 않는다. */
     OpenChoices choices(WorkspacePath path);
