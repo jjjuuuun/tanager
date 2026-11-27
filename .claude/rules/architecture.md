@@ -16,6 +16,7 @@ app/bootstrap        ← 조립 루트(composition root). 유일하게 모든 �
 - UI 는 pty4j 를 직접 쓰지 않는다. `TerminalStream` 포트를 JediTerm `TtyConnector` 로 감싼다.
 - OS 분기(`if windows`)는 `app/bootstrap` 의 플랫폼 선택(ServiceLoader) 한 곳에만 있다. 나머지 코드는 `PlatformModule` 포트만 본다(셸·경로·셸 통합·리소스 `resources()`·외관 `appearance()`).
 - UI 의 색·모서리·전환 시간은 테마 토큰(`themes/soft-*.properties`, `TerminalPalette`)으로만 쓴다. 코드에 색 리터럴 금지 — 대비는 `SoftThemeTokensTest` 가 검사.
+- UI 의 화면 글자는 `tanager.ui.i18n.Msg` 키와 번들(`i18n/messages.properties` 영어 · `messages_ko.properties` 한국어)로만 쓴다. 코드에 화면용 문자열 리터럴 금지 — `UiTextSourceTest` · `MessageBundlesTest` 가 검사(ADR-0017). 로그 · 예외 메시지는 한국어 그대로. 하위 계층은 화면 문장을 만들지 않고 구조화된 값을 넘긴다(#137).
 - 새 OS 지원 = `app/platform/<os>` 모듈 추가 + `META-INF/services` 등록. 다른 모듈은 바꾸지 않는다.
 - 새 AI 도구 지원(Codex 등) = `app/adapter/toolkit/<도구>` 모듈 추가 + `ToolkitProvider` 등록. 같은 원칙.
 - toolkit 어댑터는 사용자 설정 파일을 **절대 쓰지 않는다**. 비밀값(MCP `env`, 헤더, 토큰)은 읽는 즉시 마스킹하고 도메인으로 넘기지 않는다.
