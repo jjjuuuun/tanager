@@ -2,6 +2,8 @@ package tanager.application.state;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
+import tanager.application.port.out.AppConfig;
 import tanager.domain.history.ShellEnvironment;
 import tanager.domain.history.WorkHistory;
 import tanager.domain.session.LiveSessions;
@@ -12,13 +14,15 @@ import tanager.domain.workspace.Workspace;
  *
  * @param environments 셸 탐지 순서의 환경들(트리의 환경 노드 순서). 탐지 전에는 비어 있다 — 트리는 이력의 환경을 이름순으로 놓는다
  * @param workspace 창 배치와 창별 시작 명세(#88). UI 는 이 값을 그리기만 한다
+ * @param settings 마지막으로 읽은 정상 설정(FR-CFG-03). 처음 읽기 전에는 비어 있다
  */
 public record AppState(
         WorkHistory history,
         LiveSessions sessions,
         HistoryStore store,
         List<ShellEnvironment> environments,
-        Workspace workspace) {
+        Workspace workspace,
+        Optional<AppConfig> settings) {
 
     public AppState {
         Objects.requireNonNull(history, "history");
@@ -26,36 +30,47 @@ public record AppState(
         Objects.requireNonNull(store, "store");
         environments = List.copyOf(environments);
         Objects.requireNonNull(workspace, "workspace");
+        Objects.requireNonNull(settings, "settings");
     }
 
-    /** 앱 시작 때의 상태. 떠 있는 세션은 없고 이력은 아직 불러오는 중이며, 창은 p1 하나다. */
+    /** 앱 시작 때의 상태. 떠 있는 세션은 없고 이력 · 설정은 아직 읽는 중이며, 창은 p1 하나다. */
     public static AppState initial(WorkHistory history) {
         return new AppState(
-                history, LiveSessions.empty(), new HistoryStore.Loading(List.of()), List.of(), Workspace.initial());
+                history,
+                LiveSessions.empty(),
+                new HistoryStore.Loading(List.of()),
+                List.of(),
+                Workspace.initial(),
+                Optional.empty());
     }
 
     /** 이력만 바꾼 새 상태. */
     public AppState withHistory(WorkHistory next) {
-        return new AppState(next, sessions, store, environments, workspace);
+        return new AppState(next, sessions, store, environments, workspace, settings);
     }
 
     /** 세션들만 바꾼 새 상태. */
     public AppState withSessions(LiveSessions next) {
-        return new AppState(history, next, store, environments, workspace);
+        return new AppState(history, next, store, environments, workspace, settings);
     }
 
     /** 환경 순서만 바꾼 새 상태. */
     public AppState withEnvironments(List<ShellEnvironment> next) {
-        return new AppState(history, sessions, store, next, workspace);
+        return new AppState(history, sessions, store, next, workspace, settings);
     }
 
     /** 저장소 상태만 바꾼 새 상태. */
     public AppState withStore(HistoryStore next) {
-        return new AppState(history, sessions, next, environments, workspace);
+        return new AppState(history, sessions, next, environments, workspace, settings);
     }
 
     /** 작업 공간만 바꾼 새 상태. */
     public AppState withWorkspace(Workspace next) {
-        return new AppState(history, sessions, store, environments, next);
+        return new AppState(history, sessions, store, environments, next, settings);
+    }
+
+    /** 설정만 바꾼 새 상태. */
+    public AppState withSettings(AppConfig next) {
+        return new AppState(history, sessions, store, environments, workspace, Optional.of(next));
     }
 }

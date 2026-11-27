@@ -11,11 +11,19 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 import tanager.application.port.in.Remembered;
+import tanager.application.port.out.AnimationMode;
 import tanager.application.port.out.AppConfig;
+import tanager.application.port.out.AppearanceConfig;
 import tanager.application.port.out.ConfigError;
+import tanager.application.port.out.HistoryConfig;
 import tanager.application.port.out.InMemoryConfigRepository;
+import tanager.application.port.out.KeyConfig;
 import tanager.application.port.out.LoadedConfig;
+import tanager.application.port.out.MonitorConfig;
+import tanager.application.port.out.OpenPlacement;
 import tanager.application.port.out.ProfileSettings;
+import tanager.application.port.out.TerminalConfig;
+import tanager.application.port.out.ThemeMode;
 import tanager.domain.session.ProfileId;
 import tanager.domain.shared.Result;
 
@@ -111,5 +119,27 @@ class DefaultProfileMemoryTest {
 
         // then
         assertThat(result.error()).contains(error);
+    }
+
+    @Test
+    @DisplayName("기억할 때 읽은 설정의 다른 항목(외관 등)을 그대로 넘긴다")
+    void savesKeepingOtherSections() {
+        // given
+        AppConfig dark = new AppConfig(
+                Optional.empty(),
+                PROFILES,
+                OpenPlacement.DOWN,
+                new AppearanceConfig(ThemeMode.DARK, AnimationMode.OFF),
+                TerminalConfig.defaults(),
+                HistoryConfig.defaults(),
+                MonitorConfig.defaults(),
+                KeyConfig.defaults());
+        config.willLoad(Result.ok(new LoadedConfig(dark, List.of())));
+
+        // when
+        memory.remember(WSL_B);
+
+        // then
+        assertThat(config.saves()).containsExactly(dark.withDefaultProfile(WSL_B));
     }
 }

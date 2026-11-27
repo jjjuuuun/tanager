@@ -10,16 +10,19 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import tanager.adapter.persistence.JsonConfigRepository;
 import tanager.adapter.persistence.JsonStateRepository;
+import tanager.adapter.persistence.WatchServiceConfigWatch;
 import tanager.application.port.in.ListProfilesUseCase;
 import tanager.application.port.in.ManageHistoryUseCase;
 import tanager.application.port.in.QueryHistoryTreeUseCase;
 import tanager.application.port.in.RecordEnvironmentsUseCase;
+import tanager.application.port.in.SettingsUseCase;
 import tanager.application.port.in.StartSessionUseCase;
 import tanager.application.port.out.HistoryStoreError;
 import tanager.application.port.out.Integration;
 import tanager.application.port.out.LoadedHistory;
 import tanager.application.port.out.PlatformModule;
 import tanager.application.port.out.PtyLauncher;
+import tanager.application.port.out.Subscription;
 import tanager.application.service.DefaultProfileMemory;
 import tanager.application.service.EnvironmentRecorder;
 import tanager.application.service.HistoryManager;
@@ -29,6 +32,7 @@ import tanager.application.service.IntegrationStatus;
 import tanager.application.service.PaneManager;
 import tanager.application.service.ProfileCatalog;
 import tanager.application.service.SessionStarter;
+import tanager.application.service.SettingsReloader;
 import tanager.application.service.VisitRecorder;
 import tanager.application.state.AppState;
 import tanager.application.state.Command;
@@ -59,6 +63,9 @@ final class Assembly {
     private final ExecutorScheduler scheduler;
     private final JsonStateRepository history;
     private final PaneManager panes;
+    private final SettingsReloader settings;
+    private final WatchServiceConfigWatch configWatch;
+    private volatile Subscription watchingSettings = () -> {};
 
     private Assembly(
             ListProfilesUseCase profiles,
@@ -68,7 +75,9 @@ final class Assembly {
             HistorySaver saver,
             ExecutorScheduler scheduler,
             JsonStateRepository history,
-            PaneManager panes) {
+            PaneManager panes,
+            SettingsReloader settings,
+            WatchServiceConfigWatch configWatch) {
         this.profiles = profiles;
         this.sessions = sessions;
         this.state = state;
@@ -77,6 +86,8 @@ final class Assembly {
         this.scheduler = scheduler;
         this.history = history;
         this.panes = panes;
+        this.settings = settings;
+        this.configWatch = configWatch;
     }
 
     /**
@@ -88,7 +99,8 @@ final class Assembly {
         IntegrationStatus integration = new IntegrationStatus(platform);
         warmShellIntegration(integration);
         Path appData = platform.dirs().appData();
-        JsonConfigRepository config = new JsonConfigRepository(appData.resolve(CONFIG_FILE));
+        Path configFile = appData.resolve(CONFIG_FILE);
+        JsonConfigRepository config = new JsonConfigRepository(configFile);
         JsonStateRepository history =
                 new JsonStateRepository(appData.resolve(STATE_FILE), HistoryPolicy.DEFAULT, InstantSource.system());
         ExecutorService stateExecutor = StateActor.serialExecutor();
@@ -103,7 +115,18 @@ final class Assembly {
         SessionStarter starter = new SessionStarter(
                 catalog, config, platform, integration, launcher, new DefaultProfileMemory(config), state, visits);
         PaneManager panes = new PaneManager(catalog, config, platform.paths(), state);
-        return new Assembly(catalog, starter, state, stateExecutor, saver, scheduler, history, panes);
+        SettingsReloader settings = new SettingsReloader(config, state);
+        return new Assembly(
+                catalog,
+                starter,
+                state,
+                stateExecutor,
+                saver,
+                scheduler,
+                history,
+                panes,
+                settings,
+                new WatchServiceConfigWatch(configFile));
     }
 
     // 탐지가 끝나면 그 순서를 트리의 환경 순서로 알린다(#83). 실패하면 트리는 이력의 환경을 이름순으로 놓는다
@@ -139,16 +162,30 @@ final class Assembly {
         return state;
     }
 
+    /** 지금 설정과 설정 파일(FR-CFG-03). */
+    SettingsUseCase settings() {
+        return settings;
+    }
+
+    /**
+     * 설정 파일 감시를 걸고 한 번 읽는다 — {@code SettingsChanged} 가 한 번 나간다(ADR-0009 개정). UI 가 이벤트를 구독한 뒤에 부른다. 그 전에
+     * 부르면 시작 때의 이벤트를 UI 가 받지 못한다. 한 번만 부른다.
+     */
+    void startSettings() {
+        watchingSettings = settings.start(configWatch);
+    }
+
     /** 창 열기 · 닫기 · 포커스(#88 · #89). */
     PaneManager panes() {
         return panes;
     }
 
     /**
-     * 앱을 끝낼 때 한 번 부른다(ADR-0011 · 0012): 상태 실행기를 닫고 남은 명령을 처리한 뒤 → 미저장 이력을 바로 저장(최대 2초) → 저장소를
+     * 앱을 끝낼 때 한 번 부른다(ADR-0011 · 0012): 설정 감시를 끊고 → 상태 실행기를 닫고 남은 명령을 처리한 뒤 → 미저장 이력을 바로 저장(최대 2초) → 저장소를
      * 닫는다(잠금을 푼다). 저장하지 못했으면 저장소를 닫지 않는다. 이 뒤의 명령은 실패한 응답을 받는다.
      */
     void shutdown() {
+        watchingSettings.cancel();
         shutdownInOrder(stateExecutor, saver, FLUSH_TIMEOUT, scheduler::close, history::close);
     }
 

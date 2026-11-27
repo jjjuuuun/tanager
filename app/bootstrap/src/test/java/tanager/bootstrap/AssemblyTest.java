@@ -381,4 +381,63 @@ class AssemblyTest {
         // then
         assertThat(Files.readAllBytes(appData.resolve("state.json"))).isEqualTo(before);
     }
+
+    // ---- 설정 즉시 반영(#182) ----
+
+    private static List<AppEvent> settingsChanges(List<AppEvent> events) {
+        return events.stream()
+                .filter(e -> e instanceof AppEvent.SettingsChanged)
+                .toList();
+    }
+
+    @Test
+    @DisplayName("설정을 시작하면 SettingsChanged 가 한 번 나가고, 실행 중 terminal.size 를 16 으로 저장하면 1초 안에 한 번 더 나간다")
+    void settingsAnnounceAtStartAndReloadOnSave() throws Exception {
+        // given
+        Path file = appData.resolve("config.json");
+        Files.writeString(file, "// 내 설정\n{ \"terminal\": { \"size\": 14 } }", StandardCharsets.UTF_8);
+        Assembly assembly =
+                assemble(new FakePlatformModule(List.of(CMD)).withAppData(appData), new ScriptedPtyLauncher());
+        List<AppEvent> events = new java.util.concurrent.CopyOnWriteArrayList<>();
+        assembly.state().subscribe(events::add);
+
+        // when
+        assembly.startSettings();
+
+        // then
+        await().atMost(Duration.ofSeconds(1))
+                .until(() -> settingsChanges(events).size() == 1);
+        assertThat(assembly.settings().current().terminal().size()).isEqualTo(14);
+
+        // when
+        Files.writeString(file, "// 내 설정\n{ \"terminal\": { \"size\": 16 } }", StandardCharsets.UTF_8);
+
+        // then
+        await().atMost(Duration.ofSeconds(1))
+                .until(() -> settingsChanges(events).size() == 2);
+        assertThat(((AppEvent.SettingsChanged) settingsChanges(events).get(1))
+                        .config()
+                        .terminal()
+                        .size())
+                .isEqualTo(16);
+        await().during(Duration.ofMillis(800))
+                .atMost(Duration.ofSeconds(3))
+                .until(() -> settingsChanges(events).size() == 2);
+        assertThat(Files.readString(file, StandardCharsets.UTF_8)).startsWith("// 내 설정");
+    }
+
+    @Test
+    @DisplayName("config.json 이 없을 때 설정 파일을 열면 schemaVersion 1 만 담은 파일을 만든다")
+    void settingsFileIsCreatedWhenMissing() throws Exception {
+        // given
+        Assembly assembly =
+                assemble(new FakePlatformModule(List.of(CMD)).withAppData(appData), new ScriptedPtyLauncher());
+
+        // when
+        Path file = assembly.settings().file().value().orElseThrow();
+
+        // then
+        assertThat(file).isEqualTo(appData.resolve("config.json"));
+        assertThat(Files.readString(file, StandardCharsets.UTF_8)).containsPattern("\"schemaVersion\"\\s*:\\s*1");
+    }
 }
