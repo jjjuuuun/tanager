@@ -45,7 +45,7 @@ public final class SwingUi {
      *
      * @param panes 창 닫기 · 포커스 · 분할 · 크기 · 줌 · 교환(키보드 · 마우스, #148)
      * @param settings 지금 설정과 설정 파일 — "설정 열기"(Ctrl+,)가 연다(FR-CFG-03). 바뀐 설정은 {@code events} 의 SettingsChanged 로 온다
-     * @param resources 상태줄의 리소스 표시(#187). 표시는 상태줄 이슈(#188)가 붙인다 — 지금은 받기만 하고 구독하지 않는다
+     * @param resources 상태줄 오른쪽의 리소스 표시(#187 · #188). 창을 띄울 때 구독하고 끝낼 때 해제한다
      * @param appearance 지금 쓸 테마 · 움직임(설정 + OS, #184). 움직임을 끄면 전환 효과 없이 바로 바뀐다(FR-UI-04). 테마 적용과 변경 구독은 #185
      * @param onShutdown 앱을 끝낼 때 셸을 닫은 뒤 EDT 밖에서 한 번 부른다(미저장 이력 저장 등, ADR-0011). 끝나면 프로세스를 끝낸다
      */
@@ -115,6 +115,7 @@ public final class SwingUi {
                     panes,
                     open,
                     settings,
+                    resources,
                     onShutdown,
                     terminal,
                     motion,

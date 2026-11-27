@@ -5,17 +5,22 @@ import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Desktop;
 import java.awt.Dimension;
+import java.awt.Insets;
 import java.awt.KeyEventDispatcher;
 import java.awt.KeyboardFocusManager;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -25,6 +30,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
+import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JFrame;
@@ -43,8 +49,10 @@ import tanager.application.port.in.OpenPaneUseCase;
 import tanager.application.port.in.QueryHistoryTreeUseCase;
 import tanager.application.port.in.SettingsUseCase;
 import tanager.application.port.in.StartSessionUseCase;
+import tanager.application.port.in.WatchResourcesUseCase;
 import tanager.application.port.out.AppConfig;
 import tanager.application.port.out.ConfigError;
+import tanager.application.port.out.Subscription;
 import tanager.domain.history.WorkspacePath;
 import tanager.domain.layout.DropZone;
 import tanager.domain.layout.LayoutError;
@@ -71,6 +79,7 @@ import tanager.ui.motion.Motion;
 import tanager.ui.pane.PaneController;
 import tanager.ui.sidebar.SidebarPanel;
 import tanager.ui.sidebar.SidebarSessions;
+import tanager.ui.status.ResourceStatus;
 import tanager.ui.terminal.TerminalSettings;
 import tanager.ui.theme.ColorToken;
 import tanager.ui.theme.ThemeColors;
@@ -90,6 +99,8 @@ final class MainWindow {
     private static final int MIN_HEIGHT = 400;
     private static final int GAP = 6;
     private static final int STATUS_HEIGHT = 28;
+    // 좁은 창에서도 상태줄 왼쪽(환경 · 경로)이 이만큼은 남게 리소스 항목을 숨긴다(#188)
+    private static final int STATUS_LEFT_RESERVE = 200;
     // 경계선을 끌어도 창이 이보다 작아지지 않는다(FR-LAY-11, SDD §5.3)
     private static final int MIN_COLUMNS = 20;
     private static final int MIN_ROWS = 5;
@@ -103,6 +114,9 @@ final class MainWindow {
     private final JLabel statusLeft = new JLabel();
     private final JLabel statusRight = new JLabel();
     private final JButton settingsButton = new JButton();
+    private final JPanel statusBar = new JPanel(new BorderLayout());
+    private final ResourceStatus resourceStatus;
+    private Optional<Subscription> resourceFeed = Optional.empty();
     // 지금 쓰는 키 표. 설정이 바뀌면 다시 시작하지 않고 바꾼다(#183)
     private final LiveKeymap keys = new LiveKeymap();
     private Notices notices = new Notices(List.of());
@@ -136,6 +150,7 @@ final class MainWindow {
             PaneCommands commands,
             OpenPaneUseCase open,
             SettingsUseCase settingsFile,
+            WatchResourcesUseCase resources,
             Runnable onShutdown,
             TerminalSettings settings,
             Motion motion,
@@ -148,6 +163,10 @@ final class MainWindow {
         this.settings = Objects.requireNonNull(settings, "settings");
         this.motion = Objects.requireNonNull(motion, "motion");
         this.background = Objects.requireNonNull(background, "background");
+        this.resourceStatus = new ResourceStatus(
+                Objects.requireNonNull(resources, "resources"),
+                Locale.getDefault(Locale.Category.DISPLAY),
+                ZoneId.systemDefault());
         this.opener = new PaneOpener(Objects.requireNonNull(open, "open"), background, ui, this::notify);
         // 창의 머리줄 손잡이를 배치에 다므로 배치를 먼저 만든다(#151)
         this.layout = new LayoutView(
@@ -185,6 +204,7 @@ final class MainWindow {
     /** 창을 띄우고(아직 연결하지 않은 위젯이 놓인다) 첫 셸들을 띄운다. */
     void show(List<String> warnings) {
         frame.setVisible(true);
+        resourceFeed = Optional.of(resourceStatus.start());
         sidebar.requestRefresh();
         if (!warnings.isEmpty()) {
             notify(warnings);
@@ -249,6 +269,7 @@ final class MainWindow {
         if (!problems.isEmpty()) {
             notify(problems.stream().map(KeyProblemText::of).toList());
         }
+        resourceStatus.settingsChanged();
     }
 
     /** 마지막 창을 닫았다 — 앱을 끝낸다(ADR-0011 · 0016). EDT 에서 부른다. */
@@ -421,6 +442,7 @@ final class MainWindow {
             statusRight.setText(summary);
             statusRight.setToolTipText(tooltip(notices.messages()));
         });
+        fitResources();
     }
 
     private PaneController newPane(PaneId id) {
@@ -482,6 +504,7 @@ final class MainWindow {
             return;
         }
         closing = true;
+        resourceFeed.ifPresent(Subscription::cancel);
         KeyboardFocusManager.getCurrentKeyboardFocusManager().removeKeyEventDispatcher(shortcuts);
         List<CompletableFuture<?>> exits = new ArrayList<>();
         for (PaneController pane : panes.values()) {
@@ -623,8 +646,9 @@ final class MainWindow {
         return area;
     }
 
+    // 오른쪽은 알림 · 리소스 항목 순(#188). 왼쪽 글자는 가운데 칸에 두어 좁으면 말줄임으로 줄어든다
     private JPanel statusBar() {
-        JPanel bar = new JPanel(new BorderLayout());
+        JPanel bar = statusBar;
         bar.setBackground(ThemeColors.get(ColorToken.HEADER));
         bar.setPreferredSize(new Dimension(0, STATUS_HEIGHT));
         bar.setBorder(BorderFactory.createCompoundBorder(
@@ -633,9 +657,31 @@ final class MainWindow {
         statusLeft.setForeground(ThemeColors.get(ColorToken.MUTED));
         statusLeft.setToolTipText(keysTooltip(keys.current()));
         statusRight.setForeground(ThemeColors.get(ColorToken.WARN));
-        bar.add(statusLeft, BorderLayout.WEST);
-        bar.add(statusRight, BorderLayout.EAST);
+        JPanel right = new JPanel();
+        right.setLayout(new BoxLayout(right, BoxLayout.X_AXIS));
+        right.setOpaque(false);
+        right.add(statusRight);
+        right.add(resourceStatus.component());
+        bar.add(statusLeft, BorderLayout.CENTER);
+        bar.add(right, BorderLayout.EAST);
+        resourceStatus.installMenu(bar);
+        bar.addComponentListener(new ComponentAdapter() {
+            @Override
+            public void componentResized(ComponentEvent e) {
+                fitResources();
+            }
+        });
         return bar;
+    }
+
+    // 폭이 모자라면 리소스 항목만 숨긴다 — 알림과 CPU 는 남는다(StatusFit). 배치 전(폭 0)에는 판정하지 않는다
+    private void fitResources() {
+        if (statusBar.getWidth() == 0) {
+            return;
+        }
+        Insets insets = statusBar.getInsets();
+        int width = statusBar.getWidth() - insets.left - insets.right - statusRight.getPreferredSize().width;
+        resourceStatus.fitWithin(width - STATUS_LEFT_RESERVE);
     }
 
     // 키 도움말(#148): 상태줄 왼쪽에 마우스를 올리면 보인다. 지금 쓰는 키(재정의 반영, #183)다
