@@ -55,6 +55,8 @@ public final class TanagerApp {
                         events,
                         appearance,
                         assembly::shutdown);
+                // UI 가 구독한 뒤라 시작 때의 SettingsChanged 를 UI 가 받는다
+                assembly.startSettings();
             }
             case Result.Err<PlatformModule, PlatformSelectionError>(PlatformSelectionError error) -> {
                 LOG.log(System.Logger.Level.ERROR, error.describe());

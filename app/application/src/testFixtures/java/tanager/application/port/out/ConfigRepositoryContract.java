@@ -2,6 +2,7 @@ package tanager.application.port.out;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -64,5 +65,62 @@ public abstract class ConfigRepositoryContract {
 
         // then
         assertThat(repository.load().value()).contains(new LoadedConfig(AppConfig.defaults(), List.of()));
+    }
+
+    /** 저장소가 쓰지 않는 항목을 모두 기본값이 아니게 바꾼 설정. */
+    private static AppConfig withEveryOtherSection(AppConfig base) {
+        return new AppConfig(
+                base.defaultProfile(),
+                base.profiles(),
+                OpenPlacement.DOWN,
+                new AppearanceConfig(ThemeMode.DARK, AnimationMode.OFF),
+                new TerminalConfig("Consolas", 20, 1.5, 500),
+                new HistoryConfig(300, List.of("/x/**")),
+                new MonitorConfig(false, 5, java.util.Set.of(MonitorItem.CPU), 0.5, 3, 0.5, 0.5),
+                new KeyConfig(Optional.of("ctrl B"), Map.of("pane.splitRight", "alt R")));
+    }
+
+    @Test
+    @DisplayName("save 는 기본 프로파일 · 시작 경로만 쓰고 나머지 항목은 저장소의 값을 그대로 둔다(ADR-0009)")
+    public void saveWritesOnlyProfileKeys() {
+        // given
+        ConfigRepository repository = repository();
+
+        // when
+        Result<AppConfig, ConfigError> saved = repository.save(withEveryOtherSection(sample()));
+
+        // then
+        assertThat(saved.value()).contains(withEveryOtherSection(sample()));
+        assertThat(repository.load().value()).contains(new LoadedConfig(sample(), List.of()));
+    }
+
+    @Test
+    @DisplayName("ensureFile 은 없던 설정 파일을 만들고, 그 파일은 기본값으로 읽히며 경고가 없다")
+    public void ensureFileCreatesDefaultFile() {
+        // given
+        ConfigRepository repository = repository();
+
+        // when
+        Result<Path, ConfigError> file = repository.ensureFile();
+
+        // then
+        assertThat(file.isOk()).isTrue();
+        assertThat(repository.load().value()).contains(new LoadedConfig(AppConfig.defaults(), List.of()));
+    }
+
+    @Test
+    @DisplayName("ensureFile 은 이미 있는 설정을 바꾸지 않고, 여러 번 불러도 같은 위치다")
+    public void ensureFileKeepsExistingConfig() {
+        // given
+        ConfigRepository repository = repository();
+        repository.save(sample());
+
+        // when
+        Path first = repository.ensureFile().value().orElseThrow();
+        Path second = repository.ensureFile().value().orElseThrow();
+
+        // then
+        assertThat(second).isEqualTo(first);
+        assertThat(repository.load().value()).contains(new LoadedConfig(sample(), List.of()));
     }
 }

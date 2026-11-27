@@ -29,6 +29,23 @@ public sealed interface ConfigWarning {
         }
     }
 
+    /**
+     * {@code key} 의 값 {@code found} 가 허용 범위 밖이라 {@code used} 를 썼다. 보통 가까운 경계이고, 경계가 열린 쪽(임계값 0 이하)이면
+     * 기본값이다. 두 값 모두 파일에 쓰는 형식의 원문이다.
+     */
+    record OutOfRange(String key, String found, String used) implements ConfigWarning {
+        public OutOfRange {
+            Objects.requireNonNull(key, "key");
+            Objects.requireNonNull(found, "found");
+            Objects.requireNonNull(used, "used");
+        }
+
+        @Override
+        public String describe() {
+            return "설정 " + key + " 의 값 " + found + " 이 범위 밖이라 " + used + " 를 쓴다";
+        }
+    }
+
     /** 설정 값을 쓰지 못한 이유. */
     enum IgnoredReason {
         /** 1 이상의 정수가 아니다. */
@@ -42,6 +59,18 @@ public sealed interface ConfigWarning {
         /** 아는 값이 아니다. */
         UNKNOWN_VALUE,
         /** 알지만 아직 지원하지 않는 값이다(예: 탭이 생기기 전의 openPlacement NEW_TAB). */
-        NOT_SUPPORTED_YET
+        NOT_SUPPORTED_YET,
+        /** 정수가 아니다. */
+        NOT_INTEGER,
+        /** 숫자가 아니다. */
+        NOT_NUMBER,
+        /** true · false 가 아니다. */
+        NOT_BOOLEAN,
+        /** JSON 배열이 아니다. */
+        NOT_ARRAY,
+        /** 문자열(또는 null)이 아니다. */
+        NOT_STRING,
+        /** 이름(키)이 비어 있다. */
+        EMPTY_NAME
     }
 }

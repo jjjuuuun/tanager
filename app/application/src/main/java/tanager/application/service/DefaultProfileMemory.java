@@ -33,7 +33,6 @@ public final class DefaultProfileMemory implements RememberDefaultProfileUseCase
         if (current.defaultProfile().equals(Optional.of(profile))) {
             return Result.ok(Remembered.UNCHANGED);
         }
-        return config.save(new AppConfig(Optional.of(profile), current.profiles()))
-                .fold(saved -> Result.ok(Remembered.SAVED), Result::err);
+        return config.save(current.withDefaultProfile(profile)).fold(saved -> Result.ok(Remembered.SAVED), Result::err);
     }
 }

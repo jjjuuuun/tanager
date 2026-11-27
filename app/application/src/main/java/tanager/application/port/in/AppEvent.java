@@ -2,6 +2,9 @@ package tanager.application.port.in;
 
 import java.util.List;
 import java.util.Objects;
+import tanager.application.port.out.AppConfig;
+import tanager.application.port.out.ConfigError;
+import tanager.application.port.out.ConfigWarning;
 import tanager.application.port.out.HistoryLoadNotice;
 import tanager.application.port.out.HistoryStoreError;
 import tanager.domain.history.ShellEnvironment;
@@ -99,6 +102,53 @@ public sealed interface AppEvent {
     record EnvironmentsChanged(List<ShellEnvironment> environments) implements AppEvent {
         public EnvironmentsChanged {
             environments = List.copyOf(environments);
+        }
+    }
+
+    /**
+     * 설정을 (다시) 읽어 값이 바뀌었다(FR-CFG-03). 시작할 때도 한 번 나간다 — UI 는 이 이벤트만 보고 설정을 적용한다. 같은 값이면 나가지
+     * 않는다.
+     */
+    record SettingsChanged(AppConfig config) implements AppEvent {
+        public SettingsChanged {
+            Objects.requireNonNull(config, "config");
+        }
+    }
+
+    /** 설정을 다시 읽다 사용자에게 알릴 일이 생겼다. 상태줄 알림 한 줄. */
+    record SettingsNotice(SettingsProblem problem) implements AppEvent {
+        public SettingsNotice {
+            Objects.requireNonNull(problem, "problem");
+        }
+    }
+
+    /** 설정 다시 읽기 알림의 내용. 화면 문장은 UI 가 만든다(#137). */
+    sealed interface SettingsProblem {
+        /** 개발자용 설명(로그). */
+        String describe();
+
+        /** 읽지 못해(손상 등) 마지막 정상 설정을 그대로 쓴다. */
+        record KeptPrevious(ConfigError error) implements SettingsProblem {
+            public KeptPrevious {
+                Objects.requireNonNull(error, "error");
+            }
+
+            @Override
+            public String describe() {
+                return "이전 설정을 쓴다: " + error.describe();
+            }
+        }
+
+        /** 읽었지만 일부 값을 쓰지 못했다(새 설정은 적용했다). */
+        record Warned(ConfigWarning warning) implements SettingsProblem {
+            public Warned {
+                Objects.requireNonNull(warning, "warning");
+            }
+
+            @Override
+            public String describe() {
+                return warning.describe();
+            }
         }
     }
 }

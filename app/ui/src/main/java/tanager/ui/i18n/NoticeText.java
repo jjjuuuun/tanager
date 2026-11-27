@@ -90,6 +90,8 @@ public final class NoticeText {
             case ConfigWarning.IgnoredValue(String key, ConfigWarning.IgnoredReason reason) ->
                 t(Msg.CONFIG_IGNORED, key, of(reason));
             case ConfigWarning.NewerVersion(int found) -> t(Msg.CONFIG_NEWER_VERSION, found);
+            case ConfigWarning.OutOfRange(String key, String found, String used) ->
+                t(Msg.CONFIG_OUT_OF_RANGE, key, found, used);
         };
     }
 
@@ -101,6 +103,20 @@ public final class NoticeText {
             case NOT_NON_EMPTY_STRING -> t(Msg.CONFIG_IGNORED_NOT_NON_EMPTY_STRING);
             case UNKNOWN_VALUE -> t(Msg.CONFIG_IGNORED_UNKNOWN_VALUE);
             case NOT_SUPPORTED_YET -> t(Msg.CONFIG_IGNORED_NOT_SUPPORTED_YET);
+            case NOT_INTEGER -> t(Msg.CONFIG_IGNORED_NOT_INTEGER);
+            case NOT_NUMBER -> t(Msg.CONFIG_IGNORED_NOT_NUMBER);
+            case NOT_BOOLEAN -> t(Msg.CONFIG_IGNORED_NOT_BOOLEAN);
+            case NOT_ARRAY -> t(Msg.CONFIG_IGNORED_NOT_ARRAY);
+            case NOT_STRING -> t(Msg.CONFIG_IGNORED_NOT_STRING);
+            case EMPTY_NAME -> t(Msg.CONFIG_IGNORED_EMPTY_NAME);
+        };
+    }
+
+    /** 설정을 다시 읽다 생긴 알림(FR-CFG-03). */
+    public String of(AppEvent.SettingsProblem problem) {
+        return switch (problem) {
+            case AppEvent.SettingsProblem.KeptPrevious(ConfigError error) -> t(Msg.SETTINGS_KEPT_PREVIOUS, of(error));
+            case AppEvent.SettingsProblem.Warned(ConfigWarning warning) -> of(warning);
         };
     }
 

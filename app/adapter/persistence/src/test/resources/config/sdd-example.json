@@ -1,0 +1,15 @@
+// SDD §9.3 의 예시 파일 그대로(주석 포함). 지우지 말 것 — 읽기 계약의 기준이다
+{
+  "schemaVersion": 1,
+  "defaultProfile": "wsl:Ubuntu-24.04",             // 없거나 사라졌으면 시작할 때 셸 선택 화면(FR-SES-02, ADR-0009 개정)
+  "profiles": { "powershell": { "startDir": "C:\\work" }, "wsl:Ubuntu-24.04": { "startDir": "~" } },   // 프로파일별 시작 경로, "~" = 홈
+  "openPlacement": "RIGHT",                       // RIGHT | DOWN | NEW_TAB
+  "history": { "maxEntries": 2000, "exclude": ["/tmp/**", "**/node_modules/**"] },
+  "toolkit": { "providers": ["claude-code"], "importClaudeProjects": true },
+  "appearance": { "theme": "SYSTEM", "animations": "AUTO", "cornerRadius": 8 },   // SYSTEM | DARK | LIGHT · AUTO | ON | OFF
+  "terminal": { "font": "D2Coding", "size": 14, "lineHeight": 1.2, "scrollback": 10000 },
+  "layout": { "dividerHitPx": 6, "minPane": { "cols": 20, "rows": 5 } },
+  "monitor": { "enabled": true, "intervalSec": 2, "items": ["CPU", "MEMORY", "DISK", "WSL"],
+               "thresholds": { "cpu": 0.90, "cpuSustainSec": 10, "memory": 0.85, "disk": 0.90 } },
+  "keys": { "prefix": null, "bindings": { "pane.splitRight": "alt shift EQUALS" } }
+}

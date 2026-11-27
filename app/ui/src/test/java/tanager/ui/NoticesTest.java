@@ -52,4 +52,17 @@ class NoticesTest {
         // when / then
         assertThat(Notices.messageOf(changed)).isEmpty();
     }
+
+    @Test
+    @DisplayName("설정을 다시 읽지 못한 알림은 상태줄 문장이 되고, 설정이 바뀐 이벤트는 보이지 않는다")
+    void settingsNoticeBecomesStatusMessage() {
+        // given
+        AppEvent kept = new AppEvent.SettingsNotice(new AppEvent.SettingsProblem.KeptPrevious(
+                new tanager.application.port.out.ConfigError.Corrupt("(1:2)")));
+        AppEvent changed = new AppEvent.SettingsChanged(tanager.application.port.out.AppConfig.defaults());
+
+        // when / then
+        assertThat(Notices.messageOf(kept)).contains("설정 파일을 읽지 못해 이전 설정을 쓴다: 설정 파일이 손상됐다: (1:2)");
+        assertThat(Notices.messageOf(changed)).isEmpty();
+    }
 }

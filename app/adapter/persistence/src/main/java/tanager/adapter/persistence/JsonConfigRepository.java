@@ -1,9 +1,13 @@
 package tanager.adapter.persistence;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -30,7 +34,8 @@ import tools.jackson.databind.node.ObjectNode;
 /**
  * config.json(SDD §9.3) 을 읽고 쓴다(ADR-0009). 사람이 고치는 파일이라 읽기는 관대하고(주석 · 끝 쉼표 · BOM 허용, 빈 파일은
  * 없는 파일처럼, 형식이 틀린 키는 그 키만 무시) 쓰기는 보수적이다(디스크 파일을 다시 읽어 모르는 키를 보존하고, 손상 · 상위 버전 ·
- * 해석할 수 없는 schemaVersion 의 파일은 덮어쓰지 않으며, 임시 파일에 쓴 뒤 원자적으로 바꾼다).
+ * 해석할 수 없는 schemaVersion 의 파일은 덮어쓰지 않으며, 임시 파일에 쓴 뒤 원자적으로 바꾼다). 쓰는 키는 schemaVersion · defaultProfile ·
+ * profiles.&lt;id&gt;.startDir 뿐이다 — 나머지 항목은 읽기만 한다.
  */
 public final class JsonConfigRepository implements ConfigRepository {
     private static final int SCHEMA_VERSION = 1;
@@ -41,6 +46,8 @@ public final class JsonConfigRepository implements ConfigRepository {
     private static final String KEY_START_DIR = "startDir";
     private static final String KEY_OPEN_PLACEMENT = "openPlacement";
     private static final byte[] UTF8_BOM = {(byte) 0xEF, (byte) 0xBB, (byte) 0xBF};
+    private static final byte[] NEW_FILE =
+            ("{\n  \"" + KEY_SCHEMA_VERSION + "\": " + SCHEMA_VERSION + "\n}\n").getBytes(StandardCharsets.UTF_8);
 
     private static final JsonMapper MAPPER = JsonMapper.builder()
             .enable(JsonReadFeature.ALLOW_JAVA_COMMENTS, JsonReadFeature.ALLOW_TRAILING_COMMA)
@@ -60,6 +67,32 @@ public final class JsonConfigRepository implements ConfigRepository {
             case Disk.Missing _ -> Result.ok(new LoadedConfig(AppConfig.defaults(), List.of()));
             case Disk.Parsed parsed -> Result.ok(interpret(parsed.root()));
         });
+    }
+
+    @Override
+    public Result<Path, ConfigError> ensureFile() {
+        if (Files.exists(file, LinkOption.NOFOLLOW_LINKS)) {
+            return Result.ok(file);
+        }
+        try {
+            Path parent = file.toAbsolutePath().getParent();
+            if (parent != null) {
+                Files.createDirectories(parent);
+            }
+            createNew();
+            return Result.ok(file);
+        } catch (IOException e) {
+            return Result.err(new ConfigError.WriteFailed(file + ": " + e));
+        }
+    }
+
+    // CREATE_NEW — 확인과 쓰기 사이에 사용자가 만든 파일은 덮어쓰지 않는다
+    private void createNew() throws IOException {
+        try {
+            Files.write(file, NEW_FILE, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
+        } catch (FileAlreadyExistsException e) {
+            // 그사이 생겼다 — 그 파일을 연다
+        }
     }
 
     @Override
@@ -157,7 +190,18 @@ public final class JsonConfigRepository implements ConfigRepository {
                 .map(ProfileId::new);
         Map<ProfileId, ProfileSettings> profiles = profiles(root.get(KEY_PROFILES), warnings);
         OpenPlacement placement = openPlacement(root.get(KEY_OPEN_PLACEMENT), warnings);
-        return new LoadedConfig(new AppConfig(defaultProfile, profiles, placement), warnings);
+        ConfigSections sections = new ConfigSections(warnings);
+        return new LoadedConfig(
+                new AppConfig(
+                        defaultProfile,
+                        profiles,
+                        placement,
+                        sections.appearance(root.get("appearance")),
+                        sections.terminal(root.get("terminal")),
+                        sections.history(root.get("history")),
+                        sections.monitor(root.get("monitor")),
+                        sections.keys(root.get("keys"))),
+                warnings);
     }
 
     // 없으면 RIGHT. NEW_TAB 은 탭이 생기는 M5 까지 RIGHT 로 연다(#88). 앱은 이 키를 쓰지 않는다 — 파일 값은 merge 가 보존한다.

@@ -115,6 +115,18 @@ class NoticeTextTest {
     }
 
     @Test
+    @DisplayName("설정 다시 읽기(#182): 범위 밖 값 · 이전 설정 유지 알림이 두 언어로 나온다")
+    void settingsReloadNotices() {
+        var clamped = new ConfigWarning.OutOfRange("terminal.size", "200", "32");
+        var kept = new AppEvent.SettingsProblem.KeptPrevious(new ConfigError.Corrupt("(3:5)"));
+        assertThat(EN.of(clamped)).isEqualTo("Setting terminal.size = 200 is out of range — using 32");
+        assertThat(KO.of(clamped)).isEqualTo(clamped.describe());
+        assertThat(KO.of(kept)).isEqualTo("설정 파일을 읽지 못해 이전 설정을 쓴다: 설정 파일이 손상됐다: (3:5)");
+        assertNoHangul(EN.of(kept));
+        assertThat(EN.of(new AppEvent.SettingsProblem.Warned(clamped))).isEqualTo(EN.of(clamped));
+    }
+
+    @Test
     @DisplayName("열기 실패: 지운 배포판 · Windows 셸 없음 · 바꿀 수 없는 경로 · 모르는 셸(#91) · 세션 없는 창(#92)")
     void openErrors() {
         var home = tanager.domain.history.WorkspacePath.of(
