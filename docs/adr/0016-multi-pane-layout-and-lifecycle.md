@@ -2,7 +2,7 @@
 
 - 상태: 채택(#89, 2026-11-27)
 - 날짜: 2026-11-27
-- 관련: #87 · #88 · #89 · #176, FR-HIS-05 · FR-UI-03 · FR-LAY-04 · 07 · 10 · 12, ADR-0011(개정) · 0012
+- 관련: #87 · #88 · #89 · #176 · #177, FR-HIS-05 · FR-UI-03 · FR-LAY-04 · 07 · 10 · 12 · 13, ADR-0011(개정) · 0012
 
 ## 맥락
 M3 까지 메인 창에는 터미널 창이 하나였다. `MainWindow` 가 `PaneController` 하나를 직접 들고, 끝난 창의 Esc 는 바로 앱을 끝냈다(ADR-0011). M4 에서 창이 여럿이 되면 다음을 정해야 한다.
@@ -81,3 +81,16 @@ JediTerm 위젯은 다른 부모 컨테이너로 옮기면 `removeNotify` · `ad
 - 탭 이름: `TabName` — 앞뒤 공백을 떼고 1~40 코드 포인트, 제어 문자 없음. 이름이 비면 화면은 포커스 창 제목을 쓴다(자동 이름, 지금과 같다).
 - 탭 하나짜리 생성자 `new Workspace(Tab, specs, nextPane)` 는 지우고 팩터리 `Workspace.single(Tab, specs, nextPane)` 를 둔다.
 - 화면(탭 줄 · 탭별 창 보이기)과 유스케이스 · 저장은 이 개정의 범위 밖이다. 이 개정 시점의 `PaneDiff` 와 `MainWindow` 는 활성 탭의 창만 본다.
+
+## 개정 (#177, 2026-11-28) — 탭 유스케이스와 새 탭 자리
+
+- 탭 연산은 port.in `ManageTabUseCase`(만들기 · 닫기 · 이름 · 순서 · 고르기 · 옆 탭 · 번호)와 `MovePaneUseCase.moveToTab` · `moveToNewTab` 으로만 바꾼다. `PaneManager` 가 구현한다.
+  - 명령은 `TabCommands` 정적 팩터리다(ADR-0012). 창 · 탭 명령이 같은 규칙(`WorkspaceChange`)을 쓴다 — 작업 공간이 실제로 바뀔 때만 `LayoutChanged` 한 번, 실패 · 그대로면 상태도 이벤트도 그대로.
+  - 새 탭(`create`)의 창은 기억한 기본 셸을 그 셸의 시작 경로(→ 홈)에서 띄운다. 설정을 읽지 않아 EDT 에서 불러도 막히지 않는다.
+  - 틀린 탭 이름은 `TabError.InvalidName(TabNameProblem)`.
+- 탭 닫기는 명령 하나다. 작업 공간과 그 탭 창들의 세션 제거를 한 전이에서 바꾸고 `LayoutChanged` 다음 `SessionsChanged` 를 낸다.
+  - 마지막 탭이면 작업 공간은 그대로 두고 `LastPaneClosed` 를 낸다(응답 `TabError.LastTab`). 마지막 창 닫기와 같다. 셸이 여럿일 때의 확인은 UI 몫이다.
+- 새 탭 자리
+  - config `openPlacement: NEW_TAB` 을 그대로 읽는다(미지원 경고 없음). 트리에서 열기 · 환경 노드의 새 창 · 같은 경로에 새 창이 맨 뒤의 새 탭에 연다.
+  - 사이드바 폴더를 창 **가운데**에 놓으면 새 탭에 연다(FR-LAY-13). 놓은 창의 포커스는 바꾸지 않는다. 그 창이 그사이 닫혔으면 변에 놓을 때처럼 `UnknownPane`.
+- 화면: 탭 줄(#181) 전까지도 `LayoutView` 는 트리에 없는 창(다른 탭의 창)을 떼지 않고 숨긴다. 셸 · 크기가 그대로이고, 사이드바에서 그 세션에 포커스하면 그 탭으로 돌아온다. `PaneDiff` 는 명세만 비교하므로 탭을 옮겨도 창을 다시 만들지 않는다.
