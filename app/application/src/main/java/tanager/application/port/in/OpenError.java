@@ -31,7 +31,7 @@ public sealed interface OpenError {
         }
     }
 
-    /** 그 창에 세션이 없다(이미 닫혔거나 셸이 아직 뜨지 않았다, #92). */
+    /** 그 창에 세션이 없다(이미 닫혔거나 셸이 아직 뜨지 않았다, #92). 끌어다 놓은 대상 창이 그사이 닫혀도 이 값이다(#151). */
     record UnknownPane(PaneId pane) implements OpenError {
         public UnknownPane {
             Objects.requireNonNull(pane, "pane");

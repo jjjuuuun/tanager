@@ -5,6 +5,7 @@ import java.util.concurrent.CompletionStage;
 import tanager.application.port.out.OpenPlacement;
 import tanager.domain.history.ShellEnvironment;
 import tanager.domain.history.WorkspacePath;
+import tanager.domain.layout.DropZone;
 import tanager.domain.session.ProfileId;
 import tanager.domain.shared.PaneId;
 import tanager.domain.shared.Result;
@@ -32,6 +33,14 @@ public interface OpenPaneUseCase {
      * {@link OpenError.UnknownPane}.
      */
     CompletionStage<Result<PaneSpec, OpenError>> openSame(PaneId pane, Optional<OpenPlacement> placement);
+
+    /**
+     * 사이드바 폴더를 창 영역에 끌어다 놓았다(FR-LAY-13, #151). 대상 창의 {@code zone} 변에 {@code path} 에서 여는 창을 그 환경의 기본
+     * 프로파일로 만든다 — 포커스 창이 아니라 놓은 창 기준이다. 가운데는 새 탭 자리지만 탭이 생기는 M5 전까지는 대상 창의 오른쪽이다. 설정
+     * {@code openPlacement} 는 보지 않는다. 바뀌면 {@code LayoutChanged} 가 한 번 나간다. 대상 창이 그사이 닫혔으면 {@link
+     * OpenError.UnknownPane}.
+     */
+    CompletionStage<Result<PaneSpec, OpenError>> openAt(WorkspacePath path, DropZone zone);
 
     /** {@code path} 의 열기 메뉴 후보. 상태를 바꾸지 않는다. */
     OpenChoices choices(WorkspacePath path);

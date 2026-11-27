@@ -16,6 +16,7 @@ import tanager.application.port.in.OpenPaneUseCase;
 import tanager.application.port.out.OpenPlacement;
 import tanager.domain.history.ShellEnvironment;
 import tanager.domain.history.WorkspacePath;
+import tanager.domain.layout.DropZone;
 import tanager.domain.session.IntegrationMode;
 import tanager.domain.session.LaunchTemplate;
 import tanager.domain.session.ProfileId;
@@ -182,6 +183,13 @@ class PaneOpenerTest {
             failIfAsked();
             calls.add(
                     "openSame " + pane.value() + " " + placement.map(Enum::name).orElse("-"));
+            return CompletableFuture.completedFuture(next);
+        }
+
+        @Override
+        public CompletionStage<Result<PaneSpec, OpenError>> openAt(WorkspacePath path, DropZone zone) {
+            failIfAsked();
+            calls.add("openAt " + path.path() + " " + zone);
             return CompletableFuture.completedFuture(next);
         }
 
