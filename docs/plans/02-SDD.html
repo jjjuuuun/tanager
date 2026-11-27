@@ -481,6 +481,7 @@ public record CpuWindow(List&lt;Double&gt; recent) {                            
 <tr><td>명령 팔레트</td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd></td><td><kbd>:</kbd></td></tr>
 </table></div>
 <p class="small muted">셸·에디터가 쓰는 키(<kbd>Ctrl</kbd>+<kbd>C</kbd>, <kbd>Ctrl</kbd>+<kbd>R</kbd> 등)는 기본 바인딩에 쓰지 않는다. 설정에서 바꿀 때 충돌을 검사한다(FR-CFG-01).</p>
+<p class="small muted">레이아웃 키는 메인 창이 터미널보다 먼저 가로챈다(#148). 그래서 셸이 같은 키를 써도(readline 의 <kbd>Alt</kbd>+<kbd>←</kbd>/<kbd>→</kbd> 단어 이동 등) <b>레이아웃 키가 우선</b>하고 셸에는 가지 않는다. 가로챈 키가 만드는 글자도 셸로 보내지 않는다. 수식키는 정확히 같아야 한다 — AltGr(Windows 는 <kbd>Ctrl</kbd>+<kbd>Alt</kbd>)로 치는 글자는 셸로 간다. 키 목록은 상태줄 왼쪽 툴팁에 보인다.</p>
 <h3>8.3 마우스 조작 (FR-LAY-09)</h3>
 <div class="tbl-wrap"><table>
 <tr><th>동작</th><th>마우스</th><th>같은 유스케이스의 키</th></tr>
