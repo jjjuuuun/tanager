@@ -30,10 +30,10 @@ class JsonStateRepositoryContractTest extends HistoryRepositoryContract {
         return repository;
     }
 
-    // 상위 버전(schemaVersion 2) 파일은 읽기 전용으로 열린다
+    // 상위 버전(schemaVersion 3) 파일은 읽기 전용으로 열린다
     @Override
     protected void arrangeReadOnly() throws IOException {
-        try (InputStream in = JsonStateRepositoryContractTest.class.getResourceAsStream("/state/v2-newer.json")) {
+        try (InputStream in = JsonStateRepositoryContractTest.class.getResourceAsStream("/state/v3-newer.json")) {
             Files.write(dir.resolve("state.json"), in.readAllBytes());
         }
     }
