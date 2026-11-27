@@ -2,7 +2,6 @@ package tanager.domain.layout;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import net.jqwik.api.Arbitraries;
@@ -79,7 +78,6 @@ class LayoutNodeProperties {
         // given: 임의의 트리
         LayoutNode tree = new LayoutNode.Leaf(new PaneId("p0"));
         int next = 1;
-        List<PaneId> created = new ArrayList<>();
         for (Step step : steps) {
             if (step.split()) {
                 List<PaneId> panes = tree.panes();
@@ -87,7 +85,6 @@ class LayoutNodeProperties {
                 tree = tree.split(panes.get(step.index() % panes.size()), step.orientation(), fresh)
                         .value()
                         .orElseThrow();
-                created.add(fresh);
             }
         }
         List<PaneId> panes = tree.panes();
