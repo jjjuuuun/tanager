@@ -2,13 +2,15 @@ package tanager.domain.layout;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
+import static org.assertj.core.api.Assertions.within;
 
 import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import tanager.domain.shared.PaneId;
 
-/** 레이아웃 트리의 split · close(#87, SDD §5.3). */
+/** 레이아웃 트리의 split · close(#87) · resize · resizeTo · swap · move(#146, SDD §5.3). */
 class LayoutNodeTest {
     private static final PaneId P1 = new PaneId("p1");
     private static final PaneId P2 = new PaneId("p2");
@@ -17,6 +19,18 @@ class LayoutNodeTest {
 
     private static LayoutNode leaf(PaneId pane) {
         return new LayoutNode.Leaf(pane);
+    }
+
+    private static LayoutNode row(double ratio, LayoutNode first, LayoutNode second) {
+        return new LayoutNode.Split(Orientation.ROW, new Ratio(ratio), first, second);
+    }
+
+    private static LayoutNode column(double ratio, LayoutNode first, LayoutNode second) {
+        return new LayoutNode.Split(Orientation.COLUMN, new Ratio(ratio), first, second);
+    }
+
+    private static double rootRatio(LayoutNode tree) {
+        return ((LayoutNode.Split) tree).ratio().value();
     }
 
     private static LayoutNode ok(tanager.domain.shared.Result<LayoutNode, LayoutError> result) {
@@ -105,5 +119,173 @@ class LayoutNodeTest {
     void splitRejectsDuplicatePanes() {
         assertThatIllegalArgumentException()
                 .isThrownBy(() -> new LayoutNode.Split(Orientation.ROW, Ratio.HALF, leaf(P1), leaf(P1)));
+    }
+
+    @Test
+    @DisplayName("resize 의 방향은 경계가 움직이는 쪽이다 — p1 · p2 어느 쪽에서 RIGHT 로 키워도 0.55")
+    void resizeMovesDividerTowardDirection() {
+        // given
+        LayoutNode tree = row(0.5, leaf(P1), leaf(P2));
+
+        // when
+        LayoutNode fromLeft = ok(tree.resize(P1, Direction.RIGHT, 0.05));
+        LayoutNode fromRight = ok(tree.resize(P2, Direction.RIGHT, 0.05));
+
+        // then
+        assertThat(rootRatio(fromLeft)).isCloseTo(0.55, within(1e-9));
+        assertThat(rootRatio(fromRight)).isCloseTo(0.55, within(1e-9));
+        assertThat(rootRatio(ok(tree.resize(P1, Direction.LEFT, 0.05)))).isCloseTo(0.45, within(1e-9));
+    }
+
+    @Test
+    @DisplayName("resize 는 0.1 ~ 0.9 로 고정한다 — 0.9 에서 더 키워도 0.9, 0.1 에서 더 줄여도 0.1")
+    void resizeClamps() {
+        assertThat(rootRatio(ok(row(0.9, leaf(P1), leaf(P2)).resize(P1, Direction.RIGHT, 0.05))))
+                .isEqualTo(0.9);
+        assertThat(rootRatio(ok(column(0.1, leaf(P1), leaf(P2)).resize(P2, Direction.UP, 0.05))))
+                .isEqualTo(0.1);
+    }
+
+    @Test
+    @DisplayName("resize 는 target 을 감싼 가장 가까운 같은 축 Split 만 바꾼다")
+    void resizeNearestMatchingAncestor() {
+        // given: Split(ROW, 0.5, p1, Split(COLUMN, 0.5, p2, p3))
+        LayoutNode tree = row(0.5, leaf(P1), column(0.5, leaf(P2), leaf(P3)));
+
+        // when
+        LayoutNode wider = ok(tree.resize(P3, Direction.LEFT, 0.1));
+        LayoutNode taller = ok(tree.resize(P3, Direction.UP, 0.1));
+
+        // then: LEFT 는 바깥 ROW, UP 은 안쪽 COLUMN
+        assertThat(rootRatio(wider)).isCloseTo(0.4, within(1e-9));
+        assertThat(((LayoutNode.Split) wider).second()).isEqualTo(column(0.5, leaf(P2), leaf(P3)));
+        assertThat(rootRatio(taller)).isEqualTo(0.5);
+        assertThat(rootRatio(((LayoutNode.Split) taller).second())).isCloseTo(0.4, within(1e-9));
+    }
+
+    @Test
+    @DisplayName("위아래로만 나뉜 트리를 좌우로 resize 하면 NoSplitInDirection, 없는 창은 UnknownPane")
+    void resizeWithoutMatchingSplit() {
+        // given
+        LayoutNode tree = column(0.5, leaf(P1), leaf(P2));
+
+        // then
+        assertThat(tree.resize(P1, Direction.LEFT, 0.05).error())
+                .contains(new LayoutError.NoSplitInDirection(P1, Direction.LEFT));
+        assertThat(leaf(P1).resize(P1, Direction.DOWN, 0.05).error())
+                .contains(new LayoutError.NoSplitInDirection(P1, Direction.DOWN));
+        assertThat(tree.resize(P9, Direction.UP, 0.05).error()).contains(new LayoutError.UnknownPane(P9));
+        assertThatIllegalArgumentException().isThrownBy(() -> tree.resize(P1, Direction.UP, Double.NaN));
+        assertThatIllegalArgumentException().isThrownBy(() -> tree.resize(P1, Direction.UP, -0.05));
+    }
+
+    @Test
+    @DisplayName("resizeTo 는 경로가 가리키는 Split 의 비율만 바꾼다")
+    void resizeToPath() {
+        // given: Split(ROW, 0.5, p1, Split(COLUMN, 0.5, p2, p3))
+        LayoutNode tree = row(0.5, leaf(P1), column(0.5, leaf(P2), leaf(P3)));
+
+        // when
+        LayoutNode root = ok(tree.resizeTo(SplitPath.ROOT, new Ratio(0.3)));
+        LayoutNode inner = ok(tree.resizeTo(SplitPath.of(SplitPath.Branch.SECOND), new Ratio(0.7)));
+
+        // then
+        assertThat(root).isEqualTo(row(0.3, leaf(P1), column(0.5, leaf(P2), leaf(P3))));
+        assertThat(inner).isEqualTo(row(0.5, leaf(P1), column(0.7, leaf(P2), leaf(P3))));
+    }
+
+    @Test
+    @DisplayName("resizeTo 의 경로가 창이나 트리 밖을 가리키면 UnknownSplit")
+    void resizeToUnknownSplit() {
+        // given
+        LayoutNode tree = row(0.5, leaf(P1), leaf(P2));
+        SplitPath toLeaf = SplitPath.of(SplitPath.Branch.FIRST);
+        SplitPath beyond = SplitPath.of(SplitPath.Branch.FIRST, SplitPath.Branch.SECOND);
+
+        // then
+        assertThat(tree.resizeTo(toLeaf, Ratio.HALF).error()).contains(new LayoutError.UnknownSplit(toLeaf));
+        assertThat(tree.resizeTo(beyond, Ratio.HALF).error()).contains(new LayoutError.UnknownSplit(beyond));
+        assertThat(leaf(P1).resizeTo(SplitPath.ROOT, Ratio.HALF).error())
+                .contains(new LayoutError.UnknownSplit(SplitPath.ROOT));
+    }
+
+    @Test
+    @DisplayName("SplitPath 는 루트에서 한 칸씩 내려가며 만들고 밖에서 바꿀 수 없다")
+    void splitPath() {
+        // given
+        List<SplitPath.Branch> branches = new java.util.ArrayList<>(List.of(SplitPath.Branch.FIRST));
+        SplitPath path = new SplitPath(branches);
+
+        // when
+        branches.add(SplitPath.Branch.SECOND);
+
+        // then
+        assertThat(path).isEqualTo(SplitPath.ROOT.then(SplitPath.Branch.FIRST));
+        assertThat(SplitPath.ROOT.branches()).isEmpty();
+        assertThat(path.then(SplitPath.Branch.SECOND).branches())
+                .containsExactly(SplitPath.Branch.FIRST, SplitPath.Branch.SECOND);
+    }
+
+    @Test
+    @DisplayName("p1 | (p2 / p3) 에서 swap(p1, p3) 이면 p3 | (p2 / p1), 비율은 그대로")
+    void swapPanes() {
+        // given
+        LayoutNode tree = row(0.3, leaf(P1), column(0.6, leaf(P2), leaf(P3)));
+
+        // when
+        LayoutNode swapped = ok(tree.swap(P1, P3));
+
+        // then
+        assertThat(swapped).isEqualTo(row(0.3, leaf(P3), column(0.6, leaf(P2), leaf(P1))));
+    }
+
+    @Test
+    @DisplayName("swap 할 창이 같으면 SamePane, 없으면 UnknownPane")
+    void swapErrors() {
+        // given
+        LayoutNode tree = row(0.5, leaf(P1), leaf(P2));
+
+        // then
+        assertThat(tree.swap(P1, P1).error()).contains(new LayoutError.SamePane(P1));
+        assertThat(tree.swap(P1, P9).error()).contains(new LayoutError.UnknownPane(P9));
+        assertThat(tree.swap(P9, P2).error()).contains(new LayoutError.UnknownPane(P9));
+    }
+
+    @Test
+    @DisplayName("p1 | p2 | p3 에서 move(p3, p1, TOP) 이면 (p3 / p1) | p2, 창 집합은 같다")
+    void moveToTop() {
+        // given
+        LayoutNode tree = row(0.5, leaf(P1), row(0.5, leaf(P2), leaf(P3)));
+
+        // when
+        LayoutNode moved = ok(tree.move(P3, P1, Edge.TOP));
+
+        // then
+        assertThat(moved).isEqualTo(row(0.5, column(0.5, leaf(P3), leaf(P1)), leaf(P2)));
+        assertThat(Set.copyOf(moved.panes())).isEqualTo(Set.copyOf(tree.panes()));
+    }
+
+    @Test
+    @DisplayName("move 는 edge 쪽에 반반으로 붙인다 — BOTTOM · RIGHT 는 옮긴 창이 second, LEFT 는 first")
+    void moveEachEdge() {
+        // given
+        LayoutNode tree = row(0.3, leaf(P1), leaf(P2));
+
+        // then
+        assertThat(ok(tree.move(P1, P2, Edge.BOTTOM))).isEqualTo(column(0.5, leaf(P2), leaf(P1)));
+        assertThat(ok(tree.move(P1, P2, Edge.RIGHT))).isEqualTo(row(0.5, leaf(P2), leaf(P1)));
+        assertThat(ok(tree.move(P2, P1, Edge.LEFT))).isEqualTo(row(0.5, leaf(P2), leaf(P1)));
+    }
+
+    @Test
+    @DisplayName("move 할 창과 대상이 같으면 SamePane, 어느 쪽이든 없으면 UnknownPane")
+    void moveErrors() {
+        // given
+        LayoutNode tree = row(0.5, leaf(P1), leaf(P2));
+
+        // then
+        assertThat(tree.move(P1, P1, Edge.TOP).error()).contains(new LayoutError.SamePane(P1));
+        assertThat(tree.move(P9, P1, Edge.TOP).error()).contains(new LayoutError.UnknownPane(P9));
+        assertThat(tree.move(P1, P9, Edge.TOP).error()).contains(new LayoutError.UnknownPane(P9));
     }
 }

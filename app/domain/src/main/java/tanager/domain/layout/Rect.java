@@ -7,4 +7,9 @@ public record Rect(int x, int y, int width, int height) {
             throw new IllegalArgumentException("크기는 음수일 수 없다: " + width + "x" + height);
         }
     }
+
+    /** 점이 안에 있는가. 오른쪽 · 아래 변은 빼서 맞닿은 두 사각형이 한 점을 같이 갖지 않게 한다. */
+    public boolean contains(int px, int py) {
+        return px >= x && px < x + width && py >= y && py < y + height;
+    }
 }
