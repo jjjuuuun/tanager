@@ -46,6 +46,8 @@ public final class TanagerApp {
                         assembly.profiles(),
                         assembly.historyTree(),
                         assembly.historyManager(),
+                        assembly.panes(),
+                        assembly.panes(),
                         events,
                         assembly::shutdown);
             }

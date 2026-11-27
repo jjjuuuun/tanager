@@ -34,8 +34,10 @@ import tanager.domain.history.WorkspacePath;
 import tanager.domain.session.ProfileResolution;
 import tanager.domain.session.ShellProfile;
 import tanager.domain.session.TerminalSession;
+import tanager.domain.session.WorkingDir;
 import tanager.domain.shared.PaneId;
 import tanager.domain.shared.Result;
+import tanager.domain.workspace.PaneSpec;
 import tanager.ui.font.TerminalFontSet;
 import tanager.ui.terminal.TanagerTermWidget;
 import tanager.ui.terminal.TerminalSettings;
@@ -490,6 +492,49 @@ class PaneControllerTest {
         return null;
     }
 
+    @Test
+    @DisplayName("명세로 시작하면 그 프로파일 · 경로로 띄운다 — 트리에서 연 창(#89)")
+    void startWithSpec() {
+        // given
+        WorkspacePath a = WorkspacePath.of(new ShellEnvironment.Windows(), "C:\\a")
+                .value()
+                .orElseThrow();
+        PaneSpec spec = new PaneSpec(new PaneId("p1"), Optional.of(PaneFixtures.CMD.id()), Optional.of(a));
+
+        // when
+        onEdt(() -> {
+            controller.start(spec);
+            return null;
+        });
+        drain();
+
+        // then
+        StartRequest request = sessions.requests.getLast();
+        assertThat(request.profile()).contains(PaneFixtures.CMD.id());
+        assertThat(request.dir()).contains(new WorkingDir.At(a));
+        assertThat(request.rememberAsDefault()).isFalse();
+        assertThat(onEdt(controller::running)).isTrue();
+    }
+
+    @Test
+    @DisplayName("창 안으로 포커스가 들어오면 Host 에 한 번 알린다(클릭 포커스, #89)")
+    void focusGainedNotifiesHost() {
+        // given
+        startAndConnect();
+
+        // when
+        onEdt(() -> {
+            controller.focusChanged(true);
+            controller.focusChanged(true);
+            controller.focusChanged(false);
+            controller.focusChanged(true);
+            return null;
+        });
+
+        // then
+        assertThat(host.focusGained.get()).isEqualTo(2);
+    }
+
     private void startAndConnect() {
         onEdt(() -> {
             controller.start();
@@ -625,6 +670,13 @@ class PaneControllerTest {
 
     private static final class RecordingHost implements PaneController.Host {
         final AtomicInteger removed = new AtomicInteger();
+        final AtomicInteger focusGained = new AtomicInteger();
+
+        @Override
+        public void focusGained() {
+            focusGained.incrementAndGet();
+        }
+
         final List<String> notices = new CopyOnWriteArrayList<>();
 
         @Override
