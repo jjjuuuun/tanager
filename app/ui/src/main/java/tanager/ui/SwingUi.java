@@ -18,6 +18,7 @@ import tanager.domain.history.WorkspacePath;
 import tanager.domain.shared.PaneId;
 import tanager.ui.font.TerminalFontSet;
 import tanager.ui.font.TerminalFonts;
+import tanager.ui.i18n.Msg;
 import tanager.ui.terminal.TerminalSettings;
 import tanager.ui.theme.JediTermColors;
 import tanager.ui.theme.SoftDarkLaf;
@@ -63,11 +64,11 @@ public final class SwingUi {
             List<String> warnings = new ArrayList<>();
             // 글꼴이 없어도 창은 띄운다 — 논리 글꼴 Monospaced 로 대신하고 상태줄에 알린다
             TerminalFontSet fonts = TerminalFonts.registerBundled().fold(set -> set, error -> {
-                warnings.add("번들 글꼴을 쓸 수 없어 Monospaced 로 표시한다 — " + error);
+                warnings.add(Msg.APP_FONT_FALLBACK.text(error));
                 return TerminalFontSet.fallback();
             });
             if (!installTheme()) {
-                showFatalAndExit("소프트 다크 테마를 설치하지 못했다");
+                showFatalAndExit(Msg.APP_THEME_FAILED.text());
                 return;
             }
             TerminalSettings settings = new TerminalSettings(fonts, JediTermColors.current());
@@ -85,7 +86,7 @@ public final class SwingUi {
     public static void showFatalAndExit(String message) {
         SwingUtilities.invokeLater(() -> {
             installTheme();
-            JOptionPane.showMessageDialog(null, message, "Tanager 를 시작할 수 없습니다", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(null, message, Msg.APP_CANNOT_START.text(), JOptionPane.ERROR_MESSAGE);
             System.exit(1);
         });
     }

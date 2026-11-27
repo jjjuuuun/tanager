@@ -9,10 +9,11 @@ import tanager.domain.history.SessionStatus;
 import tanager.domain.history.ShellEnvironment;
 import tanager.domain.history.VisitedDirectory;
 import tanager.domain.history.WorkspacePath;
+import tanager.ui.i18n.Msg;
 
 /** 사이드바 노드의 글자 · 툴팁(순수 계산, #84). */
 final class SidebarText {
-    static final String PINNED_SECTION = "고정됨";
+    static final String PINNED_SECTION = Msg.SIDEBAR_PINNED.text();
     private static final DateTimeFormatter WHEN = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     private SidebarText() {}
@@ -30,16 +31,15 @@ final class SidebarText {
         String name = "#" + session.number() + " " + session.shellName();
         return switch (session.status()) {
             case SessionStatus.Running _ -> name;
-            case SessionStatus.Exited(int code) -> name + " · 종료 " + code;
+            case SessionStatus.Exited(int code) -> Msg.SIDEBAR_SESSION_EXITED.text(name, code);
         };
     }
 
     /** 전체 경로, 방문 기록이 있으면 " · 방문 N회 · 최근 날짜 시각"(현지 시각). */
     static String folderTooltip(WorkspacePath path, Optional<VisitedDirectory> visit, ZoneId zone) {
-        return path.path()
-                + visit.map(v -> " · 방문 " + v.visitCount() + "회 · 최근 "
-                                + WHEN.format(v.lastVisited().atZone(zone)))
-                        .orElse("");
+        return visit.map(v -> Msg.SIDEBAR_FOLDER_VISITS.text(
+                        path.path(), v.visitCount(), WHEN.format(v.lastVisited().atZone(zone))))
+                .orElse(path.path());
     }
 
     /** 별칭(보조 글자). */

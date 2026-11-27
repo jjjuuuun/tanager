@@ -6,6 +6,7 @@ import java.util.Objects;
 import java.util.Optional;
 import tanager.domain.session.ProfileId;
 import tanager.domain.session.ShellProfile;
+import tanager.ui.i18n.Msg;
 
 /**
  * 셸 선택 화면을 글자로 옮긴 것(순수 계산).
@@ -19,9 +20,8 @@ import tanager.domain.session.ShellProfile;
  */
 record PickerView(
         String title, List<Row> rows, String rememberLabel, boolean remember, Optional<String> missing, String hint) {
-    static final String TITLE = "시작할 셸을 고르세요";
-    static final String REMEMBER_LABEL = "다음부터 이 셸로 바로 열기";
-    private static final String KEYS = "↑↓ 고르기 · Enter 열기 · 1~9 바로 열기 · Space 기억 · ";
+    static final String TITLE = Msg.PICKER_TITLE.text();
+    static final String REMEMBER_LABEL = Msg.PICKER_REMEMBER.text();
     private static final int DIGIT_KEYS = 9;
 
     PickerView {
@@ -62,17 +62,17 @@ record PickerView(
                 REMEMBER_LABEL,
                 picker.remember(),
                 picker.missing().map(PickerView::missingText),
-                KEYS + escLabel(picking.exit()));
+                Msg.PICKER_KEYS.text(escLabel(picking.exit())));
     }
 
     private static String missingText(ProfileId id) {
-        return "기억한 셸 " + id.value() + " 를 찾을 수 없다 — 열 셸을 골라 주세요";
+        return Msg.PICKER_MISSING.text(id.value());
     }
 
     private static String escLabel(PickerExit exit) {
         return switch (exit) {
-            case PickerExit.CloseWindow _ -> "Esc 닫기";
-            case PickerExit.ReturnTo _ -> "Esc 돌아가기";
+            case PickerExit.CloseWindow _ -> Msg.HINT_ESC_CLOSE.text();
+            case PickerExit.ReturnTo _ -> Msg.HINT_ESC_BACK.text();
         };
     }
 }
