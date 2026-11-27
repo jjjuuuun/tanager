@@ -66,6 +66,7 @@ import tanager.ui.terminal.TanagerTermWidget;
 import tanager.ui.terminal.TerminalSettings;
 import tanager.ui.theme.ColorToken;
 import tanager.ui.theme.ThemeColors;
+import tanager.ui.theme.Themed;
 
 /**
  * 터미널 창 하나(Swing 쪽). 상태 전이는 {@link PaneState} 가 계산하고 여기서는 효과만 실행한다(ADR-0011). 모든 메서드는 EDT 에서
@@ -177,6 +178,19 @@ public final class PaneController {
         Objects.requireNonNull(keymap, "keymap");
         headerButtons.forEach((action, button) -> button.setToolTipText(
                 KeyHelp.withKey(keymap, buttonNames.get(action).text(), action)));
+    }
+
+    /**
+     * 테마가 바뀌었다(#185). 창에 놓인 부품은 메인 창이 이미 다시 칠했다 — 지금 창 밖에 있는 부품(선택 화면 · 종료 띠 · 떼어 둔 위젯, 줌으로
+     * 가려진 창)만 새 LaF 와 토큰 색으로 바꾼다. 위젯 · 셸은 그대로다. EDT 에서 부른다.
+     */
+    public void themeChanged() {
+        for (JComponent part : List.of(root, picker, notice, widget)) {
+            if (SwingUtilities.getWindowAncestor(part) == null) {
+                SwingUtilities.updateComponentTreeUI(part);
+                Themed.recolor(part);
+            }
+        }
     }
 
     /** 메인 창에 넣을 컴포넌트. */
@@ -530,8 +544,8 @@ public final class PaneController {
         headerBar.setOpaque(false);
         headerBar.setPreferredSize(new Dimension(0, HEADER_HEIGHT));
         headerBar.setBorder(new EmptyBorder(0, 10, 0, 10));
-        header.setForeground(ThemeColors.get(ColorToken.MUTED));
-        warning.setForeground(ThemeColors.get(ColorToken.WARN));
+        Themed.foreground(header, ColorToken.MUTED);
+        Themed.foreground(warning, ColorToken.WARN);
         warning.setVisible(false);
         grip.setToolTipText(Msg.PANE_DRAG.text());
         grip.setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
@@ -694,13 +708,13 @@ public final class PaneController {
             setFocusable(true);
             // Tab 이 포커스 이동으로 먹히지 않고 키 바인딩에 오게 한다
             setFocusTraversalKeysEnabled(false);
-            setBackground(ThemeColors.get(ColorToken.HEADER));
+            Themed.background(this, ColorToken.HEADER);
             message.setEditable(false);
             message.setFocusable(false);
             message.setOpaque(false);
             message.setLineWrap(true);
             message.setWrapStyleWord(true);
-            hint.setForeground(ThemeColors.get(ColorToken.MUTED));
+            Themed.foreground(hint, ColorToken.MUTED);
         }
 
         void band(String text) {
@@ -709,7 +723,7 @@ public final class PaneController {
             setPreferredSize(new Dimension(0, BAND_HEIGHT));
             setBorder(new EmptyBorder(0, 10, 0, 10));
             hint.setText(text);
-            hint.setForeground(ThemeColors.get(ColorToken.TEXT));
+            Themed.foreground(hint, ColorToken.TEXT);
             add(hint, BorderLayout.CENTER);
         }
 
@@ -719,9 +733,9 @@ public final class PaneController {
             setPreferredSize(null);
             setBorder(new EmptyBorder(24, 24, 24, 24));
             message.setText(text);
-            message.setForeground(ThemeColors.get(ColorToken.WARN));
+            Themed.foreground(message, ColorToken.WARN);
             hint.setText(keys);
-            hint.setForeground(ThemeColors.get(ColorToken.MUTED));
+            Themed.foreground(hint, ColorToken.MUTED);
             add(message, BorderLayout.NORTH);
             add(hint, BorderLayout.CENTER);
         }

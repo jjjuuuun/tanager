@@ -6,6 +6,7 @@ import com.jediterm.terminal.TextStyle;
 import com.jediterm.terminal.model.StyleState;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 /**
  * 셸이 고른 ANSI 글자색 · 배경색이 읽히지 않으면 그릴 글자색을 보정하는 스타일 상태(#113).
@@ -17,13 +18,15 @@ import java.util.Optional;
  *
  * <p>보정 대상은 글자색 · 배경색이 모두 ANSI 16색(글자색은 기본 전경 포함)인 경우뿐이다. truecolor · 256색 · 기본 배경 · 반전은
  * 사용자가 고른 그대로 둔다.
+ *
+ * <p>팔레트는 판단할 때마다 지금 테마의 것을 읽는다 — 실행 중에 테마를 바꾸면 그 뒤 SGR 부터 새 팔레트로 판단한다(#185).
  */
 final class ReadableStyleState extends StyleState {
     private static final int ANSI_COLORS = TerminalPalette.ANSI_COLORS;
 
-    private final TerminalPalette palette;
+    private final Supplier<TerminalPalette> palette;
 
-    ReadableStyleState(TerminalPalette palette) {
+    ReadableStyleState(Supplier<TerminalPalette> palette) {
         this.palette = Objects.requireNonNull(palette, "palette");
     }
 
@@ -41,8 +44,9 @@ final class ReadableStyleState extends StyleState {
                 || style.hasOption(TextStyle.Option.INVERSE)) {
             return style;
         }
-        Rgb shown = foreground == null ? palette.foreground() : palette.ansi(foreground.getColorIndex());
-        Rgb readable = ReadableForeground.on(shown, palette.ansi(background.getColorIndex()));
+        TerminalPalette now = palette.get();
+        Rgb shown = foreground == null ? now.foreground() : now.ansi(foreground.getColorIndex());
+        Rgb readable = ReadableForeground.on(shown, now.ansi(background.getColorIndex()));
         if (readable.equals(shown)) {
             return style;
         }

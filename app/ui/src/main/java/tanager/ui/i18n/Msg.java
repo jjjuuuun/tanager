@@ -95,6 +95,8 @@ public enum Msg {
     TERMINAL_LINE_UP("terminal.lineUp"),
     TERMINAL_LINE_DOWN("terminal.lineDown"),
     TERMINAL_SELECT_ALL("terminal.selectAll"),
+    TERMINAL_FONT_MISSING("terminal.fontMissing"),
+    TERMINAL_FONT_NO_HANGUL("terminal.fontNoHangul"),
     APP_FONT_FALLBACK("app.fontFallback"),
     APP_THEME_FAILED("app.themeFailed"),
     APP_CANNOT_START("app.cannotStart"),

@@ -1,5 +1,6 @@
 package tanager.ui.theme;
 
+import com.formdev.flatlaf.FlatLaf;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -7,6 +8,7 @@ import java.io.Reader;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Properties;
+import tanager.application.port.out.Theme;
 
 /** 번들된 소프트 테마 두 개. 색은 각 리소스 파일에만 있다. */
 public enum SoftTheme {
@@ -19,6 +21,22 @@ public enum SoftTheme {
     SoftTheme(String resource, boolean dark) {
         this.resource = resource;
         this.dark = dark;
+    }
+
+    /** 화면에 쓸 테마(설정 + OS, #184)의 소프트 테마(#185). */
+    public static SoftTheme of(Theme theme) {
+        return switch (theme) {
+            case DARK -> DARK;
+            case LIGHT -> LIGHT;
+        };
+    }
+
+    /** 이 테마를 까는 새 LaF. */
+    public FlatLaf lookAndFeel() {
+        return switch (this) {
+            case DARK -> new SoftDarkLaf();
+            case LIGHT -> new SoftLightLaf();
+        };
     }
 
     /** 클래스패스 리소스 경로. */

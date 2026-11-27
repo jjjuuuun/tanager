@@ -7,8 +7,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.function.IntPredicate;
+import java.util.function.Predicate;
 import tanager.domain.shared.Result;
 
 /** 번들 터미널 글꼴(D2Coding, OFL-1.1). JediTerm 은 대체 글꼴이 없어 기본 글꼴에 한글이 있어야 한다(ADR-0010). */
@@ -90,5 +93,44 @@ public final class TerminalFonts {
     /** 코드 포인트마다 그릴 수 있는지 판정하는 함수로 본 한글 지원 여부(테스트용 순수 판정). */
     static boolean supportsHangul(IntPredicate canDisplay) {
         return HANGUL_SAMPLE.codePoints().allMatch(canDisplay);
+    }
+
+    /**
+     * 설정의 글꼴 이름을 실제로 쓸 글꼴로 고른다(FR-CFG-02 · FR-UI-06). {@value #FAMILY} 는 번들 글꼴 객체를 그대로 쓴다. 설치되지
+     * 않았거나 한글을 그리지 못하는 글꼴이면 번들 글꼴을 쓰고 경고를 붙인다.
+     */
+    public static FontChoice choose(String name, TerminalFontSet bundled) {
+        return choose(name, bundled, TerminalFonts::installed, TerminalFonts::supportsHangul);
+    }
+
+    static FontChoice choose(
+            String name,
+            TerminalFontSet bundled,
+            Function<String, Optional<TerminalFontSet>> installed,
+            Predicate<Font> hangul) {
+        if (name.equalsIgnoreCase(FAMILY)) {
+            return new FontChoice(bundled, Optional.empty());
+        }
+        // getName: 등록 전이라 패밀리가 Dialog 로 보여도 만든 이름(번들은 D2Coding)을 알린다
+        String used = bundled.regular().getName();
+        Optional<TerminalFontSet> found = installed.apply(name);
+        if (found.isEmpty()) {
+            return new FontChoice(bundled, Optional.of(new FontFallback(name, used, FontFallback.Reason.NOT_FOUND)));
+        }
+        if (!hangul.test(found.get().regular())) {
+            return new FontChoice(bundled, Optional.of(new FontFallback(name, used, FontFallback.Reason.NO_HANGUL)));
+        }
+        return new FontChoice(found.get(), Optional.empty());
+    }
+
+    /**
+     * 이 PC 의 글꼴 {@code name}(크기 1). JDK 는 없는 이름에도 대신 Dialog 를 주므로 패밀리 · 글꼴 이름이 같을 때만 있다고 본다. 굵게는
+     * 같은 이름의 BOLD 다.
+     */
+    static Optional<TerminalFontSet> installed(String name) {
+        Font regular = new Font(name, Font.PLAIN, 1);
+        boolean same = regular.getFamily(Locale.ROOT).equalsIgnoreCase(name)
+                || regular.getFontName(Locale.ROOT).equalsIgnoreCase(name);
+        return same ? Optional.of(new TerminalFontSet(regular, new Font(name, Font.BOLD, 1))) : Optional.empty();
     }
 }

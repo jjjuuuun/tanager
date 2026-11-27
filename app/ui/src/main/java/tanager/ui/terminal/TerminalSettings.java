@@ -15,8 +15,15 @@ import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Function;
 import javax.swing.KeyStroke;
+import tanager.application.port.out.TerminalConfig;
+import tanager.ui.font.FontChoice;
+import tanager.ui.font.FontFallback;
 import tanager.ui.font.TerminalFontSet;
+import tanager.ui.font.TerminalFonts;
 import tanager.ui.i18n.Msg;
 import tanager.ui.theme.JediTermColors;
 
@@ -28,22 +35,105 @@ import tanager.ui.theme.JediTermColors;
  * 가로채지 않는다: 복사 Ctrl+Shift+C · Ctrl+Insert, 붙여넣기 Ctrl+Shift+V · Shift+Insert, 찾기 Ctrl+Shift+F, 한 쪽 스크롤
  * Ctrl+Shift+PgUp/PgDn, 한 줄 스크롤 Ctrl+Shift+↑/↓, 화면 지우기 · 모두 선택은 단축키 없음(메뉴로만). macOS 단축키는 macOS
  * 지원 때 정한다.
+ *
+ * <p>모든 창이 이 한 벌을 같이 쓴다. 글꼴 · 크기 · 줄 높이 · 스크롤백(FR-CFG-02)과 테마 색(FR-UI-05)은 실행 중에 바뀌고, 바뀌면 붙은
+ * 위젯들({@link Listener})에 알린다(#185). JediTerm 은 색 · 글꼴을 그릴 때마다 이 객체에서 읽는다. 바꾸는 쪽은 EDT, 읽는 쪽은 EDT 와
+ * 에뮬레이터 스레드라 값은 volatile 이다.
  */
 public final class TerminalSettings extends DefaultSettingsProvider {
-    static final float FONT_SIZE = 14f;
-    static final float LINE_SPACING = 1.2f;
+    static final float LINE_SPACING = (float) TerminalConfig.defaults().lineHeight();
 
-    private final TerminalFontSet fonts;
-    private final JediTermColors colors;
+    /** 위젯에 알리는 변경. */
+    public enum Change {
+        /** 테마 색 — 다시 그린다. */
+        COLORS,
+        /** 글꼴 · 크기 · 줄 높이 — 칸 크기를 다시 재고 달라졌으면 셸에 resize 를 보낸다. */
+        FONT,
+        /** 스크롤백 줄 수 — 넘치는 오래된 줄을 버린다. */
+        SCROLLBACK
+    }
 
-    public TerminalSettings(TerminalFontSet fonts, JediTermColors colors) {
-        this.fonts = Objects.requireNonNull(fonts, "fonts").sized(FONT_SIZE);
+    /** 설정 변경을 받는 쪽(위젯). EDT 에서 불린다. */
+    @FunctionalInterface
+    public interface Listener {
+        void changed(Change change);
+    }
+
+    private final TerminalFontSet bundled;
+    private final List<Listener> listeners = new CopyOnWriteArrayList<>();
+    private volatile TerminalFontSet fonts;
+    private volatile JediTermColors colors;
+    private volatile TerminalConfig config = TerminalConfig.defaults();
+
+    /** @param bundled 번들 글꼴(크기 1). 설정한 글꼴을 쓸 수 없을 때도 이것을 쓴다 */
+    public TerminalSettings(TerminalFontSet bundled, JediTermColors colors) {
+        this.bundled = Objects.requireNonNull(bundled, "bundled");
+        this.fonts = bundled.sized(config.size());
         this.colors = Objects.requireNonNull(colors, "colors");
     }
 
-    /** 위젯이 굵은 글자를 그릴 때 쓰는 14pt 글꼴 한 벌. */
+    /**
+     * 설정의 글꼴 · 크기 · 줄 높이 · 스크롤백을 쓴다. 지난번과 같으면 아무것도 하지 않는다. 글꼴을 쓸 수 없으면 번들 글꼴을 그 크기로 쓰고
+     * 경고를 돌려준다(FR-UI-06). EDT 에서 부른다.
+     */
+    public Optional<FontFallback> apply(TerminalConfig next) {
+        return apply(next, name -> TerminalFonts.choose(name, bundled));
+    }
+
+    Optional<FontFallback> apply(TerminalConfig next, Function<String, FontChoice> choose) {
+        Objects.requireNonNull(next, "next");
+        TerminalConfig before = config;
+        if (next.equals(before)) {
+            return Optional.empty();
+        }
+        FontChoice choice = choose.apply(next.font());
+        boolean fontChanged = !next.font().equals(before.font())
+                || next.size() != before.size()
+                || next.lineHeight() != before.lineHeight();
+        fonts = choice.fonts().sized(next.size());
+        config = next;
+        if (fontChanged) {
+            notifyAll(Change.FONT);
+        }
+        if (next.scrollback() != before.scrollback()) {
+            notifyAll(Change.SCROLLBACK);
+        }
+        return choice.fallback();
+    }
+
+    /** 테마 색을 바꾸고 위젯들을 다시 그린다(FR-UI-05). EDT 에서 부른다. */
+    public void colors(JediTermColors next) {
+        colors = Objects.requireNonNull(next, "next");
+        notifyAll(Change.COLORS);
+    }
+
+    void addListener(Listener listener) {
+        listeners.add(Objects.requireNonNull(listener, "listener"));
+    }
+
+    void removeListener(Listener listener) {
+        listeners.remove(listener);
+    }
+
+    /** 붙은 위젯 수(테스트용). */
+    int listenerCount() {
+        return listeners.size();
+    }
+
+    private void notifyAll(Change change) {
+        for (Listener listener : listeners) {
+            listener.changed(change);
+        }
+    }
+
+    /** 위젯이 그릴 때 쓰는 지금 글꼴 한 벌(설정 크기). */
     TerminalFontSet fonts() {
         return fonts;
+    }
+
+    /** 화면 밖으로 남길 줄 수. 넘치는 줄은 위젯이 버린다. */
+    int scrollback() {
+        return config.scrollback();
     }
 
     /**
@@ -52,7 +142,7 @@ public final class TerminalSettings extends DefaultSettingsProvider {
      */
     public Dimension cellArea(Component component, int columns, int rows) {
         FontMetrics metrics = component.getFontMetrics(getTerminalFont());
-        int rowHeight = (int) Math.ceil(metrics.getHeight() * LINE_SPACING);
+        int rowHeight = (int) Math.ceil(metrics.getHeight() * getLineSpacing());
         return new Dimension(columns * metrics.charWidth('W'), rows * rowHeight);
     }
 
@@ -63,12 +153,18 @@ public final class TerminalSettings extends DefaultSettingsProvider {
 
     @Override
     public float getTerminalFontSize() {
-        return FONT_SIZE;
+        return config.size();
     }
 
     @Override
     public float getLineSpacing() {
-        return LINE_SPACING;
+        return (float) config.lineHeight();
+    }
+
+    // JediTerm 버퍼는 만들 때 상한이 정해지고 바꿀 수 없다 — 상한은 설정 최댓값으로 두고 줄 수는 위젯이 지금 설정으로 자른다(#185)
+    @Override
+    public int getBufferMaxLinesCount() {
+        return TerminalConfig.MAX_SCROLLBACK;
     }
 
     @Override
@@ -156,20 +252,18 @@ public final class TerminalSettings extends DefaultSettingsProvider {
     }
 
     /**
-     * 위젯의 스타일 상태. 읽히지 않는 ANSI 글자색 · 배경색 조합을 보정한다(#113). 기본 스타일은 기본 전경 · 배경이다. 위젯마다 새로
-     * 만든다.
+     * 위젯의 스타일 상태. 읽히지 않는 ANSI 글자색 · 배경색 조합을 보정한다(#113). 기본 스타일은 기본 전경 · 배경이고, 둘 다 지금 테마를
+     * 따른다(#185). 위젯마다 새로 만든다.
      */
     public StyleState styleState() {
-        StyleState state = colors.styleState();
-        state.setDefaultStyle(new TextStyle(colors.foreground(), colors.background()));
-        return state;
+        return JediTermColors.styleState(() -> colors);
     }
 
     // JediTermWidget 이 StyleState 의 기본 스타일을 아직 이 (사용 중단된) 메서드로 만든다 — 3.76 기준
     @Override
     @Deprecated
     public TextStyle getDefaultStyle() {
-        return new TextStyle(colors.foreground(), colors.background());
+        return JediTermColors.defaultStyle(() -> colors);
     }
 
     @Override

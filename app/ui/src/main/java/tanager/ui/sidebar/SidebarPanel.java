@@ -50,7 +50,7 @@ import tanager.domain.history.WorkspacePath;
 import tanager.domain.shared.Result;
 import tanager.ui.i18n.Msg;
 import tanager.ui.theme.ColorToken;
-import tanager.ui.theme.ThemeColors;
+import tanager.ui.theme.Themed;
 
 /**
  * 시안 D 의 왼쪽 사이드바(#84, FR-HIS-02 · 03 · 04). 위는 '고정됨', 아래는 환경 → 폴더 → 세션. 이력 · 세션 · 환경 순서가 바뀌면 다시
@@ -115,13 +115,13 @@ public final class SidebarPanel {
         tree.setShowsRootHandles(true);
         tree.setCellRenderer(new SidebarRenderer());
         tree.getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
-        tree.setBackground(ThemeColors.get(ColorToken.SIDEBAR));
+        Themed.background(tree, ColorToken.SIDEBAR);
         ToolTipManager.sharedInstance().registerComponent(tree);
         JScrollPane scroll = new JScrollPane(tree);
         scroll.setBorder(BorderFactory.createEmptyBorder());
-        scroll.getViewport().setBackground(ThemeColors.get(ColorToken.SIDEBAR));
-        panel.setBackground(ThemeColors.get(ColorToken.SIDEBAR));
-        panel.setBorder(BorderFactory.createMatteBorder(0, 0, 0, 1, ThemeColors.get(ColorToken.BORDER)));
+        Themed.background(scroll.getViewport(), ColorToken.SIDEBAR);
+        Themed.background(panel, ColorToken.SIDEBAR);
+        panel.setBorder(Themed.line(0, 0, 0, 1, ColorToken.BORDER));
         panel.setPreferredSize(new Dimension(DEFAULT_WIDTH, 0));
         layoutSearch();
         bindMenu();
@@ -195,7 +195,7 @@ public final class SidebarPanel {
                 }
             }
         });
-        empty.setForeground(ThemeColors.get(ColorToken.MUTED));
+        Themed.foreground(empty, ColorToken.MUTED);
         empty.setBorder(BorderFactory.createEmptyBorder(8, 12, 8, 12));
         empty.setVisible(false);
     }

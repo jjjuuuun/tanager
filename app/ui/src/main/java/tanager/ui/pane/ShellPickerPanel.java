@@ -32,6 +32,7 @@ import javax.swing.UIManager;
 import javax.swing.border.EmptyBorder;
 import tanager.ui.theme.ColorToken;
 import tanager.ui.theme.ThemeColors;
+import tanager.ui.theme.Themed;
 
 /**
  * 셸 선택 화면(Swing 쪽). {@link PickerView} 를 그리고 입력을 사건으로 넘기기만 한다 — 선택 상태의 원본은 {@link ShellPicker} 다.
@@ -99,9 +100,9 @@ final class ShellPickerPanel extends JPanel {
         column.setLayout(new BoxLayout(column, BoxLayout.Y_AXIS));
         column.setOpaque(false);
 
-        title.setForeground(ThemeColors.get(ColorToken.TEXT));
+        Themed.foreground(title, ColorToken.TEXT);
         title.setFont(title.getFont().deriveFont(Font.BOLD, title.getFont().getSize2D() + 2f));
-        missing.setForeground(ThemeColors.get(ColorToken.WARN));
+        Themed.foreground(missing, ColorToken.WARN);
         rows.setLayout(new BoxLayout(rows, BoxLayout.Y_AXIS));
         rows.setOpaque(false);
         scroll.setBorder(BorderFactory.createEmptyBorder());
@@ -111,12 +112,12 @@ final class ShellPickerPanel extends JPanel {
         scroll.getVerticalScrollBar().setFocusable(false);
         remember.setFocusable(false);
         remember.setOpaque(false);
-        remember.setForeground(ThemeColors.get(ColorToken.TEXT));
+        Themed.foreground(remember, ColorToken.TEXT);
         remember.addActionListener(e -> {
             // 체크 상태는 상태에서 다시 칠한다(원본은 하나)
             events.accept(new PaneEvent.PickerInput(new PickerKey.ToggleRemember()));
         });
-        hint.setForeground(ThemeColors.get(ColorToken.MUTED));
+        Themed.foreground(hint, ColorToken.MUTED);
 
         for (JComponent part : new JComponent[] {title, missing, scroll, remember, hint}) {
             part.setAlignmentX(LEFT_ALIGNMENT);
@@ -138,11 +139,11 @@ final class ShellPickerPanel extends JPanel {
         row.setName("picker-row-" + index);
         JLabel key = new JLabel(content.key());
         key.setPreferredSize(new Dimension(KEY_WIDTH, ROW_HEIGHT));
-        key.setForeground(ThemeColors.get(content.selected() ? ColorToken.ACCENT : ColorToken.MUTED));
+        Themed.foreground(key, content.selected() ? ColorToken.ACCENT : ColorToken.MUTED);
         JLabel name = new JLabel(content.name());
-        name.setForeground(ThemeColors.get(ColorToken.TEXT));
+        Themed.foreground(name, ColorToken.TEXT);
         JLabel detail = new JLabel(content.detail());
-        detail.setForeground(ThemeColors.get(ColorToken.MUTED));
+        Themed.foreground(detail, ColorToken.MUTED);
         detail.setBorder(new EmptyBorder(0, ROW_PADDING, 0, 0));
         row.add(key, BorderLayout.WEST);
         row.add(name, BorderLayout.CENTER);

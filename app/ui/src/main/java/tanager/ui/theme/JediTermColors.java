@@ -7,6 +7,7 @@ import com.jediterm.terminal.emulator.ColorPalette;
 import com.jediterm.terminal.model.StyleState;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Supplier;
 import javax.swing.UIManager;
 
 /**
@@ -47,6 +48,11 @@ public final class JediTermColors {
                 uiColor("foreground"), uiColor("background"), uiColor("cursor"), uiColor("selection"), ansi));
     }
 
+    /** 테마 파일의 터미널 팔레트(UIManager 없이). 실행 중 테마 전환(#185)이 새 테마의 색을 미리 만든다. */
+    public static JediTermColors of(SoftTheme theme) {
+        return from(theme.load().terminal());
+    }
+
     static JediTermColors from(TerminalPalette palette) {
         return new JediTermColors(palette);
     }
@@ -74,7 +80,27 @@ public final class JediTermColors {
      * 쪽이 {@code setDefaultStyle} 로 준다.
      */
     public StyleState styleState() {
-        return new ReadableStyleState(source);
+        return new ReadableStyleState(() -> source);
+    }
+
+    /**
+     * 테마를 따라가는 스타일 상태(#185). 보정 판단과 기본 스타일 모두 {@code colors} 의 지금 값을 쓴다 — 실행 중에 테마를 바꿔도 위젯을
+     * 다시 만들지 않는다.
+     */
+    public static StyleState styleState(Supplier<JediTermColors> colors) {
+        StyleState state = new ReadableStyleState(() -> colors.get().source);
+        state.setDefaultStyle(defaultStyle(colors));
+        return state;
+    }
+
+    /**
+     * 그릴 때마다 {@code colors} 의 지금 기본 전경 · 배경을 읽는 기본 스타일. 리셋(SGR 0) 뒤 쓴 글자는 이 스타일을 버퍼에 그대로 담으므로,
+     * 고정 RGB 를 담으면 테마를 바꾼 뒤에도 옛 테마 색으로 남는다(#185).
+     */
+    public static TextStyle defaultStyle(Supplier<JediTermColors> colors) {
+        return new TextStyle(
+                new TerminalColor(() -> colors.get().foreground().toColor()),
+                new TerminalColor(() -> colors.get().background().toColor()));
     }
 
     /** 선택 영역: 기본 전경 위에 선택 배경. */

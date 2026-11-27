@@ -1,6 +1,8 @@
 package tanager.ui;
 
 import com.formdev.flatlaf.FlatLaf;
+import java.awt.Component;
+import java.awt.Window;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -30,10 +32,11 @@ import tanager.ui.i18n.NoticeText;
 import tanager.ui.motion.Motion;
 import tanager.ui.terminal.TerminalSettings;
 import tanager.ui.theme.JediTermColors;
-import tanager.ui.theme.SoftDarkLaf;
+import tanager.ui.theme.SoftTheme;
 
 /**
- * Swing 화면의 입구. 조립 루트(app/bootstrap)만 부른다. M2: 소프트 다크 테마 · 번들 D2Coding · 터미널 창 하나(ADR-0011).
+ * Swing 화면의 입구. 조립 루트(app/bootstrap)만 부른다. 소프트 테마(설정 + OS 를 따라 실행 중에도 바뀜, #185) · 번들 D2Coding · 분할한
+ * 터미널 창들(ADR-0011 · 0016).
  */
 public final class SwingUi {
     private static final System.Logger LOG = System.getLogger(SwingUi.class.getName());
@@ -46,7 +49,8 @@ public final class SwingUi {
      * @param panes 창 닫기 · 포커스 · 분할 · 크기 · 줌 · 교환(키보드 · 마우스, #148)
      * @param settings 지금 설정과 설정 파일 — "설정 열기"(Ctrl+,)가 연다(FR-CFG-03). 바뀐 설정은 {@code events} 의 SettingsChanged 로 온다
      * @param resources 상태줄 오른쪽의 리소스 표시(#187 · #188). 창을 띄울 때 구독하고 끝낼 때 해제한다
-     * @param appearance 지금 쓸 테마 · 움직임(설정 + OS, #184). 움직임을 끄면 전환 효과 없이 바로 바뀐다(FR-UI-04). 테마 적용과 변경 구독은 #185
+     * @param appearance 지금 쓸 테마 · 움직임(설정 + OS, #184). 시작 테마로 깔고, 바뀌면 화면 · 모든 터미널에 바로 쓴다(#185). 창이 활성화될 때
+     *     OS 값을 다시 읽게 한다. 움직임을 끄면 전환 효과 없이 바로 바뀐다(FR-UI-04)
      * @param initial 처음 그릴 작업 공간 — 시작 때 복원한 탭 · 분할 · 창별 명세 · 포커스(#179). 창마다 명세대로 셸을 띄운다
      * @param onShutdown 앱을 끝낼 때 셸을 닫은 뒤 EDT 밖에서 한 번 부른다(미저장 이력 저장 등, ADR-0011). 끝나면 프로세스를 끝낸다
      */
@@ -101,11 +105,12 @@ public final class SwingUi {
                 warnings.add(Msg.APP_FONT_FALLBACK.text(error));
                 return TerminalFontSet.fallback();
             });
-            if (!installTheme()) {
+            SoftTheme startTheme = SoftTheme.of(appearance.current().theme());
+            if (!installTheme(startTheme)) {
                 showFatalAndExit(Msg.APP_THEME_FAILED.text());
                 return;
             }
-            TerminalSettings terminal = new TerminalSettings(fonts, JediTermColors.current());
+            TerminalSettings terminal = new TerminalSettings(fonts, JediTermColors.of(startTheme));
             Motion motion = Motion.fromTheme(appearance.current().animations());
             Executor background =
                     task -> Thread.ofVirtual().name("tanager-session-start").start(task);
@@ -127,6 +132,16 @@ public final class SwingUi {
             Optional.ofNullable(latestSettings.get()).ifPresent(window::settingsChanged);
             window.show(warnings);
             inbox.attach(window::notify);
+            // 창을 띄운 뒤 구독한다 — 앱과 수명이 같아 해제하지 않는다. 구독 전에 바뀐 값은 current() 로 한 번 맞춘다
+            LiveTheme theme = new LiveTheme(
+                    startTheme,
+                    terminal,
+                    new SnapshotFade(),
+                    () -> List.<Component>of(Window.getWindows()),
+                    window::themeChanged);
+            appearance.subscribe(theme::apply);
+            theme.apply(appearance.current());
+            window.whenActivated(appearance::refresh);
         });
     }
 
@@ -138,17 +153,17 @@ public final class SwingUi {
     /** 시작할 수 없는 오류를 알리고 끝낸다. */
     private static void showFatalAndExit(String message) {
         SwingUtilities.invokeLater(() -> {
-            installTheme();
+            installTheme(SoftTheme.DARK);
             JOptionPane.showMessageDialog(null, message, Msg.APP_CANNOT_START.text(), JOptionPane.ERROR_MESSAGE);
             System.exit(1);
         });
     }
 
     // FlatLaf.setup 은 실패하면 예외 대신 false 를 준다
-    private static boolean installTheme() {
-        boolean installed = FlatLaf.setup(new SoftDarkLaf());
+    private static boolean installTheme(SoftTheme theme) {
+        boolean installed = FlatLaf.setup(theme.lookAndFeel());
         if (!installed) {
-            LOG.log(System.Logger.Level.WARNING, "소프트 다크 테마를 설치하지 못했다");
+            LOG.log(System.Logger.Level.WARNING, "소프트 테마를 설치하지 못했다: {0}", theme);
         }
         return installed;
     }
