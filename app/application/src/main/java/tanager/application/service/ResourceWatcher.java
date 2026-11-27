@@ -6,6 +6,7 @@ import java.time.Instant;
 import java.time.InstantSource;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -38,6 +39,7 @@ import tanager.domain.monitor.Thresholds;
 import tanager.domain.monitor.WslUsage;
 import tanager.domain.session.LiveSession;
 import tanager.domain.session.SessionState;
+import tanager.domain.shared.PaneId;
 import tanager.domain.shared.Result;
 
 /**
@@ -220,37 +222,51 @@ public final class ResourceWatcher implements WatchResourcesUseCase {
     }
 
     private Optional<Plan> plan(long expected) {
-        AppState snapshot = state.snapshot();
-        Optional<LiveSession> focused = Optional.ofNullable(
-                snapshot.sessions().byPane().get(snapshot.workspace().tab().focused()));
-        Optional<String> distro =
-                focused.flatMap(live -> switch (live.session().profile().env()) {
-                    case ShellEnvironment.Wsl(String name) -> Optional.of(name);
-                    case ShellEnvironment.Windows _ -> Optional.empty();
-                });
-        boolean distroRunning = distro.isPresent()
-                && snapshot.sessions().byPane().values().stream()
-                        .anyMatch(live -> live.session().state() instanceof SessionState.Running
-                                && live.session().profile().env().equals(new ShellEnvironment.Wsl(distro.get())));
+        Focus focus = Focus.of(state.snapshot());
         Instant now = clock.instant();
         synchronized (monitor) {
             if (!running || expected != generation) {
                 return Optional.empty();
             }
             Set<MonitorItem> items = copy(visible);
-            Optional<WorkspacePath> diskPath = items.contains(MonitorItem.DISK)
-                    ? focused.flatMap(live -> live.session().knownCwd())
-                    : Optional.empty();
-            Optional<String> wslDistro = items.contains(MonitorItem.WSL) && distroRunning ? distro : Optional.empty();
-            boolean queryWsl = wslDistro.isPresent()
-                    && lastWslAttempt
-                            .map(last ->
-                                    !Duration.between(last, now).minus(WSL_GAP).isNegative())
-                            .orElse(true);
+            Optional<WorkspacePath> diskPath = items.contains(MonitorItem.DISK) ? focus.cwd() : Optional.empty();
+            Optional<String> wslDistro = items.contains(MonitorItem.WSL) ? focus.runningDistro() : Optional.empty();
+            boolean queryWsl = wslDistro.isPresent() && wslDue(now);
             if (queryWsl) {
                 lastWslAttempt = Optional.of(now);
             }
             return Optional.of(new Plan(now, items, diskPath, wslDistro, queryWsl));
+        }
+    }
+
+    // monitor 안. 마지막 시도에서 WSL_GAP 이 지났는가(배포판과 상관없이 wsl.exe 호출 전체에 건다)
+    private boolean wslDue(Instant now) {
+        return lastWslAttempt
+                .map(last -> Duration.between(last, now).compareTo(WSL_GAP) >= 0)
+                .orElse(true);
+    }
+
+    /**
+     * 포커스 창에서 읽는 것(순수).
+     *
+     * @param cwd 포커스 창 셸의 알려진 경로. 세션이 없거나(아직 안 뜸) 홈이면 비어 있다
+     * @param runningDistro 포커스 창이 WSL 이고 그 배포판에 Running 세션이 하나라도 있을 때의 배포판 — 포커스 창이 끝났어도 같은 배포판의
+     *     다른 창이 돌면 VM 은 깨어 있다
+     */
+    private record Focus(Optional<WorkspacePath> cwd, Optional<String> runningDistro) {
+        static Focus of(AppState snapshot) {
+            Map<PaneId, LiveSession> byPane = snapshot.sessions().byPane();
+            Optional<LiveSession> focused =
+                    Optional.ofNullable(byPane.get(snapshot.workspace().tab().focused()));
+            Optional<String> distro =
+                    focused.flatMap(live -> live.session().profile().env() instanceof ShellEnvironment.Wsl(String name)
+                            ? Optional.of(name)
+                            : Optional.empty());
+            boolean running = distro.isPresent()
+                    && byPane.values().stream()
+                            .anyMatch(live -> live.session().state() instanceof SessionState.Running
+                                    && live.session().profile().env().equals(new ShellEnvironment.Wsl(distro.get())));
+            return new Focus(focused.flatMap(live -> live.session().knownCwd()), distro.filter(_ -> running));
         }
     }
 

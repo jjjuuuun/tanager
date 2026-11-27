@@ -3,6 +3,7 @@ package tanager.platform.windows;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Duration;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -49,9 +50,9 @@ class WindowsResourceProbeIntegrationTest {
         // given
         String distro = new WindowsPlatformModule()
                 .shells().stream()
-                        .map(profile -> profile.env())
-                        .filter(env -> env instanceof ShellEnvironment.Wsl)
-                        .map(env -> ((ShellEnvironment.Wsl) env).distro())
+                        .flatMap(profile -> profile.env() instanceof ShellEnvironment.Wsl(String name)
+                                ? Stream.of(name)
+                                : Stream.empty())
                         .findFirst()
                         .orElseThrow();
 
