@@ -376,7 +376,7 @@ class SessionStarterTrackingTest {
                 .endsWith(
                         new FakePlatformModule.LaunchRequest(BASH, new WorkingDir.At(wsl("/b"))),
                         new FakePlatformModule.LaunchRequest(BASH, new WorkingDir.Home()));
-        assertThat(second.notices()).contains(new StartNotice.StartDirMissing(wsl("/b")));
+        assertThat(second.notices()).contains(new StartNotice.MissingDirectory(wsl("/b")));
     }
 
     @Test

@@ -49,15 +49,18 @@ public sealed interface StartNotice {
         }
     }
 
-    /** 시작 경로 {@code requested} 가 없어 홈에서 띄웠다. */
-    record StartDirMissing(WorkspacePath requested) implements StartNotice {
-        public StartDirMissing {
+    /**
+     * 시작 경로 {@code requested}(설정 · 트리에서 연 경로 · 복원한 창의 마지막 cwd)가 없어 홈에서 열었다(SDD §6.2, #179). Windows 는 기동이
+     * 경로 없음을 알려서, WSL 은 기동 전 확인으로 안다.
+     */
+    record MissingDirectory(WorkspacePath requested) implements StartNotice {
+        public MissingDirectory {
             Objects.requireNonNull(requested, "requested");
         }
 
         @Override
         public String describe() {
-            return "시작 경로 " + requested.path() + " 가 없어 홈에서 시작했다";
+            return requested.path() + " 이 없어 홈에서 열었다";
         }
     }
 

@@ -1,5 +1,6 @@
 package tanager.ui.pane;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -22,7 +23,7 @@ import tanager.ui.i18n.NoticeText;
  * @param overlay 종료 띠 · 실패 화면의 본문
  * @param hint 누를 수 있는 키 안내
  * @param path 머리줄 끝의 경로(줄임 대상 · 툴팁). 세션이 없으면 비어 있다
- * @param warning 머리줄 오른쪽 경고(셸 통합 없음)
+ * @param warning 머리줄 오른쪽 경고(셸 통합 없음 · 경로가 없어 홈에서 엶)
  */
 record PaneView(
         String header,
@@ -58,7 +59,7 @@ record PaneView(
                         Optional.empty(),
                         Optional.empty(),
                         pathOf(started.session()),
-                        integrationMissing(started.notices()) ? Optional.of(NO_INTEGRATION) : Optional.empty());
+                        warning(started.notices()));
             case PaneState.Exited(TerminalSession session) ->
                 new PaneView(
                         header(session),
@@ -155,8 +156,18 @@ record PaneView(
         return dirOf(session.state()).map(PaneView::shown);
     }
 
-    private static boolean integrationMissing(List<StartNotice> notices) {
-        return notices.stream().anyMatch(StartNotice.IntegrationUnavailable.class::isInstance);
+    // 머리줄 경고: 셸 통합 없음 · 저장된 경로가 없어 홈에서 엶(SDD §6.2, #179). 둘 다면 한 줄씩 잇는다
+    private static Optional<String> warning(List<StartNotice> notices) {
+        List<String> lines = new ArrayList<>();
+        for (StartNotice notice : notices) {
+            if (notice instanceof StartNotice.MissingDirectory missing) {
+                lines.add(NoticeText.DEFAULT.of(missing));
+            }
+        }
+        if (notices.stream().anyMatch(StartNotice.IntegrationUnavailable.class::isInstance)) {
+            lines.add(NO_INTEGRATION);
+        }
+        return lines.isEmpty() ? Optional.empty() : Optional.of(String.join(" · ", lines));
     }
 
     private static Optional<WorkingDir> dirOf(SessionState state) {
