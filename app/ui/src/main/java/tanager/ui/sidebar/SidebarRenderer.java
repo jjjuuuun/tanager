@@ -42,6 +42,9 @@ final class SidebarRenderer extends DefaultTreeCellRenderer {
         if (item.matched()) {
             return ColorToken.ACCENT;
         }
+        if (item.hidden()) {
+            return ColorToken.MUTED;
+        }
         return item.kind() == SidebarItem.Kind.ENVIRONMENT || item.kind() == SidebarItem.Kind.PINNED_SECTION
                 ? ColorToken.MUTED
                 : ColorToken.TEXT;

@@ -21,6 +21,7 @@ import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
 import javax.swing.border.EmptyBorder;
 import tanager.application.port.in.ListProfilesUseCase;
+import tanager.application.port.in.ManageHistoryUseCase;
 import tanager.application.port.in.QueryHistoryTreeUseCase;
 import tanager.application.port.in.StartSessionUseCase;
 import tanager.domain.history.WorkspacePath;
@@ -68,13 +69,14 @@ final class MainWindow implements PaneController.Host {
             StartSessionUseCase sessions,
             ListProfilesUseCase profiles,
             QueryHistoryTreeUseCase historyTree,
+            ManageHistoryUseCase historyManager,
             Runnable onShutdown,
             TerminalSettings settings,
             Executor background) {
         this.onShutdown = Objects.requireNonNull(onShutdown, "onShutdown");
         Executor ui = SwingUtilities::invokeLater;
         this.pane = new PaneController(ONLY_PANE, ui, background, sessions, profiles, settings, this);
-        this.sidebar = new SidebarPanel(historyTree, ui);
+        this.sidebar = new SidebarPanel(historyTree, historyManager, ui);
         sidebar.onLeave(pane::focus);
         frame.getContentPane().add(sidebar.component(), BorderLayout.WEST);
         // 터미널(JediTerm)이 키를 먼저 먹지 않게 포커스와 상관없이 가로챈다

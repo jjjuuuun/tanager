@@ -42,7 +42,12 @@ public final class TanagerApp {
                 Assembly assembly = Assembly.assemble(platform, new Pty4jLauncher());
                 AppEvents events = new UiAppEvents(assembly.state(), new SwingUiDispatcher());
                 SwingUi.showMainWindow(
-                        assembly.sessions(), assembly.profiles(), assembly.historyTree(), events, assembly::shutdown);
+                        assembly.sessions(),
+                        assembly.profiles(),
+                        assembly.historyTree(),
+                        assembly.historyManager(),
+                        events,
+                        assembly::shutdown);
             }
             case Result.Err<PlatformModule, PlatformSelectionError>(PlatformSelectionError error) -> {
                 LOG.log(System.Logger.Level.ERROR, error.describe());

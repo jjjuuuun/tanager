@@ -3,6 +3,8 @@ package tanager.ui.sidebar;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.event.ActionEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.List;
@@ -10,12 +12,15 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
 import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
+import javax.swing.JMenuItem;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JTextField;
 import javax.swing.JTree;
@@ -27,12 +32,18 @@ import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
 import javax.swing.tree.TreeSelectionModel;
+import tanager.application.port.in.ManageHistoryUseCase;
 import tanager.application.port.in.QueryHistoryTreeUseCase;
+import tanager.domain.history.Alias;
 import tanager.domain.history.EnvironmentNode;
+import tanager.domain.history.HistoryError;
 import tanager.domain.history.HistoryTree;
 import tanager.domain.history.PinnedEntry;
 import tanager.domain.history.SessionStatus;
 import tanager.domain.history.TreeNode;
+import tanager.domain.history.VisitedDirectory;
+import tanager.domain.history.WorkspacePath;
+import tanager.domain.shared.Result;
 import tanager.ui.theme.ColorToken;
 import tanager.ui.theme.ThemeColors;
 
@@ -46,11 +57,18 @@ public final class SidebarPanel {
     /** 검색 결과가 없을 때 보이는 글자. */
     static final String NO_MATCH = "맞는 폴더 없음";
 
+    /** 고른 항목의 기록 삭제(Delete). */
+    static final String FORGET_KEY = "tanager.sidebar.forget";
+
+    private static final String MENU_KEY = "tanager.sidebar.menu";
+    private static final System.Logger LOG = System.getLogger(SidebarPanel.class.getName());
     private static final String ESCAPE = "tanager.sidebar.escape";
     private static final String TO_TREE = "tanager.sidebar.toTree";
 
     private final QueryHistoryTreeUseCase query;
+    private final ManageHistoryUseCase manage;
     private final Executor ui;
+    private final SidebarInteractions interactions;
     private final DefaultMutableTreeNode root = new DefaultMutableTreeNode();
     private final DefaultTreeModel model = new DefaultTreeModel(root);
     private final JTree tree = new JTree(model);
@@ -63,11 +81,28 @@ public final class SidebarPanel {
     private boolean pending;
     private boolean drawn;
     private boolean searching;
+    private boolean showHidden;
 
     /** @param ui 다시 그리기를 미룰 실행기(EDT 다음 틱) */
-    public SidebarPanel(QueryHistoryTreeUseCase query, Executor ui) {
+    public SidebarPanel(QueryHistoryTreeUseCase query, ManageHistoryUseCase manage, Executor ui) {
+        this(query, manage, ui, Optional.empty());
+    }
+
+    /** 클립보드 · 대화 상자를 바꿔 끼운다(테스트용). */
+    SidebarPanel(
+            QueryHistoryTreeUseCase query, ManageHistoryUseCase manage, Executor ui, SidebarInteractions interactions) {
+        this(query, manage, ui, Optional.of(interactions));
+    }
+
+    private SidebarPanel(
+            QueryHistoryTreeUseCase query,
+            ManageHistoryUseCase manage,
+            Executor ui,
+            Optional<SidebarInteractions> interactions) {
         this.query = Objects.requireNonNull(query, "query");
+        this.manage = Objects.requireNonNull(manage, "manage");
         this.ui = Objects.requireNonNull(ui, "ui");
+        this.interactions = interactions.orElseGet(() -> new SwingInteractions(panel));
         tree.setRootVisible(false);
         tree.setShowsRootHandles(true);
         tree.setCellRenderer(new SidebarRenderer());
@@ -81,6 +116,7 @@ public final class SidebarPanel {
         panel.setBorder(BorderFactory.createMatteBorder(0, 0, 0, 1, ThemeColors.get(ColorToken.BORDER)));
         panel.setPreferredSize(new Dimension(DEFAULT_WIDTH, 0));
         layoutSearch();
+        bindMenu();
         JPanel body = new JPanel(new BorderLayout());
         body.setOpaque(false);
         body.add(empty, BorderLayout.NORTH);
@@ -191,7 +227,7 @@ public final class SidebarPanel {
         if (nowSearching && !searching) {
             beforeSearch = Optional.of(before);
         }
-        HistoryTree next = query.tree(text, false);
+        HistoryTree next = query.tree(text, showHidden);
         rebuild(next);
         model.reload();
         ExpansionState.Restored restored;
@@ -215,6 +251,144 @@ public final class SidebarPanel {
             }
         }
         restored.selected().ifPresentOrElse(key -> tree.setSelectionPath(pathOf(key)), tree::clearSelection);
+    }
+
+    /** {@code item} 에서 메뉴의 {@code action} 을 한다(#86). 비활성 동작은 하지 않는다. EDT 에서 부른다. */
+    void perform(MenuAction action, SidebarItem item) {
+        Optional<MenuTarget> target = item.target();
+        boolean enabled = target.map(FolderMenu::items).orElse(List.of()).stream()
+                .anyMatch(menu -> menu.action() == action && menu.enabled());
+        if (!enabled) {
+            return;
+        }
+        switch (action) {
+            case COPY_PATH -> pathOf(target.orElseThrow()).ifPresent(path -> interactions.copy(path.path()));
+            case PIN, UNPIN -> visitOf(item).ifPresent(v -> report(manage.pin(v.path(), action == MenuAction.PIN)));
+            case ALIAS ->
+                visitOf(item)
+                        .ifPresent(v -> interactions
+                                .editAlias(v.alias().map(Alias::value))
+                                .ifPresent(alias -> report(manage.alias(v.path(), alias))));
+            case HIDE, UNHIDE -> visitOf(item).ifPresent(v -> report(manage.hide(v.path(), action == MenuAction.HIDE)));
+            case FORGET ->
+                visitOf(item)
+                        .filter(v -> !FolderMenu.needsConfirm(v) || interactions.confirmForget(item.label()))
+                        .ifPresent(v -> report(manage.forget(v.path())));
+            case TOGGLE_HIDDEN -> {
+                showHidden = !showHidden;
+                refresh();
+            }
+            case EXPAND_ALL, COLLAPSE_ALL -> expandAll(item.key(), action == MenuAction.EXPAND_ALL);
+        }
+    }
+
+    private static Optional<WorkspacePath> pathOf(MenuTarget target) {
+        return switch (target) {
+            case MenuTarget.Folder folder -> Optional.of(folder.path());
+            case MenuTarget.Session session -> session.cwd();
+            case MenuTarget.Environment _ -> Optional.empty();
+        };
+    }
+
+    private static Optional<VisitedDirectory> visitOf(SidebarItem item) {
+        return item.target()
+                .filter(MenuTarget.Folder.class::isInstance)
+                .flatMap(target -> ((MenuTarget.Folder) target).visit());
+    }
+
+    // 바뀐 이력은 HistoryChanged 로 트리에 다시 그려진다. 거부(그사이 지워짐 등)는 남기기만 한다
+    private static void report(CompletionStage<Result<VisitedDirectory, HistoryError>> reply) {
+        reply.whenComplete((result, failure) -> {
+            if (failure != null) {
+                LOG.log(System.Logger.Level.WARNING, "이력을 바꾸지 못했다", failure);
+            } else {
+                result.error().ifPresent(error -> LOG.log(System.Logger.Level.INFO, "이력 변경 거부: {0}", error));
+            }
+        });
+    }
+
+    private void expandAll(NodeKey key, boolean expand) {
+        DefaultMutableTreeNode top = nodes.get(key);
+        java.util.Enumeration<javax.swing.tree.TreeNode> all = top.depthFirstEnumeration();
+        List<TreePath> paths = new java.util.ArrayList<>();
+        while (all.hasMoreElements()) {
+            DefaultMutableTreeNode node = (DefaultMutableTreeNode) all.nextElement();
+            if (!node.isLeaf()) {
+                paths.add(new TreePath(node.getPath()));
+            }
+        }
+        // 펼칠 때는 위에서 아래로, 접을 때는 아래에서 위로
+        if (expand) {
+            java.util.Collections.reverse(paths);
+            paths.forEach(tree::expandPath);
+        } else {
+            paths.forEach(tree::collapsePath);
+        }
+    }
+
+    // 마우스 오른쪽 · 메뉴 키 · Shift+F10 으로 메뉴, Delete 로 기록 삭제(§8.4)
+    private void bindMenu() {
+        tree.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                popupIfTrigger(e);
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                popupIfTrigger(e);
+            }
+        });
+        tree.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke("CONTEXT_MENU"), MENU_KEY);
+        tree.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke("shift F10"), MENU_KEY);
+        tree.getActionMap().put(MENU_KEY, new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                Optional.ofNullable(tree.getSelectionPath()).ifPresent(path -> {
+                    java.awt.Rectangle bounds = tree.getPathBounds(path);
+                    showMenu(path, bounds.x, bounds.y + bounds.height);
+                });
+            }
+        });
+        tree.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke("DELETE"), FORGET_KEY);
+        tree.getActionMap().put(FORGET_KEY, new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                selectedItem().ifPresent(item -> perform(MenuAction.FORGET, item));
+            }
+        });
+    }
+
+    private void popupIfTrigger(MouseEvent e) {
+        if (!e.isPopupTrigger()) {
+            return;
+        }
+        Optional.ofNullable(tree.getPathForLocation(e.getX(), e.getY())).ifPresent(path -> {
+            tree.setSelectionPath(path);
+            showMenu(path, e.getX(), e.getY());
+        });
+    }
+
+    private void showMenu(TreePath path, int x, int y) {
+        Object user = ((DefaultMutableTreeNode) path.getLastPathComponent()).getUserObject();
+        if (!(user instanceof SidebarItem item) || item.target().isEmpty()) {
+            return;
+        }
+        JPopupMenu menu = new JPopupMenu();
+        for (MenuItem entry : FolderMenu.items(item.target().orElseThrow())) {
+            JMenuItem row = new JMenuItem(entry.label());
+            row.setEnabled(entry.enabled());
+            row.addActionListener(event -> perform(entry.action(), item));
+            menu.add(row);
+        }
+        menu.show(tree, x, y);
+    }
+
+    private Optional<SidebarItem> selectedItem() {
+        return Optional.ofNullable(tree.getSelectionPath())
+                .map(path -> ((DefaultMutableTreeNode) path.getLastPathComponent()).getUserObject())
+                .filter(SidebarItem.class::isInstance)
+                .map(SidebarItem.class::cast);
     }
 
     /** 트리(테스트용). */
@@ -291,6 +465,8 @@ public final class SidebarPanel {
                             Optional.empty(),
                             Optional.empty(),
                             SidebarItem.Kind.PINNED_SECTION,
+                            false,
+                            Optional.empty(),
                             false));
             for (PinnedEntry pinned : next.pinned()) {
                 add(
@@ -302,7 +478,9 @@ public final class SidebarPanel {
                                 Optional.of(SidebarText.folderTooltip(
                                         pinned.entry().path(), Optional.of(pinned.entry()), zone)),
                                 SidebarItem.Kind.PINNED,
-                                pinned.matched()));
+                                pinned.matched(),
+                                Optional.of(new MenuTarget.Folder(pinned.entry().path(), Optional.of(pinned.entry()))),
+                                false));
             }
         }
         for (EnvironmentNode env : next.environments()) {
@@ -314,6 +492,8 @@ public final class SidebarPanel {
                             Optional.empty(),
                             Optional.empty(),
                             SidebarItem.Kind.ENVIRONMENT,
+                            false,
+                            Optional.of(new MenuTarget.Environment(env.env(), showHidden)),
                             false));
             addAll(envNode, env.children(), zone);
         }
@@ -331,7 +511,9 @@ public final class SidebarPanel {
                                     SidebarText.secondary(folder.visit().flatMap(v -> v.alias())),
                                     Optional.of(SidebarText.folderTooltip(folder.path(), folder.visit(), zone)),
                                     SidebarItem.Kind.FOLDER,
-                                    folder.matched()));
+                                    folder.matched(),
+                                    Optional.of(new MenuTarget.Folder(folder.path(), folder.visit())),
+                                    folder.visit().map(v -> v.hidden()).orElse(false)));
                     addAll(node, folder.children(), zone);
                 }
                 case TreeNode.Session session ->
@@ -345,6 +527,9 @@ public final class SidebarPanel {
                                     session.session().status() instanceof SessionStatus.Running
                                             ? SidebarItem.Kind.SESSION_RUNNING
                                             : SidebarItem.Kind.SESSION_EXITED,
+                                    false,
+                                    Optional.of(new MenuTarget.Session(
+                                            session.session().cwd())),
                                     false));
             }
         }

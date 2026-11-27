@@ -11,6 +11,7 @@ import javax.swing.SwingUtilities;
 import tanager.application.port.in.AppEvent;
 import tanager.application.port.in.AppEvents;
 import tanager.application.port.in.ListProfilesUseCase;
+import tanager.application.port.in.ManageHistoryUseCase;
 import tanager.application.port.in.QueryHistoryTreeUseCase;
 import tanager.application.port.in.StartSessionUseCase;
 import tanager.domain.history.WorkspacePath;
@@ -38,6 +39,7 @@ public final class SwingUi {
             StartSessionUseCase sessions,
             ListProfilesUseCase profiles,
             QueryHistoryTreeUseCase historyTree,
+            ManageHistoryUseCase historyManager,
             AppEvents events,
             Runnable onShutdown) {
         // 창을 만들기 전에 구독한다 — 이력 불러오기 알림이 창보다 먼저 올 수 있다. 창은 앱과 수명이 같아 해제하지 않는다
@@ -71,7 +73,8 @@ public final class SwingUi {
             TerminalSettings settings = new TerminalSettings(fonts, JediTermColors.current());
             Executor background =
                     task -> Thread.ofVirtual().name("tanager-session-start").start(task);
-            MainWindow window = new MainWindow(sessions, profiles, historyTree, onShutdown, settings, background);
+            MainWindow window =
+                    new MainWindow(sessions, profiles, historyTree, historyManager, onShutdown, settings, background);
             shown.set(window);
             window.show(warnings);
             inbox.attach(window::notify);

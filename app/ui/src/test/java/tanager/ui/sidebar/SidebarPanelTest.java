@@ -6,7 +6,10 @@ import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.Queue;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -21,14 +24,18 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import tanager.application.port.in.ManageHistoryUseCase;
 import tanager.application.port.in.QueryHistoryTreeUseCase;
 import tanager.domain.history.DirectoryTree;
+import tanager.domain.history.HistoryError;
 import tanager.domain.history.HistoryPolicy;
 import tanager.domain.history.HistoryTree;
 import tanager.domain.history.ShellEnvironment;
 import tanager.domain.history.TreeQuery;
+import tanager.domain.history.VisitedDirectory;
 import tanager.domain.history.WorkHistory;
 import tanager.domain.history.WorkspacePath;
+import tanager.domain.shared.Result;
 import tanager.ui.theme.SoftDarkLaf;
 
 /** 사이드바 패널(Swing). 다시 투영해도 펼침 · 선택이 남고, 몰린 요청은 한 번만 다시 그린다(#84). */
@@ -41,8 +48,12 @@ class SidebarPanelTest {
     private final AtomicReference<HistoryTree> current = new AtomicReference<>();
     private final AtomicReference<WorkHistory> searchable = new AtomicReference<>();
     private final AtomicInteger queries = new AtomicInteger();
+    private final AtomicReference<Boolean> lastShowHidden = new AtomicReference<>(false);
+    private final RecordingManage manage = new RecordingManage();
+    private final FakeInteractions interactions = new FakeInteractions();
     private final QueryHistoryTreeUseCase query = (text, showHidden) -> {
         queries.incrementAndGet();
+        lastShowHidden.set(showHidden);
         return searchable.get() == null
                 ? current.get()
                 : DirectoryTree.project(searchable.get(), List.of(), new TreeQuery(text, showHidden, List.of(UBUNTU)));
@@ -124,7 +135,7 @@ class SidebarPanelTest {
 
         // when
         List<String> rows = onEdt(() -> {
-            SidebarPanel panel = new SidebarPanel(query, ui);
+            SidebarPanel panel = new SidebarPanel(query, manage, ui, interactions);
             panel.refresh();
             return visibleRows(panel.tree());
         });
@@ -139,7 +150,7 @@ class SidebarPanelTest {
         // given
         current.set(tree("/home/me/a", "/home/me/b"));
         SidebarPanel panel = onEdt(() -> {
-            SidebarPanel created = new SidebarPanel(query, ui);
+            SidebarPanel created = new SidebarPanel(query, manage, ui, interactions);
             created.refresh();
             TreePath home = pathOf(created.tree(), "/home/me");
             created.tree().expandPath(home);
@@ -168,7 +179,7 @@ class SidebarPanelTest {
     void coalescesBurstOfRequests() {
         // given
         current.set(tree("/home/me"));
-        SidebarPanel panel = onEdt(() -> new SidebarPanel(query, ui));
+        SidebarPanel panel = onEdt(() -> new SidebarPanel(query, manage, ui, interactions));
 
         // when
         onEdt(() -> {
@@ -203,7 +214,7 @@ class SidebarPanelTest {
     private SidebarPanel searchablePanel(String... visited) {
         searchable.set(history(visited));
         return onEdt(() -> {
-            SidebarPanel created = new SidebarPanel(query, ui);
+            SidebarPanel created = new SidebarPanel(query, manage, ui, interactions);
             created.refresh();
             return created;
         });
@@ -304,5 +315,193 @@ class SidebarPanelTest {
                     return panel.emptyState().isVisible();
                 }))
                 .isFalse();
+    }
+
+    /** 관리 명령을 기록한다. 응답은 쓰지 않는다(트리는 HistoryChanged 로 다시 그린다). */
+    private static final class RecordingManage implements ManageHistoryUseCase {
+        final List<String> calls = new ArrayList<>();
+
+        private CompletionStage<Result<VisitedDirectory, HistoryError>> record(String call) {
+            calls.add(call);
+            return new CompletableFuture<>();
+        }
+
+        @Override
+        public CompletionStage<Result<VisitedDirectory, HistoryError>> pin(WorkspacePath path, boolean pinned) {
+            return record("pin " + path.path() + " " + pinned);
+        }
+
+        @Override
+        public CompletionStage<Result<VisitedDirectory, HistoryError>> alias(
+                WorkspacePath path, Optional<String> alias) {
+            return record("alias " + path.path() + " " + alias.orElse("(없음)"));
+        }
+
+        @Override
+        public CompletionStage<Result<VisitedDirectory, HistoryError>> hide(WorkspacePath path, boolean hidden) {
+            return record("hide " + path.path() + " " + hidden);
+        }
+
+        @Override
+        public CompletionStage<Result<VisitedDirectory, HistoryError>> forget(WorkspacePath path) {
+            return record("forget " + path.path());
+        }
+    }
+
+    private static final class FakeInteractions implements SidebarInteractions {
+        final List<String> copied = new ArrayList<>();
+        final List<String> confirmations = new ArrayList<>();
+        boolean confirm = true;
+        Optional<Optional<String>> aliasAnswer = Optional.empty();
+
+        @Override
+        public void copy(String text) {
+            copied.add(text);
+        }
+
+        @Override
+        public boolean confirmForget(String label) {
+            confirmations.add(label);
+            return confirm;
+        }
+
+        @Override
+        public Optional<Optional<String>> editAlias(Optional<String> current) {
+            return aliasAnswer;
+        }
+    }
+
+    private static SidebarItem item(JTree tree, String label) {
+        return (SidebarItem) ((DefaultMutableTreeNode) pathOf(tree, label).getLastPathComponent()).getUserObject();
+    }
+
+    private SidebarPanel expandedPanel(WorkHistory history) {
+        searchable.set(history);
+        return onEdt(() -> {
+            SidebarPanel created = new SidebarPanel(query, manage, ui, interactions);
+            created.refresh();
+            for (int row = 0; row < created.tree().getRowCount(); row++) {
+                created.tree().expandRow(row);
+            }
+            return created;
+        });
+    }
+
+    private static WorkHistory edited(WorkHistory history, java.util.function.UnaryOperator<WorkHistory> change) {
+        return change.apply(history);
+    }
+
+    @Test
+    @DisplayName("경로 복사는 저장된 표기 그대로 클립보드에 넣는다(#86)")
+    void copyPathUsesStoredSpelling() {
+        // given
+        SidebarPanel panel = expandedPanel(history("/home/me/a", "/home/me/b"));
+
+        // when
+        onEdt(() -> {
+            panel.perform(MenuAction.COPY_PATH, item(panel.tree(), "/home/me"));
+            return null;
+        });
+
+        // then
+        assertThat(interactions.copied).containsExactly("/home/me");
+    }
+
+    @Test
+    @DisplayName("별칭을 입력하고 확인하면 그 별칭으로 바꾸라고 명령한다(#86)")
+    void aliasAsksEditorThenCommands() {
+        // given
+        SidebarPanel panel = expandedPanel(history("/home/me/a", "/home/me/b"));
+        interactions.aliasAnswer = Optional.of(Optional.of("인프라"));
+
+        // when
+        onEdt(() -> {
+            panel.perform(MenuAction.ALIAS, item(panel.tree(), "a"));
+            return null;
+        });
+
+        // then
+        assertThat(manage.calls).containsExactly("alias /home/me/a 인프라");
+    }
+
+    @Test
+    @DisplayName("일반 항목의 기록 삭제는 묻지 않고 바로 지운다(#86)")
+    void forgetPlainEntryWithoutConfirm() {
+        // given
+        SidebarPanel panel = expandedPanel(history("/home/me/a", "/home/me/b"));
+
+        // when
+        onEdt(() -> {
+            panel.perform(MenuAction.FORGET, item(panel.tree(), "a"));
+            return null;
+        });
+
+        // then
+        assertThat(interactions.confirmations).isEmpty();
+        assertThat(manage.calls).containsExactly("forget /home/me/a");
+    }
+
+    @Test
+    @DisplayName("고정 항목의 기록 삭제는 확인을 묻고, 취소하면 지우지 않는다(#86)")
+    void forgetPinnedEntryAsks() {
+        // given
+        SidebarPanel panel = expandedPanel(edited(
+                history("/home/me/a", "/home/me/b"),
+                h -> h.pin(wsl("/home/me/a"), true).value().orElseThrow()));
+        interactions.confirm = false;
+
+        // when
+        onEdt(() -> {
+            panel.perform(MenuAction.FORGET, item(panel.tree(), "a"));
+            return null;
+        });
+
+        // then
+        assertThat(interactions.confirmations).hasSize(1);
+        assertThat(manage.calls).isEmpty();
+    }
+
+    @Test
+    @DisplayName("숨긴 폴더 보기를 켜면 숨긴 폴더가 흐리게 보이고 메뉴는 숨김 해제다(#86)")
+    void showHiddenRevealsHiddenFolders() {
+        // given
+        SidebarPanel panel = expandedPanel(edited(
+                history("/home/me/a", "/home/me/b"),
+                h -> h.hide(wsl("/home/me/a"), true).value().orElseThrow()));
+        assertThat(onEdt(() -> visibleRows(panel.tree()))).doesNotContain("a");
+
+        // when
+        onEdt(() -> {
+            panel.perform(MenuAction.TOGGLE_HIDDEN, item(panel.tree(), "WSL · Ubuntu"));
+            for (int row = 0; row < panel.tree().getRowCount(); row++) {
+                panel.tree().expandRow(row);
+            }
+            return null;
+        });
+
+        // then
+        assertThat(lastShowHidden.get()).isTrue();
+        SidebarItem hidden = onEdt(() -> item(panel.tree(), "a"));
+        assertThat(hidden.hidden()).isTrue();
+        assertThat(hidden.target().map(FolderMenu::items).orElseThrow())
+                .extracting(MenuItem::action)
+                .contains(MenuAction.UNHIDE);
+    }
+
+    @Test
+    @DisplayName("Delete 키는 고른 항목의 기록을 지운다(#86)")
+    void deleteKeyForgetsSelected() {
+        // given
+        SidebarPanel panel = expandedPanel(history("/home/me/a", "/home/me/b"));
+
+        // when
+        onEdt(() -> {
+            panel.tree().setSelectionPath(pathOf(panel.tree(), "b"));
+            panel.tree().getActionMap().get(SidebarPanel.FORGET_KEY).actionPerformed(null);
+            return null;
+        });
+
+        // then
+        assertThat(manage.calls).containsExactly("forget /home/me/b");
     }
 }
