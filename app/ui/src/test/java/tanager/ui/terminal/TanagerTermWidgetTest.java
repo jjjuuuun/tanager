@@ -3,7 +3,9 @@ package tanager.ui.terminal;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
+import com.jediterm.terminal.TerminalColor;
 import com.jediterm.terminal.TextStyle;
+import com.jediterm.terminal.model.StyleState;
 import java.awt.Font;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -54,6 +56,28 @@ class TanagerTermWidgetTest {
             widget.set(new TanagerTermWidget(new TerminalSettings(fonts, JediTermColors.current())));
         });
         return widget.get();
+    }
+
+    @Test
+    @DisplayName("위젯의 스타일은 읽히지 않는 ANSI 조합을 보정하고, 기본 스타일은 설정의 기본 전경 · 배경이다(#113)")
+    void widgetUsesReadableStyleState() throws Exception {
+        // given
+        TanagerTermWidget widget = newWidget(TerminalFontSet.fallback());
+        StyleState state = widget.getTerminal().getStyleState();
+        TextStyle blueOnGreen = new TextStyle(TerminalColor.index(4), TerminalColor.index(2));
+
+        // when
+        state.setCurrent(blueOnGreen);
+        TextStyle adjusted = state.getCurrent();
+        state.reset();
+
+        // then
+        assertThat(adjusted.getForeground()).isNotEqualTo(TerminalColor.index(4));
+        assertThat(adjusted.getBackground()).isEqualTo(TerminalColor.index(2));
+        assertThat(state.getCurrent())
+                .isEqualTo(new TextStyle(
+                        JediTermColors.current().foreground(),
+                        JediTermColors.current().background()));
     }
 
     @Test

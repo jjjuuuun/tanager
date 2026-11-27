@@ -22,6 +22,12 @@ public final class TanagerTermWidget extends JediTermWidget {
         super(settings);
     }
 
+    // 상위 생성자 안에서 불린다(mySettingsProvider 는 이미 있다) — 읽히지 않는 ANSI 조합을 보정하는 스타일 상태(#113)
+    @Override
+    protected StyleState createDefaultStyle() {
+        return ((TerminalSettings) mySettingsProvider).styleState();
+    }
+
     // 상위 생성자 안에서 불린다(이 클래스의 필드는 아직 없다) — 글꼴은 넘어온 설정에서 꺼낸다
     @Override
     protected TerminalPanel createTerminalPanel(
