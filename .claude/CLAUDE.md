@@ -16,8 +16,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ./gradlew check                                   # 포맷 검사 + 전체 테스트 + ArchUnit + 커버리지
 ./gradlew spotlessApply                           # 포맷 자동 수정 (손으로 맞추지 말 것)
 ./gradlew :domain:test                            # 모듈 하나
-./gradlew :domain:test --tests 'dev.tanager.domain.layout.LayoutNodeTest'           # 클래스 하나
-./gradlew :domain:test --tests 'dev.tanager.domain.layout.LayoutNodeTest.split*'    # 메서드 패턴
+./gradlew :domain:test --tests 'tanager.domain.layout.LayoutNodeTest'           # 클래스 하나
+./gradlew :domain:test --tests 'tanager.domain.layout.LayoutNodeTest.split*'    # 메서드 패턴
 ./gradlew check -PexcludeTags=wsl                 # WSL 통합 테스트 제외 (CI 와 동일)
 ./gradlew :bootstrap:run                          # 앱 실행
 ./gradlew :bootstrap:jpackageImage                # 실행 파일 폴더(app-image) 생성 — jdeps 로 모듈 축소(목록: build/jpackage/runtime-modules.txt)
