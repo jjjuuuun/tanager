@@ -31,6 +31,7 @@ import tanager.application.port.in.ClosePaneUseCase;
 import tanager.application.port.in.FocusPaneUseCase;
 import tanager.application.port.in.ListProfilesUseCase;
 import tanager.application.port.in.ManageHistoryUseCase;
+import tanager.application.port.in.OpenPaneUseCase;
 import tanager.application.port.in.QueryHistoryTreeUseCase;
 import tanager.application.port.in.StartSessionUseCase;
 import tanager.domain.history.WorkspacePath;
@@ -72,7 +73,7 @@ final class MainWindow {
     private Notices notices = new Notices(List.of());
     // 창 ID → 컨트롤러(트리의 창 순서). 작업 공간(StateActor)의 사본만 들고, 바꾸는 일은 유스케이스로 한다(#89)
     private final Map<PaneId, PaneController> panes = new LinkedHashMap<>();
-    private final Map<PaneId, String[]> views = new HashMap<>();
+    private final Map<PaneId, View> views = new HashMap<>();
     private Workspace workspace = Workspace.initial();
     private final LayoutView layout;
     private final SidebarPanel sidebar;
@@ -94,6 +95,7 @@ final class MainWindow {
             ManageHistoryUseCase historyManager,
             ClosePaneUseCase closePane,
             FocusPaneUseCase focusPane,
+            OpenPaneUseCase open,
             Runnable onShutdown,
             TerminalSettings settings,
             Executor background) {
@@ -110,6 +112,7 @@ final class MainWindow {
         this.layout = new LayoutView(workspace.tab().root(), GAP);
         this.sidebar = new SidebarPanel(historyTree, historyManager, ui);
         sidebar.onLeave(() -> focused().focus());
+        sidebar.opener(new PaneOpener(Objects.requireNonNull(open, "open"), background, ui, this::notify));
         frame.getContentPane().add(sidebar.component(), BorderLayout.WEST);
         // 터미널(JediTerm)이 키를 먼저 먹지 않게 포커스와 상관없이 가로챈다
         KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher(shortcuts);
@@ -238,10 +241,10 @@ final class MainWindow {
 
     // 탭 이름 · 상태줄 왼쪽은 포커스 창 기준이다(#89)
     private void showStatusOf(PaneId id) {
-        String[] view = views.get(id);
+        View view = views.get(id);
         if (view != null) {
-            tab.setText(view[0]);
-            statusLeft.setText(view[1]);
+            tab.setText(view.title());
+            statusLeft.setText(view.status());
         }
     }
 
@@ -283,6 +286,9 @@ final class MainWindow {
                 .start(() -> ExitSequence.run(onShutdown, exited, deadline, () -> System.exit(0)));
     }
 
+    /** 창 하나가 마지막으로 알린 탭 이름 · 상태줄 왼쪽 글자. */
+    private record View(String title, String status) {}
+
     /** 창 하나의 알림을 받는다. 상태줄은 포커스 창 것만 보인다. */
     private final class Host implements PaneController.Host {
         private final PaneId id;
@@ -293,7 +299,7 @@ final class MainWindow {
 
         @Override
         public void viewChanged(String tabTitle, String status) {
-            views.put(id, new String[] {tabTitle, status});
+            views.put(id, new View(tabTitle, status));
             if (workspace.tab().focused().equals(id)) {
                 showStatusOf(id);
             }

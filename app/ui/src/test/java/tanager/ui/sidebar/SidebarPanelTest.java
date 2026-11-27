@@ -15,6 +15,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 import javax.swing.JTree;
+import javax.swing.KeyStroke;
 import javax.swing.LookAndFeel;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
@@ -369,6 +370,91 @@ class SidebarPanelTest {
         public Optional<Optional<String>> editAlias(Optional<String> current) {
             return aliasAnswer;
         }
+    }
+
+    /** 사이드바가 연 것을 적어 둔다. */
+    private static final class RecordingOpener implements SidebarOpener {
+        final List<String> opened = new java.util.ArrayList<>();
+
+        @Override
+        public void open(
+                tanager.domain.history.WorkspacePath path,
+                Optional<tanager.domain.session.ProfileId> profile,
+                Optional<tanager.application.port.out.OpenPlacement> placement) {
+            opened.add(path.path() + " "
+                    + profile.map(tanager.domain.session.ProfileId::value).orElse("-") + " "
+                    + placement.map(Enum::name).orElse("-"));
+        }
+
+        @Override
+        public void openHome(tanager.domain.history.ShellEnvironment env) {
+            opened.add("home " + env);
+        }
+
+        @Override
+        public void choices(
+                tanager.domain.history.WorkspacePath path,
+                java.util.function.Consumer<tanager.application.port.in.OpenChoices> onEdt) {}
+    }
+
+    @Test
+    @DisplayName("폴더를 더블클릭하거나 Enter 를 누르면 설정 자리 · 기본 셸로 그 경로를 연다(#91)")
+    void doubleClickAndEnterOpenFolder() {
+        // given
+        SidebarPanel panel = expandedPanel(history("/home/me/a", "/home/me/b"));
+        RecordingOpener opener = new RecordingOpener();
+
+        // when
+        onEdt(() -> {
+            panel.opener(opener);
+            JTree tree = panel.tree();
+            TreePath a = pathOf(tree, "a");
+            tree.setSelectionPath(a);
+            java.awt.Rectangle bounds = tree.getPathBounds(a);
+            tree.dispatchEvent(new java.awt.event.MouseEvent(
+                    tree,
+                    java.awt.event.MouseEvent.MOUSE_CLICKED,
+                    0,
+                    0,
+                    bounds.x + 2,
+                    bounds.y + 2,
+                    2,
+                    false,
+                    java.awt.event.MouseEvent.BUTTON1));
+            Object name = tree.getInputMap(javax.swing.JComponent.WHEN_FOCUSED).get(KeyStroke.getKeyStroke("ENTER"));
+            tree.getActionMap().get(name).actionPerformed(null);
+            return null;
+        });
+
+        // then
+        assertThat(opener.opened).containsExactly("/home/me/a - -", "/home/me/a - -");
+    }
+
+    @Test
+    @DisplayName("환경 노드 · 메뉴의 열기 동작은 고른 셸 · 자리로 연다(#91)")
+    void menuOpenActions() {
+        // given
+        SidebarPanel panel = expandedPanel(history("/home/me/a"));
+        RecordingOpener opener = new RecordingOpener();
+
+        // when
+        onEdt(() -> {
+            panel.opener(opener);
+            SidebarItem a = item(panel.tree(), "/home/me/a");
+            panel.open(new MenuItem(MenuAction.OPEN_DOWN, "아래", true), a);
+            panel.open(
+                    new MenuItem(
+                            MenuAction.OPEN_WITH,
+                            "cmd",
+                            true,
+                            Optional.of(new tanager.domain.session.ProfileId("cmd"))),
+                    a);
+            panel.open(new MenuItem(MenuAction.NEW_PANE, "새 창", true), item(panel.tree(), "WSL · Ubuntu"));
+            return null;
+        });
+
+        // then
+        assertThat(opener.opened).containsExactly("/home/me/a - DOWN", "/home/me/a cmd -", "home Wsl[distro=Ubuntu]");
     }
 
     private static SidebarItem item(JTree tree, String label) {

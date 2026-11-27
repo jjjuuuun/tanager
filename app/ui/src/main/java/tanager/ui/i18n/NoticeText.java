@@ -3,6 +3,7 @@ package tanager.ui.i18n;
 import java.util.Objects;
 import tanager.application.platform.PlatformSelectionError;
 import tanager.application.port.in.AppEvent;
+import tanager.application.port.in.OpenError;
 import tanager.application.port.in.StartNotice;
 import tanager.application.port.out.ConfigError;
 import tanager.application.port.out.ConfigWarning;
@@ -12,6 +13,7 @@ import tanager.application.port.out.Integration;
 import tanager.application.port.out.LaunchError;
 import tanager.domain.history.Alias;
 import tanager.domain.history.AliasProblem;
+import tanager.domain.history.ShellEnvironment;
 
 /**
  * 하위 계층이 넘긴 구조화 값을 화면 문장으로 바꾼다(#137, ADR-0017). 하위 계층의 {@code describe()} 는 로그용이라 화면에 쓰지 않는다. 모든
@@ -158,6 +160,20 @@ public final class NoticeText {
             case TOO_LONG -> t(Msg.ALIAS_TOO_LONG, Alias.MAX_CODE_POINTS);
             case INVISIBLE_CHARACTER -> t(Msg.ALIAS_INVISIBLE);
             case NO_VISIBLE_CHARACTER -> t(Msg.ALIAS_NO_VISIBLE);
+        };
+    }
+
+    /** 트리에서 창을 열지 못한 이유(#91). */
+    public String of(OpenError error) {
+        return switch (error) {
+            case OpenError.NoProfileForEnvironment(ShellEnvironment env) ->
+                switch (env) {
+                    case ShellEnvironment.Wsl(String distro) -> t(Msg.OPEN_NO_WSL, distro);
+                    case ShellEnvironment.Windows _ -> t(Msg.OPEN_NO_WINDOWS);
+                };
+            case OpenError.EnvironmentMismatch(var profile, var path) ->
+                t(Msg.OPEN_MISMATCH, profile.value(), path.path());
+            case OpenError.UnknownProfile(var profile) -> t(Msg.OPEN_UNKNOWN_PROFILE, profile.value());
         };
     }
 
