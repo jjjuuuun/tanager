@@ -36,7 +36,7 @@ app/architecture         :architecture  (ArchUnit)
 ```
 - **`platform/` 을 `adapter/` 와 따로 둔다.** 플랫폼 모듈도 포트를 구현하는 어댑터다. 다만 OS 마다 하나씩 ServiceLoader 로 골라지고, 새 OS 는 이 폴더에 모듈 하나를 더하면 된다는 확장 규칙이 다르다.
 - **`ui` 도 따로 둔다.** 사용자가 직접 보는 주도(driving) 어댑터이고 규모가 가장 크다. 의존 규칙은 어댑터와 같다(ArchUnit 의 Adapter · Platform · Ui 층은 서로 의존 금지).
-- **조립 루트는 `bootstrap` 이다.** `app/app` 을 피했고 커밋 scope `bootstrap` 과 맞춘다. Java 패키지 `dev.tanager.app` → `dev.tanager.bootstrap`. 나머지 패키지는 그대로다.
+- **조립 루트는 `bootstrap` 이다.** `app/app` 을 피했고 커밋 scope `bootstrap` 과 맞춘다. Java 패키지 `tanager.app` → `tanager.bootstrap`. 나머지 패키지는 그대로다.
 - **jar 이름은 `tanager-<경로>.jar` 다**(예 `tanager-adapter-pty.jar`). 프로젝트 이름(`pty` · `windows`)만으로는 배포본 `app/` 폴더에서 뜻이 흐려진다.
 - 묶음 폴더(`:adapter` · `:adapter:toolkit` · `:platform`)는 빌드 파일이 없는 빈 Gradle 프로젝트다.
 - 커밋 scope(`pty` · `platform-win` · `ui` …)는 바꾸지 않는다. 폴더 이름이 아니라 관심사 이름이기 때문이다.

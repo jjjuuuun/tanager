@@ -32,7 +32,7 @@
 
 ## 결정
 - **시작 경로**
-  - `dev.tanager.domain.session.WorkingDir`(sealed: `Home` | `At(WorkspacePath)`)를 둔다.
+  - `tanager.domain.session.WorkingDir`(sealed: `Home` | `At(WorkspacePath)`)를 둔다.
   - `SessionState` 의 `Starting.dir` · `Running.cwd` · `Exited.lastCwd` 는 `WorkingDir` 가 된다.
   - `TerminalSession.cwdChanged(WorkspacePath)` 는 `At` 으로 바꾼다.
   - `PlatformModule.launchCommand(ShellProfile, WorkingDir)` 로 바꾼다(ADR-0007 개정).

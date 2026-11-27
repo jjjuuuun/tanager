@@ -18,5 +18,5 @@ dependencies {
 }
 
 application {
-    mainClass = "dev.tanager.bootstrap.TanagerApp"
+    mainClass = "tanager.bootstrap.TanagerApp"
 }

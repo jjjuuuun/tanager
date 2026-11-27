@@ -149,9 +149,9 @@ main{padding:28px 20px 80px}.grid2,.grid3{grid-template-columns:1fr}}
 ├─ build-logic/                  Gradle 컨벤션 플러그인 (java · test · spotless · jacoco 공통 설정)
 ├─ gradle/libs.versions.toml     의존성 버전 카탈로그
 ├─ app/domain/                   순수 Java 도메인
-│  └─ src/main/java/dev/tanager/domain/{history,layout,session,workspace,toolkit,shared}
+│  └─ src/main/java/tanager/domain/{history,layout,session,workspace,toolkit,shared}
 ├─ app/application/              유스케이스 + 포트
-│  └─ src/main/java/dev/tanager/application/{port/in,port/out,service,integration}
+│  └─ src/main/java/tanager/application/{port/in,port/out,service,integration}
 ├─ app/adapter/pty/              PtyLauncher 구현 (pty4j)
 ├─ app/adapter/persistence/      저장소 구현 (JSON 파일)
 ├─ app/adapter/toolkit/claude/   ToolkitProvider 구현 (Claude Code 구성 읽기 전용)
@@ -182,7 +182,7 @@ main{padding:28px 20px 80px}.grid2,.grid3{grid-template-columns:1fr}}
 <tr><td><code>app/bootstrap</code></td><td>객체 조립, 플랫폼 선택(ServiceLoader), 시작·종료 순서, 패키징</td><td>전부</td><td>스모크</td></tr>
 <tr><td><code>app/architecture</code></td><td>의존 방향, 패키지 규칙, 이름 규칙 검사</td><td>전부(test 범위)</td><td>ArchUnit</td></tr>
 </table></div>
-<p>패키지는 <code>dev.tanager.&lt;계층&gt;.&lt;컨텍스트&gt;</code> 로 통일한다. 예) <code>dev.tanager.domain.layout.LayoutNode</code>, <code>dev.tanager.application.port.out.PtyLauncher</code>.</p>
+<p>패키지는 <code>tanager.&lt;계층&gt;.&lt;컨텍스트&gt;</code> 로 통일한다. 예) <code>tanager.domain.layout.LayoutNode</code>, <code>tanager.application.port.out.PtyLauncher</code>.</p>
 </section><section id="method"><h2><span class="no">4.</span>개발 방법론: DDD · TDD · 헥사고날</h2>
 <p>DDD 와 TDD 는 고르는 대상이 아니다. <b>DDD 는 무엇을 어떻게 나눌지</b>, <b>TDD 는 나눈 것을 어떤 순서로 만들지</b>, <b>헥사고날은 어디에 둘지</b>를 정한다. 이 프로젝트는 세 가지를 다 쓰되, 규모에 맞게 가볍게 쓴다.</p>
 <div class="tbl-wrap"><table>

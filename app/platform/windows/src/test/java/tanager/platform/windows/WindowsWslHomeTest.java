@@ -1,0 +1,101 @@
+package tanager.platform.windows;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import org.junit.jupiter.api.Assumptions;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledOnOs;
+import org.junit.jupiter.api.condition.OS;
+import tanager.application.port.out.Integration;
+import tanager.domain.history.ShellEnvironment;
+import tanager.domain.session.IntegrationMode;
+import tanager.domain.session.LaunchTemplate;
+import tanager.domain.session.ProfileId;
+import tanager.domain.session.ShellKind;
+import tanager.domain.session.ShellProfile;
+import tanager.domain.session.WorkingDir;
+
+/** 실제 wsl.exe 로 {@code --cd ~} 가 홈으로 들어가는지 확인한다. WSL 배포판이 없으면 건너뛴다. */
+@Tag("wsl")
+@EnabledOnOs(OS.WINDOWS)
+class WindowsWslHomeTest {
+    private static final String WSL_EXE = "C:\\Windows\\System32\\wsl.exe";
+
+    @Test
+    @DisplayName("홈으로 띄운 WSL 셸의 pwd 는 $HOME 이다")
+    void homeLaunchStartsInHomeDirectory() throws Exception {
+        // given
+        String distro = firstDistro();
+        ShellProfile profile = new ShellProfile(
+                new ProfileId("wsl:" + distro),
+                distro,
+                ShellKind.BASH,
+                new ShellEnvironment.Wsl(distro),
+                new LaunchTemplate(WSL_EXE, List.of("-d", distro)),
+                IntegrationMode.OSC7);
+        List<String> argv = new ArrayList<>(WindowsLaunchCommands.of(
+                        profile,
+                        new WorkingDir.Home(),
+                        "C:\\Users\\me",
+                        Optional.empty(),
+                        new Integration.Unavailable("통합 없음"))
+                .argv());
+        // 끝의 "bash -i" 를 한 줄 검사 스크립트로 바꿔 같은 --cd 인자를 그대로 쓴다
+        argv.removeLast();
+        argv.removeLast();
+        argv.addAll(List.of("sh", "-c", "[ \"$(pwd)\" = \"$HOME\" ] && echo SAME_AS_HOME"));
+
+        // when
+        ProcessBuilder builder = new ProcessBuilder(argv).redirectErrorStream(true);
+        builder.environment().put("WSL_UTF8", "1");
+        Process process = builder.start();
+        // 출력은 따로 읽는다 — wsl.exe 가 끝나지 않아도 테스트가 waitFor 의 시간 제한에서 멈추게
+        CompletableFuture<String> output = CompletableFuture.supplyAsync(() -> readAll(process));
+        boolean finished = process.waitFor(10, TimeUnit.SECONDS);
+        if (!finished) {
+            process.destroyForcibly();
+        }
+
+        // then
+        assertThat(finished).as("wsl.exe 가 10초 안에 끝나야 한다").isTrue();
+        assertThat(output.get(10, TimeUnit.SECONDS)).contains("SAME_AS_HOME");
+    }
+
+    private static String readAll(Process process) {
+        try {
+            return new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    private static String firstDistro() throws IOException, InterruptedException {
+        Optional<String> fromEnv =
+                Optional.ofNullable(System.getenv("TANAGER_TEST_WSL_DISTRO")).filter(name -> !name.isBlank());
+        if (fromEnv.isPresent()) {
+            return fromEnv.get();
+        }
+        ProcessBuilder builder = new ProcessBuilder(WSL_EXE, "--list", "--quiet").redirectErrorStream(true);
+        builder.environment().put("WSL_UTF8", "1");
+        Process process = builder.start();
+        String text = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        process.waitFor(10, TimeUnit.SECONDS);
+        Optional<String> found = text.replace("\u0000", "")
+                .lines()
+                .map(line -> line.replace("\uFEFF", "").trim())
+                .filter(line -> !line.isEmpty() && !line.startsWith("docker-desktop"))
+                .findFirst();
+        Assumptions.assumeTrue(found.isPresent(), "설치된 WSL 배포판이 없다");
+        return found.orElseThrow();
+    }
+}
