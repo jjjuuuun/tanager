@@ -57,7 +57,7 @@ import tanager.ui.theme.Themed;
  * 투영하되 펼침 · 선택은 경로 · 창 ID 로 이어 간다({@link ExpansionState}). 모든 메서드는 EDT 에서 부른다.
  */
 public final class SidebarPanel {
-    /** 기본 폭(저장은 M5). */
+    /** 기본 폭. 메인 창은 저장된 폭(#180, {@code SidebarSlot})으로 바꿔 놓는다. */
     public static final int DEFAULT_WIDTH = 280;
     /** 검색 결과가 없을 때 보이는 글자. */
     static final String NO_MATCH = Msg.SIDEBAR_NO_MATCH.text();

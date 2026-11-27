@@ -65,4 +65,14 @@ class NoticesTest {
         assertThat(Notices.messageOf(kept)).contains("설정 파일을 읽지 못해 이전 설정을 쓴다: 설정 파일이 손상됐다: (1:2)");
         assertThat(Notices.messageOf(changed)).isEmpty();
     }
+
+    @Test
+    @DisplayName("창 상태가 바뀐 이벤트는 상태줄에 보이지 않는다")
+    void windowChangedIsNotStatusMessage() {
+        // given
+        AppEvent changed = new AppEvent.WindowChanged(tanager.domain.workspace.WindowState.DEFAULT);
+
+        // when / then
+        assertThat(Notices.messageOf(changed)).isEmpty();
+    }
 }

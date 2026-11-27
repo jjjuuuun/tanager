@@ -40,6 +40,7 @@ record Notices(List<String> messages) {
             case AppEvent.EnvironmentsChanged environments -> Optional.empty();
             case AppEvent.LayoutChanged layout -> Optional.empty();
             case AppEvent.LastPaneClosed closed -> Optional.empty();
+            case AppEvent.WindowChanged window -> Optional.empty();
         };
     }
 

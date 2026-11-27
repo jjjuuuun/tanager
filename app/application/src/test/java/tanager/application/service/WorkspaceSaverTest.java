@@ -35,7 +35,9 @@ import tanager.domain.session.ShellProfile;
 import tanager.domain.session.TerminalSession;
 import tanager.domain.session.WorkingDir;
 import tanager.domain.shared.PaneId;
+import tanager.domain.workspace.Bounds;
 import tanager.domain.workspace.PaneSpec;
+import tanager.domain.workspace.PanelState;
 import tanager.domain.workspace.WindowState;
 import tanager.domain.workspace.Workspace;
 import tanager.domain.workspace.WorkspaceSnapshot;
@@ -87,7 +89,8 @@ class WorkspaceSaverTest {
             Workspace start = loaded.map(WorkspaceSnapshot::workspace).orElseGet(Workspace::initial);
             actor = new StateActor(
                     AppState.initial(WorkHistory.empty(HistoryPolicy.DEFAULT), start)
-                            .withStore(store),
+                            .withStore(store)
+                            .withWindow(loaded.map(WorkspaceSnapshot::window).orElse(WindowState.DEFAULT)),
                     actorExecutor);
             actor.subscribe(events::add);
             saver = new WorkspaceSaver(actor, repository, scheduler, io, loaded);
@@ -348,7 +351,7 @@ class WorkspaceSaverTest {
     }
 
     @Test
-    @DisplayName("불러온 창 상태는 그대로 다시 쓴다(창 상태 저장은 #180)")
+    @DisplayName("창 상태를 바꾸지 않으면 불러온 창 상태를 그대로 다시 쓴다")
     void loadedWindowIsKept() {
         // given
         WindowState window = new WindowState(
@@ -364,6 +367,52 @@ class WorkspaceSaverTest {
 
         // then
         assertThat(rig.repository.saves().getFirst().window()).isEqualTo(window);
+    }
+
+    @Test
+    @DisplayName("창 상태가 바뀌면(WindowChanged) 1초 뒤 새 창 상태를 저장한다")
+    void windowChangeIsSavedAfterOneSecond() {
+        // given
+        Rig rig = new Rig();
+        WindowState moved = new WindowState(
+                Optional.of(new Bounds(40, 30, 1000, 700)),
+                true,
+                new PanelState(false, 236),
+                new PanelState(true, 264));
+
+        // when
+        rig.actor.submit(current ->
+                new Transition<>(current.withWindow(moved), List.of(new AppEvent.WindowChanged(moved)), true));
+        rig.settle();
+        rig.advance(Duration.ofMillis(999));
+        int beforeDeadline = rig.repository.saves().size();
+        rig.advance(Duration.ofMillis(1));
+
+        // then
+        assertThat(beforeDeadline).isZero();
+        assertThat(rig.repository.saves()).hasSize(1);
+        assertThat(rig.repository.saves().getFirst().window()).isEqualTo(moved);
+        assertThat(rig.repository.saves().getFirst().workspace()).isEqualTo(saved());
+    }
+
+    @Test
+    @DisplayName("창 상태를 바꾼 뒤 종료 flush 는 새 창 상태를 바로 쓴다")
+    void flushWritesPendingWindowChange() {
+        // given
+        Rig rig = new Rig();
+        WindowState hidden =
+                new WindowState(Optional.empty(), false, new PanelState(false, 236), new PanelState(true, 264));
+        rig.actor.submit(current ->
+                new Transition<>(current.withWindow(hidden), List.of(new AppEvent.WindowChanged(hidden)), true));
+        rig.settle();
+
+        // when
+        boolean flushed = rig.saver.flush(SECOND);
+
+        // then
+        assertThat(flushed).isTrue();
+        assertThat(rig.repository.saves()).hasSize(1);
+        assertThat(rig.repository.saves().getFirst().window()).isEqualTo(hidden);
     }
 
     @Test

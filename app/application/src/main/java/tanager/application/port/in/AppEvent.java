@@ -14,6 +14,7 @@ import tanager.domain.history.WorkHistory;
 import tanager.domain.history.WorkspacePath;
 import tanager.domain.session.LiveSessions;
 import tanager.domain.shared.PaneId;
+import tanager.domain.workspace.WindowState;
 import tanager.domain.workspace.Workspace;
 
 /** 명령이 상태를 바꾼 뒤 구독자에게 알리는 이벤트. 세부 변경 대신 바뀐 값을 싣는다(ADR-0012). */
@@ -113,6 +114,13 @@ public sealed interface AppEvent {
     record LayoutChanged(Workspace workspace) implements AppEvent {
         public LayoutChanged {
             Objects.requireNonNull(workspace, "workspace");
+        }
+    }
+
+    /** 메인 창의 위치 · 크기 · 최대화 · 패널 상태가 바뀌었다(FR-RES-03, #180). 새 창 상태 전체를 싣는다. */
+    record WindowChanged(WindowState window) implements AppEvent {
+        public WindowChanged {
+            Objects.requireNonNull(window, "window");
         }
     }
 

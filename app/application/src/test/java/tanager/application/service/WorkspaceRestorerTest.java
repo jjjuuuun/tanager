@@ -16,7 +16,9 @@ import tanager.domain.layout.Ratio;
 import tanager.domain.session.ProfileId;
 import tanager.domain.shared.PaneId;
 import tanager.domain.shared.TabId;
+import tanager.domain.workspace.Bounds;
 import tanager.domain.workspace.PaneSpec;
+import tanager.domain.workspace.PanelState;
 import tanager.domain.workspace.Tab;
 import tanager.domain.workspace.WindowState;
 import tanager.domain.workspace.Workspace;
@@ -67,5 +69,32 @@ class WorkspaceRestorerTest {
         assertThat(planned).isEqualTo(saved);
         assertThat(planned.tab().focused()).isEqualTo(P2);
         assertThat(planned.spec(P3)).contains(spec(P3, "/home/me/gone"));
+    }
+
+    @Test
+    @DisplayName("저장된 창 상태가 없으면 기본 창 상태로 시작한다")
+    void withoutSnapshotWindowIsDefault() {
+        // when
+        WindowState window = restorer.window(Optional.empty());
+
+        // then
+        assertThat(window).isEqualTo(WindowState.DEFAULT);
+    }
+
+    @Test
+    @DisplayName("저장된 창 상태(자리 · 최대화 · 사이드바)를 그대로 쓴다")
+    void savedWindowIsKept() {
+        // given
+        WindowState saved = new WindowState(
+                Optional.of(new Bounds(-1600, 120, 1400, 900)),
+                true,
+                new PanelState(false, 300),
+                new PanelState(true, 264));
+
+        // when
+        WindowState window = restorer.window(Optional.of(new WorkspaceSnapshot(Workspace.initial(), saved)));
+
+        // then
+        assertThat(window).isEqualTo(saved);
     }
 }
