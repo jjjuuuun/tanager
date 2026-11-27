@@ -2,14 +2,14 @@
 
 **English** | [한국어](README.ko.md)
 
-[![CI](https://github.com/jjjuuuun/tanager/actions/workflows/ci.yml/badge.svg?branch=dev)](https://github.com/jjjuuuun/tanager/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/jjjuuuun/tanager?include_prereleases)](https://github.com/jjjuuuun/tanager/releases)
+[![CI](https://github.com/jjjuuuun/tanager/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/jjjuuuun/tanager/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/badge/release-v0.2.0-blue)](https://github.com/jjjuuuun/tanager/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 A desktop terminal manager for Windows. Split **WSL**, **Windows PowerShell 5.1** and **cmd** terminals in one window like tmux, and keep every directory you have worked in as a **folder tree** — so after a reboot you know exactly where you left off.
 
-> [!IMPORTANT]
-> **v0.1.0 is a scaffolding release.** It opens an empty window and proves the build, test and packaging pipeline end to end. Real terminals arrive in **v0.2.0**. See the [roadmap](#roadmap).
+> [!NOTE]
+> **Latest release: v0.2.0 — single terminal.** One terminal per window running a WSL distro, Windows PowerShell 5.1 or cmd. Directory history and the folder tree arrive in **v0.3.0**, splits in **v0.4.0**. See the [roadmap](#roadmap).
 
 ## Why Tanager?
 
@@ -43,11 +43,16 @@ The executable is not code-signed yet, so Windows SmartScreen may warn you. Choo
 
 ## Usage
 
-### What works in v0.1.0
+### What works in v0.2.0
 
-Launch `Tanager.exe`. A window titled **"Tanager — windows"** opens; the title confirms that the Windows platform module was detected. There is nothing else to do yet.
+1. Launch `Tanager.exe`. Tanager lists the shells it found on this PC — your WSL distros, Windows PowerShell 5.1 and cmd.
+2. Pick one with the arrow keys and <kbd>Enter</kbd> (or <kbd>1</kbd>–<kbd>9</kbd>). Leave the "open this shell directly next time" option on to skip the list from then on.
+3. The shell runs in a full terminal (ConPTY). Korean text and IME input work thanks to the bundled D2Coding font.
+4. When the shell exits, the pane shows its exit code: <kbd>Enter</kbd> restarts it, <kbd>Tab</kbd> picks another shell, <kbd>Esc</kbd> closes the window.
 
-### Planned (from v0.2.0)
+The interface is in Korean for now.
+
+### Planned key bindings (from v0.4.0)
 
 Default key bindings (Windows). Everything can also be done with the mouse — pane header buttons, dragging dividers, and dragging panes or sidebar folders onto drop zones. Bindings may still change before v1.0.
 
@@ -64,7 +69,7 @@ Default key bindings (Windows). Everything can also be done with the mouse — p
 | Toggle sidebar / toolkit | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>K</kbd> | — |
 | Search the folder tree | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd> | — |
 
-Tanager learns where each shell is by a small shell-integration hook that reports the current directory after every prompt (OSC 7 for bash, OSC 9;9 for PowerShell and cmd). It never records the commands you type or their output — only directories.
+From v0.3.0, Tanager learns where each shell is through a small shell-integration hook that reports the current directory after every prompt (OSC 7 for bash, OSC 9;9 for PowerShell and cmd). It never records the commands you type or their output — only directories.
 
 ## Build from source
 
@@ -77,8 +82,6 @@ Tanager learns where each shell is by a small shell-integration hook that report
 ```bash
 git clone https://github.com/jjjuuuun/tanager.git
 cd tanager
-git switch dev                         # development happens on dev; main holds the latest release
-
 ./gradlew check                      # format check + all tests + architecture rules + coverage
 ./gradlew :bootstrap:run             # run the app
 ./gradlew :bootstrap:jpackageImage   # Windows: app/bootstrap/build/jpackage/Tanager/Tanager.exe
@@ -135,8 +138,8 @@ The full rules (in Korean) are in [`.claude/rules/git.md`](.claude/rules/git.md)
 
 | Version | Milestone |
 |---|---|
-| **v0.1.0** | Scaffolding — modules, architecture rules, platform selection, packaging ✅ |
-| v0.2.0 | Single terminal — shell detection, one terminal pane, restart on exit, soft theme |
+| v0.1.0 | Scaffolding — modules, architecture rules, platform selection, packaging ✅ |
+| **v0.2.0** | Single terminal — shell detection, one terminal pane, restart on exit, soft theme ✅ |
 | v0.3.0 | History and folder tree — directory tracking, folder → session tree, pin and search |
 | v0.4.0 | Splits — keyboard and mouse |
 | v0.5.0 | Restore, tabs, settings, themes, resource monitor |
