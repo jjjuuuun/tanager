@@ -1,8 +1,8 @@
 # 0013. 이력 저장: state.json 의 history · 저장 시점 · 손상 처리
 
-- 상태: 채택(#78, 2026-11-26) · 개정(#79, #178) — 형식 · 원자적 쓰기 · `.bak` · 손상 · 상위 버전 · 잠금은 #78 에서, 저장 시점(throttle) · 불러오기 전 방문 · 종료 시 저장은 #79(2026-11-27)에서 구현했다.
+- 상태: 채택(#78, 2026-11-26) · 개정(#79, #178, #179) — 형식 · 원자적 쓰기 · `.bak` · 손상 · 상위 버전 · 잠금은 #78 에서, 저장 시점(throttle) · 불러오기 전 방문 · 종료 시 저장은 #79(2026-11-27)에서 구현했다.
 - 날짜: 2026-11-26
-- 관련: #78 · #79 · #178, FR-HIS-01 · FR-RES-01 · FR-RES-02 · FR-RES-03 · FR-RES-04, NFR-03, SDD §6.4 · §9.1 · §9.2 · §9.4, ADR-0009 · 0012
+- 관련: #78 · #79 · #178 · #179, FR-HIS-01 · FR-RES-01 · FR-RES-02 · FR-RES-03 · FR-RES-04, NFR-02 · NFR-03, SDD §6.2 · §6.4 · §9.1 · §9.2 · §9.4, ADR-0009 · 0012
 
 ## 맥락
 SDD 는 이력 · 작업 공간 · 창을 한 파일(`state.json`)에 둔다. 작업 공간 · 창은 M5 에서 쓴다. M3 는 이력만 먼저 저장해야 한다. 재시작하면 이력이 사라질 경우 사이드바 트리가 쓸모없기 때문이다.
@@ -95,3 +95,46 @@ SDD 는 이력 · 작업 공간 · 창을 한 파일(`state.json`)에 둔다. �
 - **뼈대 손상 · `.bak` 복구**(FR-RES-04)는 위 규칙 그대로 문서 단위로 한다. `.bak` 으로 복구하면 이력과 작업 공간을 모두 되살린다. `.bak` 이 v1 이면 복구한 뒤 마이그레이션한다.
 - 계약은 `WorkspaceRepositoryContract` 로 고정한다. 메모리 Fake(`InMemoryWorkspaceRepository`)와 `JsonStateRepository` 가 함께 통과한다. 마이그레이션은 `MigrationV1ToV2Test`, 부분 손상 · 두 포트 나눠 쓰기는 `JsonStateWorkspaceTest` 가 본다. 픽스처 `v1-history-only.json`(v0.4 가 쓴 파일) · `v1-sdd-example.json` · `v2.json` 은 지우지 않는다. 상위 버전 픽스처는 `v3-*.json` 이다.
 - 시작할 때 복원(스냅샷으로 창을 띄우기 · 화면 밖 판정)과 저장 시점은 #179 의 범위다.
+
+## 개정 (#179, 2026-11-28) — 시작 때 작업 공간 복원 · 작업 공간 저장 시점
+- **시작 순서**(FR-RES-02). 복원할 배치를 모르고 p1 셸을 먼저 띄우면 그 셸을 버려야 하기 때문에 정했다.
+  1. bootstrap(`Assembly.assemble`)은 state.json 을 **창을 만들기 전에** 읽는다.
+     - 가상 스레드에서 `loadWorkspace` → `load` 를 차례로 부른다(문서 읽기는 한 번, #178).
+     - 셸 탐지는 그동안 가상 스레드에서 미리 돈다(`ProfileCatalog` 는 한 번만 탐지한다). 셸 통합 설치도 지금처럼 나란히 돈다.
+     - `StateActor` 를 만들기 직전에 결과를 기다린다. 로컬 파일이라 수 ms 다.
+  2. 처음 상태는 `AppState.initial(빈 이력, RestoreWorkspaceUseCase.plan(snapshot))` 이다. snapshot 이 없으면(처음 실행 · v1 이력만 · 작업 공간을 버림) `Workspace.initial()` 이다. 저장소는 `Loading` 으로 시작한다.
+  3. 불러온 이력(`HistoryLoaded` · `HistoryLoadFailed`)과 작업 공간 불러오기 알림(`WorkspaceLoaded` → `StoreProblem.WorkspaceLoaded`)은 **UI 가 이벤트를 구독한 뒤** `Assembly.startStore()` 가 넣는다.
+     - 결과는 이미 손에 있다. 그래서 구독 전에 넣으면 불러오기 알림이 반드시 사라진다. 전에는 불러오기가 늦어 우연히 피하던 경합이다.
+     - 그때까지의 방문은 지금처럼 `Loading(pending)` 에 쌓였다가 불러온 이력 위에 합쳐진다.
+  4. UI 는 그 작업 공간을 그대로 그린다. **모든 탭의 창**을 만들고(활성 탭이 아닌 창은 숨김, ADR-0016 #177), 창마다 명세대로 셸을 띄운다. 기동은 창마다 백그라운드라 병렬이다(NFR-02).
+     - 셸이 뜨거나 화면이 바뀔 때 키보드 포커스는 작업 공간의 포커스 창만 가져간다(`PaneController.Host.focused`). 여러 창이 차례로 뜨면서 저장된 포커스를 빼앗지 않게 하려는 것이다.
+- **창 기동**(SDD §6.2). 명세에 경로가 있을 때의 규칙이다.
+  - **Windows 경로**: 지금과 같다. 미리 확인하지 않고, `LaunchError.WorkingDirectoryNotFound` 가 오면 홈에서 다시 띄운다(ADR-0009).
+  - **WSL 경로**: 기동 전에 `PlatformModule.directories().isDirectory(path, 1초)`(#53)로 확인한다. wsl.exe 는 없는 `--cd` 를 받아도 오류 없이 `/` 에서 뜨기 때문이다.
+    - 없으면(false) 홈에서 띄운다.
+    - 모르면(시간 초과 · 접근 불가) 확인 없이 그 경로로 띄운다. VM 이 깨어나는 동안 창을 오래 막지 않으려는 것이다.
+    - 설정 시작 경로 · 트리에서 연 경로 · 다시 띄우기에도 같은 규칙을 쓴다. 기동 경로 하나(`SessionStarter.launch`)에서 판정한다.
+  - 홈에서 띄웠으면 두 경우 모두 `StartNotice.MissingDirectory(경로)` 로 알린다. 전의 `StartDirMissing` 을 이 이름으로 바꿨다(알림 하나로 맞춤).
+    - 문구는 "`<경로>` 이 없어 홈에서 열었다"다. 창 머리줄 경고(⚠ 툴팁)와 상태줄에 보인다.
+  - 홈에서 떠 셸이 OSC 를 알리기 전에 끝난 창은 저장할 때 원래 명세 경로를 그대로 쓴다(`WorkspaceSnapshot.capture`). 홈으로 덮지 않는다.
+  - **프로파일이 탐지 목록에 없으면** 지금의 `StartFailure.ChoiceRequired`(셸 선택 화면)다. 다른 창은 그대로 뜬다.
+    - 사용자가 **같은 환경의 셸**을 고르면 저장된 경로에서 연다(`Attempt.Chosen.dir`). 다른 환경의 셸이면 그 셸의 시작 경로에서 연다. 다른 환경의 경로는 그 셸로 열 수 없기 때문이다.
+- **저장 시점**(FR-RES-01)
+  - 이력의 일정 조율을 `ThrottledSaver<T>`(application.service, 패키지 전용)로 뽑았다. 규칙은 위 #79 그대로다. 이력 · 작업 공간이 같은 규칙을 쓴다.
+    - 첫 미저장 변경 후 1초.
+    - 한 번에 하나. 저장 중에 기한이 오면 끝나자마자 다음 저장.
+    - 종료 때 flush.
+    - 파일에 있다고 아는 값 · 쓰는 중인 값과 같으면 쓰지 않는다.
+    - 같은 실패는 한 번만 알린다.
+    - 규칙 8 의 예외(단일 monitor · I/O 는 monitor 밖)도 이 클래스가 진다. `HistorySaver` 에는 불러오는 중인지 · 그동안 방문이 있었는지만 남는다.
+  - `WorkspaceSaver` 는 같은 조율로 `saveWorkspace(WorkspaceSnapshot.capture(workspace, sessions, window))` 를 부른다.
+    - 받는 이벤트: `LayoutChanged` · `SessionsChanged` · `SessionCwdChanged`, 그리고 `HistoryChanged`. 마지막 것은 불러오기가 끝났다는 신호다 — 불러오는 동안 바뀐 것을 그때 예약한다.
+    - 받을 때마다 capture 를 다시 계산해 파일에 있는 값과 다를 때만 예약한다. 그래서 저장된 명세 그대로 셸이 뜨기만 한 것은 바뀐 것이 아니다.
+    - `ReadOnly` 면 예약하지 않는다. `Loading` 중에는 예약해도 쓰지 않는다(쓸 수 있을 때만 쓰는 규칙은 이력과 같다).
+    - 시작 때 읽은 snapshot 을 "파일에 있는 값"으로 안다. snapshot 이 없으면(처음 실행 · v1 이력만) 시작 상태의 capture 를 그 값으로 본다 — 다시 읽어도 같은 작업 공간으로 시작하기 때문이다. 그래서 불러오기만 하고 바꾸지 않으면 종료 때도 파일을 건드리지 않는다.
+    - 창 상태(`window`)는 불러온 값(없으면 `WindowState.DEFAULT`)을 그대로 다시 쓴다. 창 상태를 따라가는 일(`WindowChanged`)은 #180 이 이 저장기에 붙인다.
+  - 두 저장기가 각자 문서 전체를 쓴다(어댑터가 두 부분의 마지막 값을 들고 있다, #178). 둘이 같은 초에 바뀌면 1초에 두 번 쓸 수 있다. 받아들인 대가다.
+- **종료 순서**(ADR-0011 · 0012): 상태 실행기 종료 → 이력 flush → 작업 공간 flush(둘이 합쳐 한 기한 2초) → 저장소 닫기.
+  - 둘 중 하나라도 실패하면 저장소를 닫지 않는다(위 #79 와 같은 까닭).
+  - 앱 종료는 창을 `ClosePaneUseCase` 로 닫지 않는다. 그래서 종료가 작업 공간을 빈 배치로 덮지 않는다.
+- 범위 밖: 창 위치 · 크기 · 사이드바 상태의 복원과 화면 밖 판정(#180), 탭 막대(#181).
