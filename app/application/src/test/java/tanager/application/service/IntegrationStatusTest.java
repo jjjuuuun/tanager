@@ -63,7 +63,8 @@ class IntegrationStatusTest {
 
         // then
         assertThat(first).isInstanceOf(Integration.Unavailable.class);
-        assertThat(((Integration.Unavailable) first).reason()).contains("IllegalStateException");
+        assertThat(((Integration.Unavailable) first).problem())
+                .isEqualTo(new Integration.Problem.Crashed("IllegalStateException"));
         assertThat(second).isEqualTo(first);
         assertThat(integration.installCalls()).isEqualTo(1);
     }

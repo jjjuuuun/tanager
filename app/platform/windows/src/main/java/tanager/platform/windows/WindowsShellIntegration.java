@@ -78,7 +78,8 @@ final class WindowsShellIntegration implements ShellIntegration {
         } catch (IOException | RuntimeException e) {
             // 셸은 통합 없이도 떠야 한다 — 예외 대신 이유를 돌려주고, 원인 전체는 로그에 남긴다
             LOG.log(System.Logger.Level.WARNING, "셸 통합 스크립트 설치 실패: " + current, e);
-            return new Integration.Unavailable("셸 통합 스크립트를 설치하지 못했다: " + current + " (" + cause(e) + ")");
+            return new Integration.Unavailable(
+                    new Integration.Problem.InstallFailed(String.valueOf(current), cause(e), detail(e)));
         }
     }
 
@@ -162,14 +163,26 @@ final class WindowsShellIntegration implements ShellIntegration {
         Files.move(source, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
     }
 
-    /** 사용자에게 보일 짧은 원인. 예외 클래스 이름(FQN)을 그대로 보이지 않는다. */
-    private static String cause(Exception e) {
+    /** 알려진 파일 문제. 문장은 UI 가 만든다(#137). */
+    private static Integration.FileProblem cause(Exception e) {
         return switch (e) {
-            case AccessDeniedException _ -> "접근이 거부됐다";
-            case FileAlreadyExistsException _ -> "같은 이름의 파일이 있다";
-            case DirectoryNotEmptyException _ -> "같은 이름의 폴더가 있다";
-            case NoSuchFileException _ -> "경로가 없다";
-            case NotDirectoryException _ -> "폴더가 아니다";
+            case AccessDeniedException _ -> Integration.FileProblem.ACCESS_DENIED;
+            case FileAlreadyExistsException _ -> Integration.FileProblem.FILE_EXISTS;
+            case DirectoryNotEmptyException _ -> Integration.FileProblem.DIRECTORY_EXISTS;
+            case NoSuchFileException _ -> Integration.FileProblem.NO_SUCH_PATH;
+            case NotDirectoryException _ -> Integration.FileProblem.NOT_DIRECTORY;
+            default -> Integration.FileProblem.OTHER;
+        };
+    }
+
+    /** 알려지지 않은 문제의 OS 이유. 예외 클래스 이름(FQN)을 그대로 보이지 않는다. 알려진 문제면 비어 있다. */
+    private static String detail(Exception e) {
+        return switch (e) {
+            case AccessDeniedException _,
+                    FileAlreadyExistsException _,
+                    DirectoryNotEmptyException _,
+                    NoSuchFileException _,
+                    NotDirectoryException _ -> "";
             case FileSystemException fse when fse.getReason() != null -> fse.getReason();
             case FileSystemException _ -> e.getClass().getSimpleName();
             default ->

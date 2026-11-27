@@ -71,9 +71,9 @@ public final class JsonConfigRepository implements ConfigRepository {
             case Disk.Missing _ -> MAPPER.createObjectNode();
             case Disk.Parsed parsed -> parsed.root();
         };
-        Optional<String> refused = versionRefusal(root);
+        Optional<ConfigError> refused = versionRefusal(root);
         if (refused.isPresent()) {
-            return Result.err(new ConfigError.WouldOverwrite(refused.get()));
+            return Result.err(refused.get());
         }
         merge(root, config);
         return write(root).map(_ -> config);
@@ -138,14 +138,15 @@ public final class JsonConfigRepository implements ConfigRepository {
         if (location == null || location.getLineNr() < 1) {
             return message;
         }
-        return message + " (줄 " + location.getLineNr() + ", 열 " + location.getColumnNr() + ")";
+        return message + " (" + location.getLineNr() + ":" + location.getColumnNr() + ")";
     }
 
     private static LoadedConfig interpret(ObjectNode root) {
         List<ConfigWarning> warnings = new ArrayList<>();
         Optional<Integer> version = schemaVersion(root);
         if (version.isEmpty()) {
-            warnings.add(new ConfigWarning.IgnoredValue(KEY_SCHEMA_VERSION, "1 이상의 정수가 아니다"));
+            warnings.add(new ConfigWarning.IgnoredValue(
+                    KEY_SCHEMA_VERSION, ConfigWarning.IgnoredReason.NOT_POSITIVE_INTEGER));
         } else if (version.get() > SCHEMA_VERSION) {
             warnings.add(new ConfigWarning.NewerVersion(version.get()));
         }
@@ -174,15 +175,15 @@ public final class JsonConfigRepository implements ConfigRepository {
             return profiles;
         }
         if (!(node instanceof ObjectNode object)) {
-            warnings.add(new ConfigWarning.IgnoredValue(KEY_PROFILES, "객체가 아니다"));
+            warnings.add(new ConfigWarning.IgnoredValue(KEY_PROFILES, ConfigWarning.IgnoredReason.NOT_OBJECT));
             return profiles;
         }
         for (Map.Entry<String, JsonNode> entry : object.properties()) {
             String key = KEY_PROFILES + "." + entry.getKey();
             if (entry.getKey().isBlank()) {
-                warnings.add(new ConfigWarning.IgnoredValue(key, "프로파일 id 가 비어 있다"));
+                warnings.add(new ConfigWarning.IgnoredValue(key, ConfigWarning.IgnoredReason.EMPTY_PROFILE_ID));
             } else if (!(entry.getValue() instanceof ObjectNode settings)) {
-                warnings.add(new ConfigWarning.IgnoredValue(key, "객체가 아니다"));
+                warnings.add(new ConfigWarning.IgnoredValue(key, ConfigWarning.IgnoredReason.NOT_OBJECT));
             } else {
                 Optional<String> startDir =
                         nonBlankString(settings.get(KEY_START_DIR), key + "." + KEY_START_DIR, warnings);
@@ -199,28 +200,30 @@ public final class JsonConfigRepository implements ConfigRepository {
         if (node.isString() && !node.stringValue().isBlank()) {
             return Optional.of(node.stringValue());
         }
-        warnings.add(new ConfigWarning.IgnoredValue(key, "비어 있지 않은 문자열이 아니다"));
+        warnings.add(new ConfigWarning.IgnoredValue(key, ConfigWarning.IgnoredReason.NOT_NON_EMPTY_STRING));
         return Optional.empty();
     }
 
     // ---- 쓰기 ----
 
     // 덮어써도 되는 것은 schemaVersion 이 없거나 정수 1 일 때뿐이다. 해석할 수 없는 값도 사용자의 의도를 모르니 지킨다.
-    private static Optional<String> versionRefusal(ObjectNode root) {
+    private static Optional<ConfigError> versionRefusal(ObjectNode root) {
         JsonNode version = root.get(KEY_SCHEMA_VERSION);
         if (version == null || (version.isInt() && version.intValue() == SCHEMA_VERSION)) {
             return Optional.empty();
         }
-        return Optional.of(schemaVersion(root)
-                .filter(v -> v > SCHEMA_VERSION)
-                .map(v -> "새 버전(schemaVersion " + v + ")이 쓴 파일이다")
-                .orElse("schemaVersion " + version + " 을 해석할 수 없다"));
+        ConfigError.Risk risk =
+                schemaVersion(root).filter(v -> v > SCHEMA_VERSION).isPresent()
+                        ? ConfigError.Risk.NEWER_VERSION
+                        : ConfigError.Risk.UNREADABLE_VERSION;
+        return Optional.of(new ConfigError.WouldOverwrite(risk, "schemaVersion " + version));
     }
 
     // 읽지 못한 파일은 덮어쓰지 않는다. 손상은 사용자의 내용을 지키려는 거부이고, 그 밖은 쓰기 실패다.
     private static ConfigError refusal(ConfigError readError) {
         return switch (readError) {
-            case ConfigError.Corrupt corrupt -> new ConfigError.WouldOverwrite("손상된 파일이다 — " + corrupt.detail());
+            case ConfigError.Corrupt corrupt ->
+                new ConfigError.WouldOverwrite(ConfigError.Risk.CORRUPT_FILE, corrupt.detail());
             case ConfigError.Unreadable unreadable -> new ConfigError.WriteFailed(unreadable.detail());
             case ConfigError.WouldOverwrite w -> w;
             case ConfigError.WriteFailed w -> w;

@@ -51,7 +51,7 @@ public final class TanagerApp {
             }
             case Result.Err<PlatformModule, PlatformSelectionError>(PlatformSelectionError error) -> {
                 LOG.log(System.Logger.Level.ERROR, error.describe());
-                SwingUi.showFatalAndExit(error.describe());
+                SwingUi.showFatalAndExit(error);
             }
         }
     }

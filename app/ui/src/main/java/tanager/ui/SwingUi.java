@@ -8,6 +8,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
+import tanager.application.platform.PlatformSelectionError;
 import tanager.application.port.in.AppEvent;
 import tanager.application.port.in.AppEvents;
 import tanager.application.port.in.ListProfilesUseCase;
@@ -19,6 +20,7 @@ import tanager.domain.shared.PaneId;
 import tanager.ui.font.TerminalFontSet;
 import tanager.ui.font.TerminalFonts;
 import tanager.ui.i18n.Msg;
+import tanager.ui.i18n.NoticeText;
 import tanager.ui.terminal.TerminalSettings;
 import tanager.ui.theme.JediTermColors;
 import tanager.ui.theme.SoftDarkLaf;
@@ -82,8 +84,13 @@ public final class SwingUi {
         });
     }
 
+    /** 플랫폼을 고르지 못해 시작할 수 없음을 알리고 끝낸다. */
+    public static void showFatalAndExit(PlatformSelectionError error) {
+        showFatalAndExit(NoticeText.DEFAULT.of(error));
+    }
+
     /** 시작할 수 없는 오류를 알리고 끝낸다. */
-    public static void showFatalAndExit(String message) {
+    private static void showFatalAndExit(String message) {
         SwingUtilities.invokeLater(() -> {
             installTheme();
             JOptionPane.showMessageDialog(null, message, Msg.APP_CANNOT_START.text(), JOptionPane.ERROR_MESSAGE);

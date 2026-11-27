@@ -62,7 +62,11 @@ class WindowsLaunchCommandsTest {
 
     private static LaunchCommand of(ShellProfile profile, WorkingDir dir) {
         return WindowsLaunchCommands.of(
-                profile, dir, USER_PROFILE, Optional.empty(), new Integration.Unavailable("통합 없음"));
+                profile,
+                dir,
+                USER_PROFILE,
+                Optional.empty(),
+                new Integration.Unavailable(new Integration.Problem.NotSupported()));
     }
 
     @Test

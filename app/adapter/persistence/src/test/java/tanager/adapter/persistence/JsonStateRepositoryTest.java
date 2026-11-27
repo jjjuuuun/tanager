@@ -906,7 +906,7 @@ class JsonStateRepositoryTest {
         Result<WorkHistory, HistoryStoreError> saved = repository.save(historyOf("C:\\other"));
 
         // then
-        assertThat(saved.error()).contains(new HistoryStoreError.ReadOnly("닫힌 저장소에는 쓰지 않는다"));
+        assertThat(saved.error()).contains(new HistoryStoreError.ReadOnly(HistoryStoreError.ReadOnlyReason.CLOSED));
         assertThat(Files.readAllBytes(file())).isEqualTo(before);
     }
 
@@ -938,7 +938,7 @@ class JsonStateRepositoryTest {
         Result<WorkHistory, HistoryStoreError> saved = repository.save(historyOf("C:\\other"));
 
         // then
-        assertThat(saved.error()).contains(new HistoryStoreError.ReadOnly("불러오기 전에는 쓰지 않는다"));
+        assertThat(saved.error()).contains(new HistoryStoreError.ReadOnly(HistoryStoreError.ReadOnlyReason.NOT_LOADED));
         assertThat(file()).doesNotExist();
     }
 

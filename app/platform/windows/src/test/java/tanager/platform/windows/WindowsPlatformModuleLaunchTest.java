@@ -19,7 +19,8 @@ import tanager.domain.session.WorkingDir;
 
 class WindowsPlatformModuleLaunchTest {
 
-    private static final Integration NO_INTEGRATION = new Integration.Unavailable("통합 없음");
+    private static final Integration NO_INTEGRATION =
+            new Integration.Unavailable(new Integration.Problem.NotSupported());
     private static final ShellProfile POWERSHELL = new ShellProfile(
             new ProfileId("powershell"),
             "Windows PowerShell",

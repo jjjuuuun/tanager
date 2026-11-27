@@ -203,8 +203,8 @@ final class Assembly {
                 switch (integration.await()) {
                     case Integration.Installed(var directory) ->
                         LOG.log(System.Logger.Level.INFO, "셸 통합 스크립트: {0}", directory);
-                    case Integration.Unavailable(var reason) ->
-                        LOG.log(System.Logger.Level.WARNING, "셸 통합 없음: {0}", reason);
+                    case Integration.Unavailable(var problem) ->
+                        LOG.log(System.Logger.Level.WARNING, "셸 통합 없음: {0}", problem.describe());
                 }
             } catch (RuntimeException e) {
                 LOG.log(System.Logger.Level.ERROR, "셸 통합 설치 실패", e);

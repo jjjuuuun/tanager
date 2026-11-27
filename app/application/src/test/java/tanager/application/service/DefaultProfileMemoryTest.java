@@ -94,7 +94,9 @@ class DefaultProfileMemoryTest {
     }
 
     static Stream<ConfigError> saveErrors() {
-        return Stream.of(new ConfigError.WouldOverwrite("새 버전"), new ConfigError.WriteFailed("disk"));
+        return Stream.of(
+                new ConfigError.WouldOverwrite(ConfigError.Risk.NEWER_VERSION, "schemaVersion 2"),
+                new ConfigError.WriteFailed("disk"));
     }
 
     @ParameterizedTest

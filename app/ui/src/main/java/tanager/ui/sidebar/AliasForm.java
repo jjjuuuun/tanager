@@ -9,6 +9,7 @@ import javax.swing.JTextField;
 import tanager.domain.history.Alias;
 import tanager.domain.history.HistoryError;
 import tanager.ui.i18n.Msg;
+import tanager.ui.i18n.NoticeText;
 import tanager.ui.theme.ColorToken;
 import tanager.ui.theme.ThemeColors;
 
@@ -48,7 +49,7 @@ final class AliasForm extends JPanel {
                             return Optional.of(Optional.of(alias.value()));
                         },
                         (HistoryError.InvalidAlias invalid) -> {
-                            error.setText(invalid.reason());
+                            error.setText(NoticeText.DEFAULT.of(invalid.problem()));
                             error.setVisible(true);
                             return Optional.empty();
                         });

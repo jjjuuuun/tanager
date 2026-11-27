@@ -48,7 +48,7 @@ class WindowsWslHomeTest {
                         new WorkingDir.Home(),
                         "C:\\Users\\me",
                         Optional.empty(),
-                        new Integration.Unavailable("통합 없음"))
+                        new Integration.Unavailable(new Integration.Problem.NotSupported()))
                 .argv());
         // 끝의 "bash -i" 를 한 줄 검사 스크립트로 바꿔 같은 --cd 인자를 그대로 쓴다
         argv.removeLast();

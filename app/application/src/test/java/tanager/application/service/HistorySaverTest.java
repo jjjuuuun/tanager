@@ -142,7 +142,7 @@ class HistorySaverTest {
             synchronized (events) {
                 return events.stream()
                         .filter(AppEvent.StoreNotice.class::isInstance)
-                        .map(e -> ((AppEvent.StoreNotice) e).message())
+                        .map(e -> ((AppEvent.StoreNotice) e).problem().describe())
                         .toList();
             }
         }

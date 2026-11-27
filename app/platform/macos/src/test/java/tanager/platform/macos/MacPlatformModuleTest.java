@@ -49,6 +49,6 @@ class MacPlatformModuleTest {
         Integration result = module.integration().install();
 
         // then
-        assertThat(result).isEqualTo(new Integration.Unavailable("M7"));
+        assertThat(result).isEqualTo(new Integration.Unavailable(new Integration.Problem.NotSupported()));
     }
 }

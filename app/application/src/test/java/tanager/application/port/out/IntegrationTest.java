@@ -23,12 +23,15 @@ class IntegrationTest {
     }
 
     @Test
-    @DisplayName("Unavailable 은 이유가 null 이거나 공백이면 거부한다")
-    void unavailableRequiresReason() {
+    @DisplayName("Unavailable 은 이유(Problem)가 있어야 하고, InstallFailed 는 경로 · 원인 · 세부가 null 이 아니다")
+    void unavailableRequiresProblem() {
         // when / then
         assertThatThrownBy(() -> new Integration.Unavailable(null)).isInstanceOf(NullPointerException.class);
-        assertThatThrownBy(() -> new Integration.Unavailable("")).isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new Integration.Unavailable("  \t")).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new Integration.Problem.InstallFailed(null, Integration.FileProblem.OTHER, ""))
+                .isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> new Integration.Problem.InstallFailed("p", null, ""))
+                .isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> new Integration.Problem.Crashed(null)).isInstanceOf(NullPointerException.class);
     }
 
     @Test
@@ -36,25 +39,32 @@ class IntegrationTest {
     void valueEquality() {
         // when / then
         assertThat(new Integration.Installed(Path.of("a"))).isEqualTo(new Integration.Installed(Path.of("a")));
-        assertThat(new Integration.Unavailable("M7")).isEqualTo(new Integration.Unavailable("M7"));
-        assertThat(new Integration.Unavailable("M7")).isNotEqualTo(new Integration.Installed(Path.of("M7")));
+        assertThat(new Integration.Unavailable(new Integration.Problem.NotSupported()))
+                .isEqualTo(new Integration.Unavailable(new Integration.Problem.NotSupported()));
+        assertThat(new Integration.Unavailable(new Integration.Problem.NotSupported()))
+                .isNotEqualTo(new Integration.Installed(Path.of("M7")));
     }
 
     @Property
-    @Label("공백이 아닌 글자가 하나라도 있는 이유는 항상 보존된다")
-    void nonBlankReasonIsKept(@ForAll @AlphaChars @StringLength(min = 1, max = 40) String reason) {
+    @Label("설치 실패의 경로 · 세부는 항상 보존되고 개발자용 설명에 들어간다")
+    void installFailedKeepsDetails(
+            @ForAll @AlphaChars @StringLength(min = 1, max = 40) String path,
+            @ForAll @AlphaChars @StringLength(max = 40) String detail) {
         // when
-        Integration.Unavailable unavailable = new Integration.Unavailable(reason);
+        Integration.Problem.InstallFailed failed =
+                new Integration.Problem.InstallFailed(path, Integration.FileProblem.OTHER, detail);
 
         // then
-        assertThat(unavailable.reason()).isEqualTo(reason);
+        assertThat(failed.path()).isEqualTo(path);
+        assertThat(failed.detail()).isEqualTo(detail);
+        assertThat(failed.describe()).contains(path).contains(detail);
     }
 
     @Test
     @DisplayName("FakePlatformModule 은 integration() 으로 지정한 셸 통합을 돌려준다")
     void fakePlatformExposesIntegration() {
         // given
-        FakeShellIntegration custom = FakeShellIntegration.unavailable("테스트");
+        FakeShellIntegration custom = FakeShellIntegration.unavailable();
         FakePlatformModule platform = new FakePlatformModule(List.of()).withIntegration(custom);
 
         // when
@@ -62,7 +72,7 @@ class IntegrationTest {
 
         // then
         assertThat(platform.integration()).isSameAs(custom);
-        assertThat(result).isEqualTo(new Integration.Unavailable("테스트"));
+        assertThat(result).isEqualTo(new Integration.Unavailable(new Integration.Problem.NotSupported()));
         assertThat(custom.installCalls()).isEqualTo(1);
     }
 
@@ -96,7 +106,7 @@ class IntegrationTest {
     @DisplayName("FakePlatformModule 에 지정한 integration() 은 나중에 withAppData 를 줘도 바뀌지 않는다")
     void fakePlatformCustomIntegrationSurvivesAppDataChange() {
         // given
-        FakeShellIntegration custom = FakeShellIntegration.unavailable("테스트");
+        FakeShellIntegration custom = FakeShellIntegration.unavailable();
 
         // when
         FakePlatformModule platform = new FakePlatformModule(List.of())

@@ -201,8 +201,8 @@ public final class SessionStarter implements StartSessionUseCase {
         switch (integration) {
             case Integration.Installed _ ->
                 stream.subscribe(new CwdTracker(pane, running.profile().env(), mode, visits));
-            case Integration.Unavailable(var reason) -> {
-                notices.add(new StartNotice.IntegrationUnavailable(reason));
+            case Integration.Unavailable(var problem) -> {
+                notices.add(new StartNotice.IntegrationUnavailable(problem));
                 running.knownCwd().ifPresent(start -> visits.record(pane, start));
             }
         }

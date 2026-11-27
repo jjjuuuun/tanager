@@ -172,7 +172,8 @@ class PaneViewTest {
         // given
         var session = PaneFixtures.started(
                 new ScriptedTerminalStream(1),
-                List.of(new tanager.application.port.in.StartNotice.IntegrationUnavailable("설치 실패")));
+                List.of(new tanager.application.port.in.StartNotice.IntegrationUnavailable(
+                        new tanager.application.port.out.Integration.Problem.NotSupported())));
 
         // when
         PaneView view = PaneView.of(new PaneState.Running(session));

@@ -31,7 +31,7 @@ public final class IntegrationStatus {
         } catch (RuntimeException e) {
             LOG.log(System.Logger.Level.ERROR, "셸 통합 설치가 예외로 끝났다", e);
             return new Integration.Unavailable(
-                    "셸 통합 설치가 예외로 끝났다: " + e.getClass().getSimpleName());
+                    new Integration.Problem.Crashed(e.getClass().getSimpleName()));
         }
     }
 }

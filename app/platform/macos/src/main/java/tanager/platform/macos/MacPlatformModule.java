@@ -44,6 +44,6 @@ public final class MacPlatformModule implements PlatformModule {
     /** M7 에서 zsh 판을 채운다. 그때까지 셸 통합 없음. */
     @Override
     public ShellIntegration integration() {
-        return () -> new Integration.Unavailable("M7");
+        return () -> new Integration.Unavailable(new Integration.Problem.NotSupported());
     }
 }

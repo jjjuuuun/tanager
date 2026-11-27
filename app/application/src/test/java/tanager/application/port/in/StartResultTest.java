@@ -122,9 +122,10 @@ class StartResultTest {
     @DisplayName("DefaultNotSaved 는 셸 id 와 저장 실패 이유를 문장으로 설명한다")
     void defaultNotSavedDescribes() {
         // when
-        String text = new StartNotice.DefaultNotSaved(new ProfileId("cmd"), new ConfigError.WouldOverwrite("손상된 파일이다"))
+        String text = new StartNotice.DefaultNotSaved(
+                        new ProfileId("cmd"), new ConfigError.WouldOverwrite(ConfigError.Risk.CORRUPT_FILE, "손상된 파일이다"))
                 .describe();
         // then
-        assertThat(text).isEqualTo("기본 셸 cmd 을 저장하지 못했다 — 설정 파일을 덮어쓰지 않았다: 손상된 파일이다");
+        assertThat(text).isEqualTo("기본 셸 cmd 을 저장하지 못했다 — 설정 파일을 덮어쓰지 않았다(CORRUPT_FILE): 손상된 파일이다");
     }
 }

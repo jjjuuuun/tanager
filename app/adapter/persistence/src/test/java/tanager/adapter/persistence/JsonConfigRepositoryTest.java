@@ -173,7 +173,7 @@ class JsonConfigRepositoryTest {
     }
 
     @Test
-    @DisplayName("Corrupt 의 설명에는 오류가 난 줄과 열이 있다")
+    @DisplayName("Corrupt 의 설명에는 오류가 난 줄:열이 있다(언어와 무관한 형식, #137)")
     void corruptDetailHasLocation() throws IOException {
         // given
         write("{\n  \"defaultProfile\": ,\n}");
@@ -183,7 +183,7 @@ class JsonConfigRepositoryTest {
 
         // then
         assertThat(error).isInstanceOf(ConfigError.Corrupt.class);
-        assertThat(((ConfigError.Corrupt) error).detail()).contains("줄 2").contains("열 ");
+        assertThat(((ConfigError.Corrupt) error).detail()).containsPattern("\\(2:\\d+\\)$");
     }
 
     @Test
