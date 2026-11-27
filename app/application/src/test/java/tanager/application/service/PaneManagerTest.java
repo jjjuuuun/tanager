@@ -9,6 +9,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import tanager.application.port.in.AppEvent;
+import tanager.application.port.in.OpenChoices;
 import tanager.application.port.in.OpenError;
 import tanager.application.port.out.AppConfig;
 import tanager.application.port.out.InMemoryConfigRepository;
@@ -94,7 +95,7 @@ class PaneManagerTest {
         configure(Optional.of("cmd"), OpenPlacement.RIGHT);
 
         // when
-        PaneSpec spec = ok(panes.open(A, Optional.empty()));
+        PaneSpec spec = ok(panes.open(A, Optional.empty(), Optional.empty()));
 
         // then
         assertThat(spec).isEqualTo(new PaneSpec(P2, Optional.of(CMD.id()), Optional.of(A)));
@@ -112,7 +113,7 @@ class PaneManagerTest {
         configure(Optional.empty(), OpenPlacement.DOWN);
 
         // when
-        ok(panes.open(A, Optional.empty()));
+        ok(panes.open(A, Optional.empty(), Optional.empty()));
 
         // then
         assertThat(((LayoutNode.Split) workspace().tab().root()).orientation()).isEqualTo(Orientation.COLUMN);
@@ -125,7 +126,7 @@ class PaneManagerTest {
         configure(Optional.of("wsl:A"), OpenPlacement.RIGHT);
 
         // when
-        PaneSpec spec = ok(panes.open(A, Optional.empty()));
+        PaneSpec spec = ok(panes.open(A, Optional.empty(), Optional.empty()));
 
         // then
         assertThat(spec.profile()).contains(POWERSHELL.id());
@@ -138,7 +139,7 @@ class PaneManagerTest {
         config.willFailLoad(new tanager.application.port.out.ConfigError.Unreadable("권한"));
 
         // when
-        PaneSpec spec = ok(panes.open(A, Optional.empty()));
+        PaneSpec spec = ok(panes.open(A, Optional.empty(), Optional.empty()));
 
         // then
         assertThat(spec.profile()).contains(POWERSHELL.id());
@@ -154,7 +155,7 @@ class PaneManagerTest {
                 .orElseThrow();
 
         // when
-        OpenError error = err(panes.open(z, Optional.empty()));
+        OpenError error = err(panes.open(z, Optional.empty(), Optional.empty()));
 
         // then
         assertThat(error).isEqualTo(new OpenError.NoProfileForEnvironment(new ShellEnvironment.Wsl("Z")));
@@ -171,7 +172,7 @@ class PaneManagerTest {
                 .orElseThrow();
 
         // when
-        PaneSpec spec = ok(panes.open(mnt, Optional.of(POWERSHELL.id())));
+        PaneSpec spec = ok(panes.open(mnt, Optional.of(POWERSHELL.id()), Optional.empty()));
 
         // then
         WorkspacePath windows = WorkspacePath.of(WIN, "C:\\work").value().orElseThrow();
@@ -184,9 +185,9 @@ class PaneManagerTest {
         WorkspacePath home = WorkspacePath.of(new ShellEnvironment.Wsl("A"), "/home/me")
                 .value()
                 .orElseThrow();
-        assertThat(err(panes.open(home, Optional.of(POWERSHELL.id()))))
+        assertThat(err(panes.open(home, Optional.of(POWERSHELL.id()), Optional.empty())))
                 .isEqualTo(new OpenError.EnvironmentMismatch(POWERSHELL.id(), home));
-        assertThat(err(panes.open(A, Optional.of(new ProfileId("gone")))))
+        assertThat(err(panes.open(A, Optional.of(new ProfileId("gone")), Optional.empty())))
                 .isEqualTo(new OpenError.UnknownProfile(new ProfileId("gone")));
         assertThat(workspace()).isEqualTo(Workspace.initial());
     }
@@ -194,14 +195,15 @@ class PaneManagerTest {
     @Test
     @DisplayName("지정한 프로파일이 경로 환경과 같으면 그것으로 연다")
     void explicitProfile() {
-        assertThat(ok(panes.open(A, Optional.of(CMD.id()))).profile()).contains(CMD.id());
+        assertThat(ok(panes.open(A, Optional.of(CMD.id()), Optional.empty())).profile())
+                .contains(CMD.id());
     }
 
     @Test
     @DisplayName("p2 를 닫으면 p1 하나가 되고 포커스 p1, p2 의 세션은 LiveSessions 에서 빠진다")
     void closeRemovesPaneAndSession() {
         // given
-        ok(panes.open(A, Optional.empty()));
+        ok(panes.open(A, Optional.empty(), Optional.empty()));
         TerminalSession running = TerminalSession.start(CMD, new WorkingDir.At(A))
                 .value()
                 .orElseThrow()
@@ -243,7 +245,7 @@ class PaneManagerTest {
     void focus() {
         // given
         configure(Optional.empty(), OpenPlacement.RIGHT);
-        ok(panes.open(A, Optional.empty()));
+        ok(panes.open(A, Optional.empty(), Optional.empty()));
         events.clear();
 
         // when
@@ -260,5 +262,63 @@ class PaneManagerTest {
     @DisplayName("앱 상태의 시작 작업 공간은 창 p1 하나다")
     void initialWorkspace() {
         assertThat(workspace()).isEqualTo(Workspace.initial());
+    }
+
+    @Test
+    @DisplayName("메뉴에서 고른 자리(아래)는 설정(오른쪽)보다 우선한다(#91)")
+    void explicitPlacementWins() {
+        // given
+        configure(Optional.empty(), OpenPlacement.RIGHT);
+
+        // when
+        ok(panes.open(A, Optional.empty(), Optional.of(OpenPlacement.DOWN)));
+
+        // then
+        assertThat(((LayoutNode.Split) workspace().tab().root()).orientation()).isEqualTo(Orientation.COLUMN);
+    }
+
+    @Test
+    @DisplayName("환경 노드의 새 창은 그 환경의 기본 셸을 그 셸의 시작 경로(→ 홈)에서 연다, 셸이 없으면 NoProfileForEnvironment(#91)")
+    void openHome() {
+        // given
+        configure(Optional.of("cmd"), OpenPlacement.RIGHT);
+
+        // when
+        PaneSpec spec = ok(panes.openHome(WIN, Optional.empty()));
+
+        // then
+        assertThat(spec).isEqualTo(new PaneSpec(P2, Optional.of(CMD.id()), Optional.empty()));
+        assertThat(err(panes.openHome(new ShellEnvironment.Wsl("Z"), Optional.empty())))
+                .isEqualTo(new OpenError.NoProfileForEnvironment(new ShellEnvironment.Wsl("Z")));
+    }
+
+    @Test
+    @DisplayName("열기 메뉴 후보: Windows 폴더는 기본 셸 + 같은 환경의 다른 셸 · 경로를 바꿀 수 있는 WSL(탐지 순서)(#91)")
+    void choicesForWindowsFolder() {
+        // given
+        configure(Optional.of("cmd"), OpenPlacement.RIGHT);
+
+        // when
+        OpenChoices choices = panes.choices(A);
+
+        // then
+        assertThat(choices.primary()).contains(CMD);
+        assertThat(choices.others()).containsExactly(WSL_A, POWERSHELL);
+    }
+
+    @Test
+    @DisplayName("열기 메뉴 후보: WSL 홈은 Windows 셸로 열 수 없고, 지운 배포판은 기본 셸도 없다(#91)")
+    void choicesWithoutTranslation() {
+        // given
+        WorkspacePath home = WorkspacePath.of(new ShellEnvironment.Wsl("A"), "/home/me")
+                .value()
+                .orElseThrow();
+        WorkspacePath gone = WorkspacePath.of(new ShellEnvironment.Wsl("Z"), "/home/me")
+                .value()
+                .orElseThrow();
+
+        // then
+        assertThat(panes.choices(home)).isEqualTo(new OpenChoices(Optional.of(WSL_A), List.of()));
+        assertThat(panes.choices(gone)).isEqualTo(new OpenChoices(Optional.empty(), List.of()));
     }
 }

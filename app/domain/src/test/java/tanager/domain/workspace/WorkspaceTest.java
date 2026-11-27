@@ -25,7 +25,7 @@ class WorkspaceTest {
             WorkspacePath.of(new ShellEnvironment.Windows(), "C:\\a").value().orElseThrow();
 
     private static Workspace opened(Workspace workspace, Orientation orientation) {
-        return workspace.openBeside(orientation, PWSH, A).workspace();
+        return workspace.openBeside(orientation, PWSH, Optional.of(A)).workspace();
     }
 
     @Test
@@ -44,7 +44,7 @@ class WorkspaceTest {
     @DisplayName("오른쪽에 열면 포커스 창을 ROW 로 나누고 새 창 p2 에 포커스, 명세는 (프로파일, 경로)다")
     void openRight() {
         // when
-        Workspace.Opened opened = Workspace.initial().openBeside(Orientation.ROW, PWSH, A);
+        Workspace.Opened opened = Workspace.initial().openBeside(Orientation.ROW, PWSH, Optional.of(A));
 
         // then
         assertThat(opened.pane()).isEqualTo(P2);
@@ -63,7 +63,7 @@ class WorkspaceTest {
         Workspace closed = two.close(P2).value().orElseThrow();
 
         // when
-        Workspace.Opened again = closed.openBeside(Orientation.COLUMN, PWSH, A);
+        Workspace.Opened again = closed.openBeside(Orientation.COLUMN, PWSH, Optional.of(A));
 
         // then
         assertThat(again.pane()).isEqualTo(P3);
