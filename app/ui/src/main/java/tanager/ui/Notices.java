@@ -33,6 +33,7 @@ record Notices(List<String> messages) {
             case AppEvent.HistoryChanged changed -> Optional.empty();
             case AppEvent.SessionCwdChanged moved -> Optional.empty();
             case AppEvent.SessionsChanged sessions -> Optional.empty();
+            case AppEvent.EnvironmentsChanged environments -> Optional.empty();
         };
     }
 

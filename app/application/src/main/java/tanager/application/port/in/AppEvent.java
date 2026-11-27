@@ -1,6 +1,8 @@
 package tanager.application.port.in;
 
+import java.util.List;
 import java.util.Objects;
+import tanager.domain.history.ShellEnvironment;
 import tanager.domain.history.WorkHistory;
 import tanager.domain.history.WorkspacePath;
 import tanager.domain.session.LiveSessions;
@@ -35,6 +37,13 @@ public sealed interface AppEvent {
     record StoreNotice(String message) implements AppEvent {
         public StoreNotice {
             Objects.requireNonNull(message, "message");
+        }
+    }
+
+    /** 셸 탐지가 끝나 환경 순서(트리의 환경 노드 순서)가 정해졌다. 탐지 순서대로 한 번씩. */
+    record EnvironmentsChanged(List<ShellEnvironment> environments) implements AppEvent {
+        public EnvironmentsChanged {
+            environments = List.copyOf(environments);
         }
     }
 }

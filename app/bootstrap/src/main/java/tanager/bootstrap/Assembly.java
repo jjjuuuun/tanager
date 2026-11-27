@@ -11,6 +11,7 @@ import java.util.concurrent.TimeUnit;
 import tanager.adapter.persistence.JsonConfigRepository;
 import tanager.adapter.persistence.JsonStateRepository;
 import tanager.application.port.in.ListProfilesUseCase;
+import tanager.application.port.in.RecordEnvironmentsUseCase;
 import tanager.application.port.in.StartSessionUseCase;
 import tanager.application.port.out.HistoryStoreError;
 import tanager.application.port.out.Integration;
@@ -18,6 +19,7 @@ import tanager.application.port.out.LoadedHistory;
 import tanager.application.port.out.PlatformModule;
 import tanager.application.port.out.PtyLauncher;
 import tanager.application.service.DefaultProfileMemory;
+import tanager.application.service.EnvironmentRecorder;
 import tanager.application.service.HistorySaver;
 import tanager.application.service.IntegrationStatus;
 import tanager.application.service.ProfileCatalog;
@@ -75,13 +77,6 @@ final class Assembly {
      */
     static Assembly assemble(PlatformModule platform, PtyLauncher launcher) {
         ProfileCatalog catalog = new ProfileCatalog(platform);
-        Thread.ofVirtual().name("tanager-shell-detect").start(() -> {
-            try {
-                catalog.list();
-            } catch (RuntimeException e) {
-                LOG.log(System.Logger.Level.ERROR, "셸 탐지 실패", e);
-            }
-        });
         IntegrationStatus integration = new IntegrationStatus(platform);
         warmShellIntegration(integration);
         Path appData = platform.dirs().appData();
@@ -95,10 +90,22 @@ final class Assembly {
         // 불러오기 명령보다 먼저 구독해야 불러온 이력을 "저장할 것 없음"으로 안다
         HistorySaver saver = new HistorySaver(state, history, scheduler, io);
         loadHistory(history, state);
+        detectShells(catalog, new EnvironmentRecorder(state));
         VisitRecorder visits = new VisitRecorder(state, InstantSource.system());
         SessionStarter starter = new SessionStarter(
                 catalog, config, platform, integration, launcher, new DefaultProfileMemory(config), state, visits);
         return new Assembly(catalog, starter, state, stateExecutor, saver, scheduler, history);
+    }
+
+    // 탐지가 끝나면 그 순서를 트리의 환경 순서로 알린다(#83). 실패하면 트리는 이력의 환경을 이름순으로 놓는다
+    private static void detectShells(ProfileCatalog catalog, RecordEnvironmentsUseCase environments) {
+        Thread.ofVirtual().name("tanager-shell-detect").start(() -> {
+            try {
+                environments.profilesDetected(catalog.list());
+            } catch (RuntimeException e) {
+                LOG.log(System.Logger.Level.ERROR, "셸 탐지 실패", e);
+            }
+        });
     }
 
     ListProfilesUseCase profiles() {
