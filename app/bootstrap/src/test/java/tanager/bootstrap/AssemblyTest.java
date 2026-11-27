@@ -147,6 +147,20 @@ class AssemblyTest {
     }
 
     @Test
+    @DisplayName("셸 탐지가 끝나면 그 순서가 상태의 환경 순서가 된다(#83)")
+    void detectedShellsSetEnvironmentOrder() {
+        // given
+        FakePlatformModule platform = new FakePlatformModule(List.of(CMD)).withAppData(appData);
+
+        // when
+        Assembly assembly = assemble(platform, new ScriptedPtyLauncher());
+
+        // then
+        await().atMost(Duration.ofSeconds(2))
+                .until(() -> assembly.state().snapshot().environments().equals(List.of(CMD.env())));
+    }
+
+    @Test
     @DisplayName("조립하면 셸 통합 설치가 백그라운드에서 한 번 돈다")
     void assembleInstallsShellIntegrationOnce() {
         // given
