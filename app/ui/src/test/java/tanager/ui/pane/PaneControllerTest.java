@@ -535,6 +535,52 @@ class PaneControllerTest {
         return null;
     }
 
+    @Test
+    @DisplayName("셸이 경로를 알려도 터미널 위젯을 떼었다 붙이지 않는다 — 포커스가 사이드바 검색칸으로 넘어가지 않게(#143)")
+    void cwdReportKeepsWidgetAttached() {
+        // given
+        startAndConnect();
+        java.util.List<java.awt.Component> removed = new java.util.concurrent.CopyOnWriteArrayList<>();
+        onEdt(() -> {
+            controller.widget().getParent().addContainerListener(new java.awt.event.ContainerAdapter() {
+                @Override
+                public void componentRemoved(java.awt.event.ContainerEvent e) {
+                    removed.add(e.getChild());
+                }
+            });
+            return null;
+        });
+        WorkspacePath work = WorkspacePath.of(new ShellEnvironment.Windows(), "C:\\work")
+                .value()
+                .orElseThrow();
+
+        // when
+        onEdt(() -> {
+            controller.cwdReported(work);
+            controller.cwdReported(work);
+            return null;
+        });
+        drain();
+
+        // then
+        assertThat(removed).isEmpty();
+        assertThat(onEdt(() -> controller.widget().getParent())).isNotNull();
+    }
+
+    @Test
+    @DisplayName("셸이 끝나면 지금처럼 종료 띠가 붙는다 — 본문이 바뀔 때는 다시 놓는다(#143)")
+    void exitStillShowsBand() {
+        // given
+        startAndConnect();
+
+        // when
+        sessions.streams.getFirst().exit(3);
+        drain();
+
+        // then
+        assertThat(onEdt(() -> controller.notice().getParent())).isNotNull();
+    }
+
     private void startAndConnect() {
         onEdt(() -> {
             controller.start();
