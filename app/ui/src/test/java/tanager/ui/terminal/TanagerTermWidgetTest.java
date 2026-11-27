@@ -74,10 +74,11 @@ class TanagerTermWidgetTest {
         // then
         assertThat(adjusted.getForeground()).isNotEqualTo(TerminalColor.index(4));
         assertThat(adjusted.getBackground()).isEqualTo(TerminalColor.index(2));
-        assertThat(state.getCurrent())
-                .isEqualTo(new TextStyle(
-                        JediTermColors.current().foreground(),
-                        JediTermColors.current().background()));
+        // 기본 전경 · 배경은 그릴 때 지금 테마 색을 읽는 색이다(#185) — 값으로 비교한다
+        assertThat(state.getCurrent().getForeground().toColor())
+                .isEqualTo(JediTermColors.current().foreground().toColor());
+        assertThat(state.getCurrent().getBackground().toColor())
+                .isEqualTo(JediTermColors.current().background().toColor());
     }
 
     @Test

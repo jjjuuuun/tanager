@@ -84,7 +84,7 @@ import tanager.ui.sidebar.SidebarSessions;
 import tanager.ui.status.ResourceStatus;
 import tanager.ui.terminal.TerminalSettings;
 import tanager.ui.theme.ColorToken;
-import tanager.ui.theme.ThemeColors;
+import tanager.ui.theme.Themed;
 
 /**
  * 메인 창(시안 D): 제목 표시줄 안 탭 · 사이드바 · 분할한 터미널 창들(#89) · 상태줄. EDT 에서만 만진다.
@@ -286,7 +286,30 @@ final class MainWindow {
         if (!problems.isEmpty()) {
             notify(problems.stream().map(KeyProblemText::of).toList());
         }
+        // 글꼴 · 크기 · 줄 높이 · 스크롤백은 모든 창에 바로 쓴다(FR-CFG-02, #185). 터미널 설정이 그대로면 아무 일도 없다
+        settings.apply(config.terminal()).ifPresent(fallback -> notify(List.of(fallback.message())));
         resourceStatus.settingsChanged();
+    }
+
+    /**
+     * 테마를 바꿨다(#185). 창에 놓인 부품은 이미 다시 칠했고, 창마다 지금 화면 밖에 있는 부품을 정리한다. 셸 · 위젯은 그대로다. EDT 에서
+     * 부른다.
+     */
+    void themeChanged() {
+        for (PaneController pane : panes.values()) {
+            pane.themeChanged();
+        }
+    }
+
+    /** 창이 활성화될 때마다 {@code action} 을 부른다 — OS 테마를 다시 읽게 한다(ADR-0018). */
+    void whenActivated(Runnable action) {
+        Objects.requireNonNull(action, "action");
+        frame.addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowActivated(WindowEvent e) {
+                action.run();
+            }
+        });
     }
 
     /** 마지막 창을 닫았다 — 앱을 끝낸다(ADR-0011 · 0016). EDT 에서 부른다. */
@@ -635,10 +658,9 @@ final class MainWindow {
         JMenuBar bar = new JMenuBar();
         bar.setOpaque(false);
         bar.setBorder(new EmptyBorder(0, 0, 0, 0));
-        tab.setForeground(ThemeColors.get(ColorToken.TEXT));
+        Themed.foreground(tab, ColorToken.TEXT);
         tab.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createMatteBorder(2, 0, 0, 0, ThemeColors.get(ColorToken.ACCENT)),
-                new EmptyBorder(0, 14, 0, 14)));
+                Themed.line(2, 0, 0, 0, ColorToken.ACCENT), new EmptyBorder(0, 14, 0, 14)));
         tab.putClientProperty(FlatClientProperties.COMPONENT_TITLE_BAR_CAPTION, true);
         bar.add(tab);
         bar.add(Box.createHorizontalGlue());
@@ -651,7 +673,7 @@ final class MainWindow {
         settingsButton.setText(Msg.SETTINGS_OPEN.text());
         settingsButton.setToolTipText(
                 KeyHelp.withKey(keys.current(), Msg.SETTINGS_OPEN.text(), new KeyAction.OpenSettings()));
-        settingsButton.setForeground(ThemeColors.get(ColorToken.MUTED));
+        Themed.foreground(settingsButton, ColorToken.MUTED);
         settingsButton.setFocusable(false);
         settingsButton.setContentAreaFilled(false);
         settingsButton.setBorderPainted(false);
@@ -662,7 +684,7 @@ final class MainWindow {
 
     private JPanel paneArea() {
         JPanel area = new JPanel(new BorderLayout());
-        area.setBackground(ThemeColors.get(ColorToken.WINDOW));
+        Themed.background(area, ColorToken.WINDOW);
         area.setBorder(new EmptyBorder(GAP, GAP, GAP, GAP));
         area.add(layout.component(), BorderLayout.CENTER);
         return area;
@@ -671,14 +693,13 @@ final class MainWindow {
     // 오른쪽은 알림 · 리소스 항목 순(#188). 왼쪽 글자는 가운데 칸에 두어 좁으면 말줄임으로 줄어든다
     private JPanel statusBar() {
         JPanel bar = statusBar;
-        bar.setBackground(ThemeColors.get(ColorToken.HEADER));
+        Themed.background(bar, ColorToken.HEADER);
         bar.setPreferredSize(new Dimension(0, STATUS_HEIGHT));
         bar.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createMatteBorder(1, 0, 0, 0, ThemeColors.get(ColorToken.BORDER)),
-                new EmptyBorder(0, 10, 0, 10)));
-        statusLeft.setForeground(ThemeColors.get(ColorToken.MUTED));
+                Themed.line(1, 0, 0, 0, ColorToken.BORDER), new EmptyBorder(0, 10, 0, 10)));
+        Themed.foreground(statusLeft, ColorToken.MUTED);
         statusLeft.setToolTipText(keysTooltip(keys.current()));
-        statusRight.setForeground(ThemeColors.get(ColorToken.WARN));
+        Themed.foreground(statusRight, ColorToken.WARN);
         JPanel right = new JPanel();
         right.setLayout(new BoxLayout(right, BoxLayout.X_AXIS));
         right.setOpaque(false);

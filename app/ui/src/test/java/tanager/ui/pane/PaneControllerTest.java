@@ -2,6 +2,7 @@ package tanager.ui.pane;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.awt.Color;
 import java.awt.Component;
 import java.awt.event.InputEvent;
 import java.awt.event.MouseEvent;
@@ -47,8 +48,11 @@ import tanager.ui.keys.LayoutAction;
 import tanager.ui.motion.Motion;
 import tanager.ui.terminal.TanagerTermWidget;
 import tanager.ui.terminal.TerminalSettings;
+import tanager.ui.theme.ColorToken;
 import tanager.ui.theme.JediTermColors;
 import tanager.ui.theme.SoftDarkLaf;
+import tanager.ui.theme.SoftLightLaf;
+import tanager.ui.theme.ThemeColors;
 
 /** 창 컨트롤러의 효과 실행. Swing 은 EDT 에서, 두 executor 는 테스트가 직접 비운다. */
 class PaneControllerTest {
@@ -123,6 +127,33 @@ class PaneControllerTest {
         // then
         assertThat(sessions.restarts).containsExactly(exited);
         assertThat(onEdt(controller::state)).isInstanceOf(PaneState.Running.class);
+    }
+
+    @Test
+    @DisplayName("테마를 바꾸면 창 머리줄 글자와 지금 본문에 없는 종료 띠도 새 테마 토큰 색이다 — 위젯 · 셸은 그대로(#185)")
+    void themeChangeRecolorsWithoutRecreating() {
+        // given
+        startAndConnect();
+        TanagerTermWidget widget = onEdt(controller::widget);
+        Color darkMuted = onEdt(() -> ThemeColors.get(ColorToken.MUTED));
+
+        // when
+        onEdt(() -> {
+            UIManager.setLookAndFeel(new SoftLightLaf());
+            controller.themeChanged();
+            return null;
+        });
+
+        // then
+        Color lightMuted = onEdt(() -> ThemeColors.get(ColorToken.MUTED));
+        assertThat(lightMuted).isNotEqualTo(darkMuted);
+        assertThat(onEdt(() -> controller.header().getForeground())).isEqualTo(lightMuted);
+        assertThat(onEdt(() -> controller.notice().getParent())).isNull();
+        assertThat(onEdt(() -> controller.notice().getBackground()))
+                .isEqualTo(onEdt(() -> ThemeColors.get(ColorToken.HEADER)));
+        assertThat(onEdt(controller::widget)).isSameAs(widget);
+        assertThat(onEdt(controller::state)).isInstanceOf(PaneState.Running.class);
+        assertThat(sessions.streams.getFirst().closeCalls()).isZero();
     }
 
     @Test

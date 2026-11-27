@@ -11,7 +11,7 @@ import tanager.domain.history.HistoryError;
 import tanager.ui.i18n.Msg;
 import tanager.ui.i18n.NoticeText;
 import tanager.ui.theme.ColorToken;
-import tanager.ui.theme.ThemeColors;
+import tanager.ui.theme.Themed;
 
 /**
  * 별칭 입력칸(#86). 확인할 때 도메인 규칙({@link Alias#of})으로 검사한다. 틀리면 칸 아래에 이유를 보이고 결과를 주지 않는다 — 대화
@@ -25,10 +25,10 @@ final class AliasForm extends JPanel {
         super(new BorderLayout(0, 6));
         setOpaque(false);
         field.setText(current.orElse(""));
-        error.setForeground(ThemeColors.get(ColorToken.BAD));
+        Themed.foreground(error, ColorToken.BAD);
         error.setVisible(false);
         JLabel hint = new JLabel(Msg.ALIAS_HINT.text());
-        hint.setForeground(ThemeColors.get(ColorToken.MUTED));
+        Themed.foreground(hint, ColorToken.MUTED);
         setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
         add(hint, BorderLayout.NORTH);
         add(field, BorderLayout.CENTER);

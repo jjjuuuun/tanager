@@ -40,7 +40,11 @@ import tanager.domain.history.WorkHistory;
 import tanager.domain.history.WorkspacePath;
 import tanager.domain.shared.PaneId;
 import tanager.domain.shared.Result;
+import tanager.ui.theme.ColorToken;
 import tanager.ui.theme.SoftDarkLaf;
+import tanager.ui.theme.SoftLightLaf;
+import tanager.ui.theme.ThemeColors;
+import tanager.ui.theme.Themed;
 
 /** 사이드바 패널(Swing). 다시 투영해도 펼침 · 선택이 남고, 몰린 요청은 한 번만 다시 그린다(#84). */
 class SidebarPanelTest {
@@ -145,6 +149,32 @@ class SidebarPanelTest {
             }
             return null;
         });
+    }
+
+    @Test
+    @DisplayName("테마를 바꾸면 사이드바 · 트리 배경이 새 테마의 sidebar 토큰이다 — 패널은 그대로(#185)")
+    void themeChangeRecolorsSidebar() {
+        // given
+        SidebarPanel panel = onEdt(() -> new SidebarPanel(query, manage, ui, interactions));
+        java.awt.Color dark = onEdt(() -> ThemeColors.get(ColorToken.SIDEBAR));
+
+        // when
+        onEdt(() -> {
+            try {
+                UIManager.setLookAndFeel(new SoftLightLaf());
+            } catch (Exception e) {
+                throw new IllegalStateException(e);
+            }
+            SwingUtilities.updateComponentTreeUI(panel.component());
+            Themed.recolor(panel.component());
+            return null;
+        });
+
+        // then
+        java.awt.Color light = onEdt(() -> ThemeColors.get(ColorToken.SIDEBAR));
+        assertThat(light).isNotEqualTo(dark);
+        assertThat(onEdt(() -> panel.component().getBackground())).isEqualTo(light);
+        assertThat(onEdt(() -> panel.tree().getBackground())).isEqualTo(light);
     }
 
     @Test
