@@ -96,6 +96,45 @@ class PaneControllerTest {
     }
 
     @Test
+    @DisplayName("사이드바의 재시작은 끝난 창에서 Enter 와 같이 끝난 세션으로 restart 를 부른다(#92)")
+    void restartFromSidebarRestartsExitedSession() {
+        // given
+        startAndConnect();
+        sessions.streams.getFirst().exit(3);
+        drain();
+        TerminalSession exited = ((PaneState.Exited) onEdt(controller::state)).session();
+
+        // when
+        onEdt(() -> {
+            controller.restart();
+            return null;
+        });
+        drain();
+
+        // then
+        assertThat(sessions.restarts).containsExactly(exited);
+        assertThat(onEdt(controller::state)).isInstanceOf(PaneState.Running.class);
+    }
+
+    @Test
+    @DisplayName("실행 중인 창의 재시작은 아무것도 하지 않는다(#92 — 강제 재시작은 M4 에서 판단)")
+    void restartWhileRunningDoesNothing() {
+        // given
+        startAndConnect();
+
+        // when
+        onEdt(() -> {
+            controller.restart();
+            return null;
+        });
+        drain();
+
+        // then
+        assertThat(sessions.restarts).isEmpty();
+        assertThat(onEdt(controller::state)).isInstanceOf(PaneState.Running.class);
+    }
+
+    @Test
     @DisplayName("셸이 경로를 알리면 머리줄에 그 경로가, 툴팁에 전체 경로가 보인다(#82)")
     void headerShowsReportedCwd() {
         // given

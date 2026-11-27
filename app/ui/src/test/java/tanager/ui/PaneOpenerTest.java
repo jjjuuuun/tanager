@@ -96,6 +96,21 @@ class PaneOpenerTest {
     }
 
     @Test
+    @DisplayName("세션의 같은 경로에 새 창은 고른 자리로 그 창 기준으로 열고, 세션이 없으면 알린다(#92)")
+    void openSameUsesChosenPlacement() {
+        // given
+        useCase.next = Result.err(new OpenError.UnknownPane(new PaneId("p9")));
+
+        // when
+        opener.openSame(new PaneId("p9"), OpenPlacement.DOWN);
+
+        // then
+        assertThat(useCase.calls).containsExactly("openSame p9 DOWN");
+        assertThat(notices).containsExactly(List.of("창 p9 에 세션이 없다"));
+        assertThat(threads).containsExactly("background", "ui");
+    }
+
+    @Test
     @DisplayName("유스케이스가 예외를 던지면 알리지 않고 끝난다")
     void openExceptionIsSwallowed() {
         // given
