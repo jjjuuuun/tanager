@@ -53,6 +53,7 @@ import tanager.ui.layout.LayoutView;
 import tanager.ui.layout.PaneDiff;
 import tanager.ui.layout.PaneMenu;
 import tanager.ui.layout.PaneMinimum;
+import tanager.ui.motion.Motion;
 import tanager.ui.pane.PaneController;
 import tanager.ui.sidebar.SidebarPanel;
 import tanager.ui.sidebar.SidebarSessions;
@@ -94,12 +95,14 @@ final class MainWindow {
     private Workspace workspace = Workspace.initial();
     private final LayoutView layout;
     private final SidebarPanel sidebar;
+    private final SidebarSlot sidebarSlot;
     private final KeyEventDispatcher shortcuts = this::shortcut;
     private final Runnable onShutdown;
     private final StartSessionUseCase sessions;
     private final ListProfilesUseCase profiles;
     private final PaneCommands commands;
     private final TerminalSettings settings;
+    private final Motion motion;
     private final Executor ui = SwingUtilities::invokeLater;
     private final Executor background;
     private boolean closing;
@@ -115,12 +118,14 @@ final class MainWindow {
             OpenPaneUseCase open,
             Runnable onShutdown,
             TerminalSettings settings,
+            Motion motion,
             Executor background) {
         this.onShutdown = Objects.requireNonNull(onShutdown, "onShutdown");
         this.sessions = Objects.requireNonNull(sessions, "sessions");
         this.profiles = Objects.requireNonNull(profiles, "profiles");
         this.commands = Objects.requireNonNull(commands, "commands");
         this.settings = Objects.requireNonNull(settings, "settings");
+        this.motion = Objects.requireNonNull(motion, "motion");
         this.background = Objects.requireNonNull(background, "background");
         for (PaneId id : workspace.tab().root().panes()) {
             panes.put(id, newPane(id));
@@ -130,7 +135,8 @@ final class MainWindow {
         sidebar.onLeave(() -> focused().focus());
         sidebar.opener(new PaneOpener(Objects.requireNonNull(open, "open"), background, ui, this::notify));
         sidebar.sessions(new Sessions());
-        frame.getContentPane().add(sidebar.component(), BorderLayout.WEST);
+        this.sidebarSlot = new SidebarSlot(sidebar.component(), motion);
+        frame.getContentPane().add(sidebarSlot.component(), BorderLayout.WEST);
         // 터미널(JediTerm)이 키를 먼저 먹지 않게 포커스와 상관없이 가로챈다
         KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher(shortcuts);
         frame.setJMenuBar(titleBarTabs());
@@ -305,17 +311,15 @@ final class MainWindow {
         });
     }
 
-    // Ctrl+Shift+E: 사이드바 보이기 · 숨기기, Ctrl+Shift+F: 사이드바 검색(SDD §8.2). 전환 효과는 M4(FR-UI-04)
+    // Ctrl+Shift+E: 사이드바 보이기 · 숨기기(밀어 넣고 빼는 전환, FR-UI-04), Ctrl+Shift+F: 사이드바 검색(SDD §8.2)
     private boolean sidebarShortcut(KeyEvent event) {
         boolean ours = event.isControlDown() && event.isShiftDown() && !event.isAltDown();
         if (ours && event.getKeyCode() == KeyEvent.VK_E) {
-            sidebar.component().setVisible(!sidebar.component().isVisible());
-            frame.getContentPane().revalidate();
+            sidebarSlot.toggle();
             return true;
         }
         if (ours && event.getKeyCode() == KeyEvent.VK_F) {
-            sidebar.component().setVisible(true);
-            frame.getContentPane().revalidate();
+            sidebarSlot.show();
             sidebar.focusSearch();
             return true;
         }
@@ -342,7 +346,7 @@ final class MainWindow {
     }
 
     private PaneController newPane(PaneId id) {
-        return new PaneController(id, ui, background, sessions, profiles, settings, new Host(id));
+        return new PaneController(id, ui, background, sessions, profiles, settings, motion, new Host(id));
     }
 
     // 20열 × 5행. 칸 크기는 터미널 글꼴로, 테두리 · 머리줄 · 스크롤바 몫은 포커스 창에서 잰다(창마다 같은 꾸밈이다)

@@ -16,6 +16,7 @@ import tanager.application.port.in.ManageHistoryUseCase;
 import tanager.application.port.in.OpenPaneUseCase;
 import tanager.application.port.in.QueryHistoryTreeUseCase;
 import tanager.application.port.in.StartSessionUseCase;
+import tanager.application.port.out.SystemAppearance;
 import tanager.domain.history.WorkspacePath;
 import tanager.domain.shared.PaneId;
 import tanager.domain.workspace.Workspace;
@@ -23,6 +24,7 @@ import tanager.ui.font.TerminalFontSet;
 import tanager.ui.font.TerminalFonts;
 import tanager.ui.i18n.Msg;
 import tanager.ui.i18n.NoticeText;
+import tanager.ui.motion.Motion;
 import tanager.ui.terminal.TerminalSettings;
 import tanager.ui.theme.JediTermColors;
 import tanager.ui.theme.SoftDarkLaf;
@@ -39,6 +41,7 @@ public final class SwingUi {
      * EDT 에서 메인 창을 띄우고 기억한 셸 하나를 연다(없으면 셸 선택 화면). {@code events} 의 저장소 알림은 상태줄에 보인다.
      *
      * @param panes 창 닫기 · 포커스 · 분할 · 크기 · 줌 · 교환(키보드 · 마우스, #148)
+     * @param appearance OS 외관 설정. 애니메이션을 껐으면 전환 효과 없이 바로 바뀐다(FR-UI-04)
      * @param onShutdown 앱을 끝낼 때 셸을 닫은 뒤 EDT 밖에서 한 번 부른다(미저장 이력 저장 등, ADR-0011). 끝나면 프로세스를 끝낸다
      */
     public static void showMainWindow(
@@ -49,6 +52,7 @@ public final class SwingUi {
             PaneCommands panes,
             OpenPaneUseCase open,
             AppEvents events,
+            SystemAppearance appearance,
             Runnable onShutdown) {
         // 창을 만들기 전에 구독한다 — 이력 불러오기 알림이 창보다 먼저 올 수 있다. 창은 앱과 수명이 같아 해제하지 않는다
         NoticeInbox inbox = new NoticeInbox();
@@ -86,10 +90,20 @@ public final class SwingUi {
                 return;
             }
             TerminalSettings settings = new TerminalSettings(fonts, JediTermColors.current());
+            Motion motion = Motion.fromTheme(appearance.animations());
             Executor background =
                     task -> Thread.ofVirtual().name("tanager-session-start").start(task);
             MainWindow window = new MainWindow(
-                    sessions, profiles, historyTree, historyManager, panes, open, onShutdown, settings, background);
+                    sessions,
+                    profiles,
+                    historyTree,
+                    historyManager,
+                    panes,
+                    open,
+                    onShutdown,
+                    settings,
+                    motion,
+                    background);
             shown.set(window);
             window.show(warnings);
             inbox.attach(window::notify);

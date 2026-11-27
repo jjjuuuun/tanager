@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.awt.Component;
 import java.awt.event.InputEvent;
 import java.awt.event.MouseEvent;
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import java.util.Queue;
@@ -43,6 +44,7 @@ import tanager.domain.shared.Result;
 import tanager.domain.workspace.PaneSpec;
 import tanager.ui.font.TerminalFontSet;
 import tanager.ui.keys.LayoutAction;
+import tanager.ui.motion.Motion;
 import tanager.ui.terminal.TanagerTermWidget;
 import tanager.ui.terminal.TerminalSettings;
 import tanager.ui.theme.JediTermColors;
@@ -50,6 +52,8 @@ import tanager.ui.theme.SoftDarkLaf;
 
 /** 창 컨트롤러의 효과 실행. Swing 은 EDT 에서, 두 executor 는 테스트가 직접 비운다. */
 class PaneControllerTest {
+    // 테두리 전환은 AnimatorTest 가 본다 — 여기서는 Swing 타이머 없이 바로 바뀌게 한다
+    private static final Motion INSTANT = new Motion(Duration.ZERO, false);
     private final QueueExecutor ui = new QueueExecutor();
     private final QueueExecutor background = new QueueExecutor();
     private final FakeSessions sessions = new FakeSessions();
@@ -64,7 +68,8 @@ class PaneControllerTest {
             previous = UIManager.getLookAndFeel();
             UIManager.setLookAndFeel(new SoftDarkLaf());
             TerminalSettings settings = new TerminalSettings(TerminalFontSet.fallback(), JediTermColors.current());
-            controller = new PaneController(new PaneId("p1"), ui, background, sessions, profiles, settings, host);
+            controller =
+                    new PaneController(new PaneId("p1"), ui, background, sessions, profiles, settings, INSTANT, host);
             return null;
         });
     }
