@@ -25,6 +25,11 @@ public final class FakeDirectoryProbe implements DirectoryProbe {
         return answer(Optional.of(false), paths);
     }
 
+    /** 이 경로들은 있다(true) — 앞서 정한 답을 되돌린다. */
+    public synchronized FakeDirectoryProbe exists(WorkspacePath... paths) {
+        return answer(Optional.of(true), paths);
+    }
+
     /** 이 경로들은 모른다(empty — 시간 초과 · 접근 불가 흉내). */
     public synchronized FakeDirectoryProbe unknown(WorkspacePath... paths) {
         return answer(Optional.empty(), paths);

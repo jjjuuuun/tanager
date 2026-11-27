@@ -14,6 +14,7 @@ import tanager.application.platform.PlatformSelectionError;
 import tanager.application.port.in.AppEvent;
 import tanager.application.port.in.AppEvents;
 import tanager.application.port.in.ApplyThemeUseCase;
+import tanager.application.port.in.CheckMissingPathsUseCase;
 import tanager.application.port.in.ListProfilesUseCase;
 import tanager.application.port.in.ManageHistoryUseCase;
 import tanager.application.port.in.OpenPaneUseCase;
@@ -49,6 +50,7 @@ public final class SwingUi {
      * @param panes 창 닫기 · 포커스 · 분할 · 크기 · 줌 · 교환(키보드 · 마우스, #148)
      * @param settings 지금 설정과 설정 파일 — "설정 열기"(Ctrl+,)가 연다(FR-CFG-03). 바뀐 설정은 {@code events} 의 SettingsChanged 로 온다
      * @param resources 상태줄 오른쪽의 리소스 표시(#187 · #188). 창을 띄울 때 구독하고 끝낼 때 해제한다
+     * @param missingPaths 창이 활성화되면 사라진 이력 경로를 다시 확인한다(FR-HIS-08, #186)
      * @param appearance 지금 쓸 테마 · 움직임(설정 + OS, #184). 시작 테마로 깔고, 바뀌면 화면 · 모든 터미널에 바로 쓴다(#185). 창이 활성화될 때
      *     OS 값을 다시 읽게 한다. 움직임을 끄면 전환 효과 없이 바로 바뀐다(FR-UI-04)
      * @param initial 처음 그릴 작업 공간 — 시작 때 복원한 탭 · 분할 · 창별 명세 · 포커스(#179). 창마다 명세대로 셸을 띄운다
@@ -64,6 +66,7 @@ public final class SwingUi {
             SettingsUseCase settings,
             AppEvents events,
             WatchResourcesUseCase resources,
+            CheckMissingPathsUseCase missingPaths,
             ApplyThemeUseCase appearance,
             Workspace initial,
             Runnable onShutdown) {
@@ -94,7 +97,8 @@ public final class SwingUi {
             if (event instanceof AppEvent.HistoryChanged
                     || event instanceof AppEvent.SessionsChanged
                     || event instanceof AppEvent.SessionCwdChanged
-                    || event instanceof AppEvent.EnvironmentsChanged) {
+                    || event instanceof AppEvent.EnvironmentsChanged
+                    || event instanceof AppEvent.MissingPathsChanged) {
                 Optional.ofNullable(shown.get()).ifPresent(MainWindow::historyChanged);
             }
         });
@@ -123,6 +127,7 @@ public final class SwingUi {
                     open,
                     settings,
                     resources,
+                    missingPaths,
                     onShutdown,
                     terminal,
                     motion,

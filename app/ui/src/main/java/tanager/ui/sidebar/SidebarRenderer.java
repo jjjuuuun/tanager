@@ -38,12 +38,12 @@ final class SidebarRenderer extends DefaultTreeCellRenderer {
         return this;
     }
 
-    // 검색어에 맞은 노드는 강조색(#85)
+    // 검색어에 맞은 노드는 강조색(#85), 숨긴 · 사라진 폴더는 흐리게(#86 · #186)
     private static ColorToken colorOf(SidebarItem item) {
         if (item.matched()) {
             return ColorToken.ACCENT;
         }
-        if (item.hidden()) {
+        if (item.hidden() || item.missing()) {
             return ColorToken.MUTED;
         }
         return item.kind() == SidebarItem.Kind.ENVIRONMENT || item.kind() == SidebarItem.Kind.PINNED_SECTION

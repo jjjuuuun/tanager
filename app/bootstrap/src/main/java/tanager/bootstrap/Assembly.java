@@ -14,6 +14,7 @@ import tanager.adapter.persistence.JsonConfigRepository;
 import tanager.adapter.persistence.JsonStateRepository;
 import tanager.adapter.persistence.WatchServiceConfigWatch;
 import tanager.application.port.in.ApplyThemeUseCase;
+import tanager.application.port.in.CheckMissingPathsUseCase;
 import tanager.application.port.in.ListProfilesUseCase;
 import tanager.application.port.in.ManageHistoryUseCase;
 import tanager.application.port.in.QueryHistoryTreeUseCase;
@@ -38,6 +39,7 @@ import tanager.application.service.HistoryManager;
 import tanager.application.service.HistorySaver;
 import tanager.application.service.HistoryTreeQuery;
 import tanager.application.service.IntegrationStatus;
+import tanager.application.service.MissingPathScanner;
 import tanager.application.service.PaneManager;
 import tanager.application.service.ProfileCatalog;
 import tanager.application.service.ResourceWatcher;
@@ -85,6 +87,7 @@ final class Assembly {
     private final ResourceWatcher resources;
     private final ExecutorScheduler monitorScheduler;
     private final AppearanceWatcher appearance;
+    private final MissingPathScanner missingPaths;
     private volatile Subscription watchingSettings = () -> {};
 
     private Assembly(
@@ -102,7 +105,8 @@ final class Assembly {
             WatchServiceConfigWatch configWatch,
             ResourceWatcher resources,
             ExecutorScheduler monitorScheduler,
-            AppearanceWatcher appearance) {
+            AppearanceWatcher appearance,
+            MissingPathScanner missingPaths) {
         this.profiles = profiles;
         this.sessions = sessions;
         this.state = state;
@@ -118,6 +122,7 @@ final class Assembly {
         this.resources = resources;
         this.monitorScheduler = monitorScheduler;
         this.appearance = appearance;
+        this.missingPaths = missingPaths;
     }
 
     /**
@@ -159,6 +164,12 @@ final class Assembly {
                 scheduler,
                 task -> Thread.ofVirtual().name("tanager-workspace-save").start(task),
                 stored.snapshot());
+        // 불러온 이력의 HistoryChanged 로 시작 뒤 한 번 확인한다 — 불러오기보다 먼저 구독한다(#186)
+        MissingPathScanner missingPaths = new MissingPathScanner(
+                state,
+                platform.directories(),
+                task -> Thread.ofVirtual().name("tanager-path-check").start(task),
+                InstantSource.system());
         detectShells(catalog, new EnvironmentRecorder(state));
         VisitRecorder visits = new VisitRecorder(state, InstantSource.system());
         SessionStarter starter = new SessionStarter(
@@ -197,7 +208,8 @@ final class Assembly {
                 new WatchServiceConfigWatch(configFile),
                 resources,
                 monitorScheduler,
-                appearance);
+                appearance,
+                missingPaths);
     }
 
     // 상태를 만들기 전에 시작한다 — state.json 을 기다리는 동안에도 탐지가 돈다(탐지는 한 번뿐이고 뒤의 호출은 그 결과를 기다린다)
@@ -270,6 +282,11 @@ final class Assembly {
     /** OS 외관을 부른 스레드에서 한 번 읽는다(Windows: reg.exe). 창을 띄우기 전에 EDT 가 아닌 곳에서 부른다. */
     ResolvedAppearance readAppearance() {
         return appearance.readNow();
+    }
+
+    /** 사라진 이력 경로 확인 — 창 활성화 때 다시 확인한다(#186). */
+    CheckMissingPathsUseCase missingPaths() {
+        return missingPaths;
     }
 
     /** 창 열기 · 닫기 · 포커스(#88 · #89). */

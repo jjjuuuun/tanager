@@ -43,6 +43,7 @@ import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.SwingUtilities;
 import javax.swing.border.EmptyBorder;
+import tanager.application.port.in.CheckMissingPathsUseCase;
 import tanager.application.port.in.ListProfilesUseCase;
 import tanager.application.port.in.ManageHistoryUseCase;
 import tanager.application.port.in.OpenPaneUseCase;
@@ -153,6 +154,7 @@ final class MainWindow {
             OpenPaneUseCase open,
             SettingsUseCase settingsFile,
             WatchResourcesUseCase resources,
+            CheckMissingPathsUseCase missingPaths,
             Runnable onShutdown,
             TerminalSettings settings,
             Motion motion,
@@ -161,6 +163,7 @@ final class MainWindow {
         this.workspace = Objects.requireNonNull(initial, "initial");
         this.onShutdown = Objects.requireNonNull(onShutdown, "onShutdown");
         this.settingsFile = Objects.requireNonNull(settingsFile, "settingsFile");
+        Objects.requireNonNull(missingPaths, "missingPaths");
         this.sessions = Objects.requireNonNull(sessions, "sessions");
         this.profiles = Objects.requireNonNull(profiles, "profiles");
         this.commands = Objects.requireNonNull(commands, "commands");
@@ -199,6 +202,12 @@ final class MainWindow {
             @Override
             public void windowClosing(WindowEvent e) {
                 closeRequested();
+            }
+
+            // 다른 창에서 폴더를 만들거나 지우고 돌아왔을 수 있다 — 오래된 확인만 백그라운드로 다시 한다(#186)
+            @Override
+            public void windowActivated(WindowEvent e) {
+                missingPaths.windowActivated();
             }
         });
         frame.setSize(WIDTH, HEIGHT);

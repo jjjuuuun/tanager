@@ -759,4 +759,31 @@ class SidebarPanelTest {
         // then
         assertThat(manage.calls).containsExactly("forget /home/me/b");
     }
+
+    @Test
+    @DisplayName("사라진 경로의 폴더는 흐리게 표시하고 툴팁으로 알린다 — 열기 메뉴는 그대로다(#186)")
+    void missingFolderIsMuted() {
+        // given
+        WorkHistory h = history("/home/me/a", "/home/me/b");
+        current.set(DirectoryTree.project(
+                h, List.of(), new TreeQuery("", false, List.of(UBUNTU)), java.util.Set.of(wsl("/home/me/a"))));
+        SidebarPanel panel = onEdt(() -> {
+            SidebarPanel created = new SidebarPanel(query, manage, ui, interactions);
+            created.refresh();
+            for (int row = 0; row < created.tree().getRowCount(); row++) {
+                created.tree().expandRow(row);
+            }
+            return created;
+        });
+
+        // when
+        SidebarItem gone = onEdt(() -> item(panel.tree(), "a"));
+        SidebarItem here = onEdt(() -> item(panel.tree(), "b"));
+
+        // then
+        assertThat(gone.missing()).isTrue();
+        assertThat(gone.tooltip()).hasValueSatisfying(t -> assertThat(t).endsWith("이 경로가 더 이상 없다"));
+        assertThat(gone.target()).containsInstanceOf(MenuTarget.Folder.class);
+        assertThat(here.missing()).isFalse();
+    }
 }

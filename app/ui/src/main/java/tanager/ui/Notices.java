@@ -34,6 +34,7 @@ record Notices(List<String> messages) {
             case AppEvent.SettingsNotice(var problem) -> Optional.of(NoticeText.DEFAULT.of(problem));
             case AppEvent.SettingsChanged changed -> Optional.empty();
             case AppEvent.HistoryChanged changed -> Optional.empty();
+            case AppEvent.MissingPathsChanged missing -> Optional.empty();
             case AppEvent.SessionCwdChanged moved -> Optional.empty();
             case AppEvent.SessionsChanged sessions -> Optional.empty();
             case AppEvent.EnvironmentsChanged environments -> Optional.empty();

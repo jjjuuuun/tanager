@@ -42,6 +42,12 @@ final class SidebarText {
                 .orElse(path.path());
     }
 
+    /** {@link #folderTooltip(WorkspacePath, Optional, ZoneId)} 에, 사라진 경로면 " · 이 경로가 더 이상 없다"를 붙인다(#186). */
+    static String folderTooltip(WorkspacePath path, Optional<VisitedDirectory> visit, ZoneId zone, boolean missing) {
+        String tooltip = folderTooltip(path, visit, zone);
+        return missing ? Msg.SIDEBAR_FOLDER_MISSING.text(tooltip) : tooltip;
+    }
+
     /** 별칭(보조 글자). */
     static Optional<String> secondary(Optional<Alias> alias) {
         return alias.map(Alias::value);

@@ -71,6 +71,15 @@ class SidebarTextTest {
     }
 
     @Test
+    @DisplayName("사라진 경로의 툴팁은 끝에 '이 경로가 더 이상 없다' 를 붙인다(#186)")
+    void missingFolderTooltip() {
+        assertThat(SidebarText.folderTooltip(wsl("/home/old"), Optional.empty(), SEOUL, true))
+                .isEqualTo("/home/old · 이 경로가 더 이상 없다");
+        assertThat(SidebarText.folderTooltip(wsl("/home/old"), Optional.empty(), SEOUL, false))
+                .isEqualTo("/home/old");
+    }
+
+    @Test
     @DisplayName("별칭은 보조 글자로 쓴다")
     void aliasIsSecondary() {
         assertThat(SidebarText.secondary(Optional.of(new Alias("작업")))).contains("작업");

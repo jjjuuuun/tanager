@@ -16,8 +16,12 @@ import tanager.domain.shared.Result;
  * 작업 경로 이력 애그리거트. 키는 {@link WorkspacePath}(환경별 비교 규칙)이고 경로마다 항목 하나다. 모든 연산은 새 {@code
  * WorkHistory} 를 돌려준다.
  *
- * <p>한도: {@link #recordVisit} · {@link #restore} 직후 항목 수 ≤ max(한도, 고정 수 + 1) — 고정 항목과 방금 방문한 항목은 한도를
- * 넘어도 지우지 않는다. {@link #pin} · {@link #hide} 는 지우지 않는다(고정을 풀자마자 항목이 사라지지 않게). 다음 방문 때 다시 맞춘다.
+ * <p>한도: {@link #recordVisit} · {@link #restore} 직후 항목 수 ≤ max(한도, 고정 수 + 1), {@link #withPolicy} 직후 ≤ max(한도, 고정
+ * 수) — 고정 항목과 방금 방문한 항목은 한도를 넘어도 지우지 않는다. {@link #pin} · {@link #hide} 는 지우지 않는다(고정을 풀자마자 항목이
+ * 사라지지 않게). 다음 방문 때 다시 맞춘다.
+ *
+ * <p>제외 규칙(FR-HIS-09): 제외 경로 방문은 기록하지 않는다. {@link #restore} · {@link #withPolicy} 는 제외 규칙에 맞는 고정 안 된 항목을
+ * 지운다. 고정 항목은 사용자가 고른 것이라 남긴다.
  */
 public record WorkHistory(Map<WorkspacePath, VisitedDirectory> entries, HistoryPolicy policy) {
 
@@ -46,16 +50,28 @@ public record WorkHistory(Map<WorkspacePath, VisitedDirectory> entries, HistoryP
         for (VisitedDirectory v : entries) {
             merged.merge(v.path(), v, VisitedDirectory::mergedWith);
         }
-        return new WorkHistory(evict(merged, policy, Optional.empty()), policy);
+        return new WorkHistory(evict(withoutExcluded(merged, policy), policy, Optional.empty()), policy);
     }
 
-    /** {@code path} 방문을 기록한다. 한도를 넘으면 고정 아닌 항목 중 가장 오래 전에 방문한 것부터 지운다(방금 방문한 것은 남김). */
+    /**
+     * {@code path} 방문을 기록한다. 한도를 넘으면 고정 아닌 항목 중 가장 오래 전에 방문한 것부터 지운다(방금 방문한 것은 남김). 제외 경로면
+     * 기록하지 않고 이 인스턴스를 그대로 돌려준다.
+     */
     public WorkHistory recordVisit(WorkspacePath path, Instant at) {
         Objects.requireNonNull(path, "path");
         Objects.requireNonNull(at, "at");
+        if (policy.excludes(path)) {
+            return this;
+        }
         Map<WorkspacePath, VisitedDirectory> next = new HashMap<>(entries);
         next.merge(path, VisitedDirectory.firstVisit(path, at), (old, fresh) -> old.visitedAgain(at));
         return new WorkHistory(evict(next, policy, Optional.of(path)), policy);
+    }
+
+    /** 정책을 바꾼다. 제외 규칙에 맞는 고정 안 된 항목을 지우고, 새 한도를 넘으면 고정 안 된 항목을 오래된 순으로 지운다. */
+    public WorkHistory withPolicy(HistoryPolicy next) {
+        Objects.requireNonNull(next, "next");
+        return new WorkHistory(evict(withoutExcluded(entries, next), next, Optional.empty()), next);
     }
 
     /** 고정하거나 푼다. 고정하면 숨김은 풀린다. */
@@ -115,6 +131,20 @@ public record WorkHistory(Map<WorkspacePath, VisitedDirectory> entries, HistoryP
                     VisitedDirectory::lastVisited)
             .thenComparing(VisitedDirectory::firstVisited)
             .thenComparing(v -> v.path().path());
+
+    private static Map<WorkspacePath, VisitedDirectory> withoutExcluded(
+            Map<WorkspacePath, VisitedDirectory> entries, HistoryPolicy policy) {
+        if (policy.exclude().isEmpty()) {
+            return entries;
+        }
+        Map<WorkspacePath, VisitedDirectory> out = new HashMap<>();
+        for (VisitedDirectory v : entries.values()) {
+            if (v.pinned() || !policy.excludes(v.path())) {
+                out.put(v.path(), v);
+            }
+        }
+        return out;
+    }
 
     // 후보를 한 번 정렬해 앞에서부터 지운다 — 큰 저장 파일을 불러와도 O(n log n).
     private static Map<WorkspacePath, VisitedDirectory> evict(

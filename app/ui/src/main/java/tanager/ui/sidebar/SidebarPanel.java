@@ -619,6 +619,7 @@ public final class SidebarPanel {
                             SidebarItem.Kind.PINNED_SECTION,
                             false,
                             Optional.empty(),
+                            false,
                             false));
             for (PinnedEntry pinned : next.pinned()) {
                 add(
@@ -628,11 +629,12 @@ public final class SidebarPanel {
                                 pinned.label(),
                                 Optional.empty(),
                                 Optional.of(SidebarText.folderTooltip(
-                                        pinned.entry().path(), Optional.of(pinned.entry()), zone)),
+                                        pinned.entry().path(), Optional.of(pinned.entry()), zone, pinned.missing())),
                                 SidebarItem.Kind.PINNED,
                                 pinned.matched(),
                                 Optional.of(new MenuTarget.Folder(pinned.entry().path(), Optional.of(pinned.entry()))),
-                                false));
+                                false,
+                                pinned.missing()));
             }
         }
         for (EnvironmentNode env : next.environments()) {
@@ -646,6 +648,7 @@ public final class SidebarPanel {
                             SidebarItem.Kind.ENVIRONMENT,
                             false,
                             Optional.of(new MenuTarget.Environment(env.env(), showHidden)),
+                            false,
                             false));
             addAll(envNode, env.children(), zone);
         }
@@ -661,11 +664,13 @@ public final class SidebarPanel {
                                     Nodes.keyOf(folder),
                                     folder.label(),
                                     SidebarText.secondary(folder.visit().flatMap(v -> v.alias())),
-                                    Optional.of(SidebarText.folderTooltip(folder.path(), folder.visit(), zone)),
+                                    Optional.of(SidebarText.folderTooltip(
+                                            folder.path(), folder.visit(), zone, folder.missing())),
                                     SidebarItem.Kind.FOLDER,
                                     folder.matched(),
                                     Optional.of(new MenuTarget.Folder(folder.path(), folder.visit())),
-                                    folder.visit().map(v -> v.hidden()).orElse(false)));
+                                    folder.visit().map(v -> v.hidden()).orElse(false),
+                                    folder.missing()));
                     addAll(node, folder.children(), zone);
                 }
                 case TreeNode.Session session ->
@@ -684,6 +689,7 @@ public final class SidebarPanel {
                                             session.session().pane(),
                                             session.session().cwd(),
                                             session.session().status() instanceof SessionStatus.Exited)),
+                                    false,
                                     false));
             }
         }

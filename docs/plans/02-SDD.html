@@ -268,7 +268,7 @@ public record WorkHistory(Map&lt;WorkspacePath, VisitedDirectory&gt; entries, Hi
 public final class DirectoryTree {
     public static HistoryTree project(WorkHistory h, List&lt;SessionLeaf&gt; sessions, TreeQuery q) { ... }
 }</code></pre>
-<p><b>불변식</b>: 같은 경로(환경별 비교)는 하나 · <code>visitCount ≥ 1</code> · <code>firstVisited ≤ lastVisited</code> · recordVisit · restore 직후 항목 수 ≤ max(한도, 고정 수 + 1)(고정 · 방금 방문한 항목은 남기고 오래된 순 제거, ADR-0012) · 제외 규칙에 맞는 경로는 기록되지 않음.</p>
+<p><b>불변식</b>: 같은 경로(환경별 비교)는 하나 · <code>visitCount ≥ 1</code> · <code>firstVisited ≤ lastVisited</code> · recordVisit · restore 직후 항목 수 ≤ max(한도, 고정 수 + 1)(고정 · 방금 방문한 항목은 남기고 오래된 순 제거, ADR-0012) · withPolicy 직후 항목 수 ≤ max(한도, 고정 수) · 제외 규칙에 맞는 경로는 기록되지 않음(고정 항목은 규칙에 맞아도 남김).</p>
 <p><b>트리 규칙</b>: 루트 = 고정됨, 환경(정렬: WSL 배포판 → Windows). 경로 세그먼트로 트리를 만들고, 방문하지 않은 중간 노드가 자식 하나뿐이면 압축. 실행 중 세션은 <code>cwd</code> 가 같은 폴더 노드의 자식으로 붙인다(방문 기록이 없는 경로라도 세션이 있으면 노드를 만든다).</p>
 
 <h3>5.3 layout</h3>

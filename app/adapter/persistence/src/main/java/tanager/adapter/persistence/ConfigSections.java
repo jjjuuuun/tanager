@@ -19,6 +19,7 @@ import tanager.application.port.out.MonitorConfig;
 import tanager.application.port.out.MonitorItem;
 import tanager.application.port.out.TerminalConfig;
 import tanager.application.port.out.ThemeMode;
+import tanager.domain.history.PathPattern;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.node.ArrayNode;
 import tools.jackson.databind.node.ObjectNode;
@@ -239,10 +240,22 @@ final class ConfigSections {
         return array(node, key).map(array -> {
             List<String> globs = new ArrayList<>();
             for (int i = 0; i < array.size(); i++) {
-                nonBlankString(array.get(i), key + "[" + i + "]").ifPresent(globs::add);
+                String element = key + "[" + i + "]";
+                nonBlankString(array.get(i), element)
+                        .filter(raw -> isGlob(raw, element))
+                        .ifPresent(globs::add);
             }
             return globs;
         });
+    }
+
+    // 해석은 domain 이 한다 — 여기서는 읽을 수 있는지만 보고 못 읽는 항목을 알린다(#186)
+    private boolean isGlob(String raw, String key) {
+        if (PathPattern.of(raw).isOk()) {
+            return true;
+        }
+        ignore(key, IgnoredReason.INVALID_GLOB);
+        return false;
     }
 
     private Optional<Set<MonitorItem>> items(JsonNode node) {
