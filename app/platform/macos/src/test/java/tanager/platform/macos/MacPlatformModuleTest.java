@@ -74,6 +74,20 @@ class MacPlatformModuleTest {
     }
 
     @Test
+    @DisplayName("directories() 는 M7 전까지 모름(empty)이다")
+    void directoriesAreUnknown() {
+        // given
+        var win = new tanager.domain.history.ShellEnvironment.Windows();
+        var path = tanager.domain.history.WorkspacePath.of(win, "C:\\x").value().orElseThrow();
+
+        // when
+        var answer = module.directories().isDirectory(path, java.time.Duration.ofSeconds(1));
+
+        // then
+        assertThat(answer).isEmpty();
+    }
+
+    @Test
     @DisplayName("appearance() 는 애니메이션을 켠다(M7 에서 OS 설정을 읽는다)")
     void appearanceEnablesAnimations() {
         // when / then

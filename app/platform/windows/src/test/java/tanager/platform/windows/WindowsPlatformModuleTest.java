@@ -16,10 +16,14 @@ import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 import tanager.application.platform.OperatingSystem;
 import tanager.application.port.out.Integration;
+import tanager.application.port.out.PathTranslation;
 import tanager.application.port.out.PlatformModule;
+import tanager.domain.history.ShellEnvironment;
+import tanager.domain.history.WorkspacePath;
 import tanager.domain.session.ShellProfile;
 
 class WindowsPlatformModuleTest {
+    private static final ShellEnvironment WINDOWS = new ShellEnvironment.Windows();
     private final WindowsPlatformModule module = new WindowsPlatformModule();
 
     @Test
@@ -112,6 +116,41 @@ class WindowsPlatformModuleTest {
         // then
         org.assertj.core.api.Assertions.assertThat(windows.map(tanager.domain.history.WorkspacePath::path))
                 .contains("C:\\x");
+    }
+
+    @Test
+    @DisplayName("paths() 는 directories() 가 배포판에서 읽어 둔 마운트 루트로 /win/c/x ↔ C:\\x 를 바꾼다(#53)")
+    void pathsUseMountRootLearnedByDirectories() {
+        // given
+        WindowsShellCatalog catalog = new WindowsShellCatalog(
+                new FakeCommandRunner(new CommandOutcome.NotStarted("x")),
+                key -> Optional.empty(),
+                Duration.ofSeconds(1));
+        FakeWindowsFiles files = new FakeWindowsFiles()
+                .directory("\\\\wsl.localhost\\Ubuntu\\home\\me", Optional.of(true))
+                .text("\\\\wsl.localhost\\Ubuntu\\etc\\wsl.conf", Optional.of("[automount]\nroot = /win/\n"));
+        WindowsPlatformModule custom = new WindowsPlatformModule(
+                catalog,
+                key -> Optional.empty(),
+                "C:\\Users\\u",
+                new FakeCommandRunner(new CommandOutcome.NotStarted("x")),
+                files,
+                Runnable::run);
+        ShellEnvironment ubuntu = new ShellEnvironment.Wsl("Ubuntu");
+        // 미리 받아 둔 변환기도 나중에 알게 된 루트를 쓴다(bootstrap 은 paths() 를 한 번만 부른다)
+        PathTranslation paths = custom.paths();
+
+        // when
+        var home = custom.directories()
+                .isDirectory(WorkspacePath.of(ubuntu, "/home/me").value().orElseThrow(), Duration.ofSeconds(1));
+        var toWindows =
+                paths.translate(WorkspacePath.of(ubuntu, "/win/c/x").value().orElseThrow(), WINDOWS);
+        var toWsl = paths.translate(WorkspacePath.of(WINDOWS, "C:\\x").value().orElseThrow(), ubuntu);
+
+        // then
+        assertThat(home).contains(true);
+        assertThat(toWindows.map(WorkspacePath::path)).contains("C:\\x");
+        assertThat(toWsl.map(WorkspacePath::path)).contains("/win/c/x");
     }
 
     @Test

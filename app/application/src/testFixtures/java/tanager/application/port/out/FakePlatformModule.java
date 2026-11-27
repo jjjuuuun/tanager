@@ -35,6 +35,7 @@ public final class FakePlatformModule implements PlatformModule {
     private SystemAppearance appearance = SystemAppearance.DEFAULT;
     private final FakeResourceProbe resources = new FakeResourceProbe();
     private final RecordingSystemTools systemTools = new RecordingSystemTools();
+    private DirectoryProbe directories = new FakeDirectoryProbe();
 
     public FakePlatformModule(List<ShellProfile> shells) {
         this.shells = List.copyOf(shells);
@@ -164,6 +165,17 @@ public final class FakePlatformModule implements PlatformModule {
     @Override
     public PathTranslation paths() {
         return (from, to) -> PathTranslator.translate(from, to, WslMount.DEFAULT);
+    }
+
+    /** {@code directories()} 가 돌려줄 확인기. 주지 않으면 모든 경로가 있다고 답하는 {@link FakeDirectoryProbe} 다. */
+    public synchronized FakePlatformModule withDirectories(DirectoryProbe directories) {
+        this.directories = Objects.requireNonNull(directories, "directories");
+        return this;
+    }
+
+    @Override
+    public synchronized DirectoryProbe directories() {
+        return directories;
     }
 
     @Override

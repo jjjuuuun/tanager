@@ -14,28 +14,44 @@ public final class PathTranslator {
 
     private PathTranslator() {}
 
-    /** {@code from} 을 {@code to} 환경의 경로로. 같은 환경이면 그대로다. */
+    /** {@code from} 을 {@code to} 환경의 경로로. 같은 환경이면 그대로다. 모든 배포판이 {@code mount} 에 드라이브를 붙인다고 본다. */
     public static Optional<WorkspacePath> translate(WorkspacePath from, ShellEnvironment to, WslMount mount) {
+        return translate(from, to, WslMounts.uniform(Objects.requireNonNull(mount, "mount")));
+    }
+
+    /** {@code from} 을 {@code to} 환경의 경로로. 같은 환경이면 그대로다. 드라이브 자리는 배포판마다 {@code mounts} 에서 찾는다(#53). */
+    public static Optional<WorkspacePath> translate(WorkspacePath from, ShellEnvironment to, WslMounts mounts) {
         Objects.requireNonNull(from, "from");
         Objects.requireNonNull(to, "to");
-        Objects.requireNonNull(mount, "mount");
+        Objects.requireNonNull(mounts, "mounts");
         if (from.env().equals(to)) {
             return Optional.of(from);
         }
         Optional<String> raw = switch (from.env()) {
-            case ShellEnvironment.Wsl _ ->
+            case ShellEnvironment.Wsl(String source) ->
                 switch (to) {
-                    case ShellEnvironment.Windows _ -> wslToWindows(from, mount);
-                    // 드라이브는 모든 배포판이 같은 자리에 붙인다고 본다. 리눅스 쪽 경로는 배포판마다 다르다
-                    case ShellEnvironment.Wsl _ -> wslToWindows(from, mount).map(_ -> from.path());
+                    case ShellEnvironment.Windows _ -> wslToWindows(from, mounts.of(source));
+                    // 리눅스 쪽 경로는 배포판마다 다르다 — 드라이브 아래만 옮긴다
+                    case ShellEnvironment.Wsl(String target) -> wslToOtherWsl(from, mounts.of(source), target, mounts);
                 };
             case ShellEnvironment.Windows _ ->
                 switch (to) {
-                    case ShellEnvironment.Wsl(String distro) -> windowsToWsl(from, distro, mount);
+                    case ShellEnvironment.Wsl(String distro) -> windowsToWsl(from, distro, mounts.of(distro));
                     case ShellEnvironment.Windows _ -> Optional.of(from.path());
                 };
         };
         return raw.flatMap(path -> WorkspacePath.of(to, path).value());
+    }
+
+    private static Optional<String> wslToOtherWsl(
+            WorkspacePath from, WslMount source, String target, WslMounts mounts) {
+        Optional<String> drive = wslToWindows(from, source);
+        if (source.equals(mounts.of(target))) {
+            return drive.map(_ -> from.path());
+        }
+        return drive.flatMap(path ->
+                        WorkspacePath.of(new ShellEnvironment.Windows(), path).value())
+                .flatMap(windows -> windowsToWsl(windows, target, mounts.of(target)));
     }
 
     // /mnt/c/a/b → C:\a\b. 마운트 루트 바로 아래가 드라이브 문자 한 글자일 때만

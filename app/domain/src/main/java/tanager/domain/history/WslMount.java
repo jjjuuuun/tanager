@@ -6,7 +6,7 @@ import java.util.Objects;
 
 /**
  * WSL 이 Windows 드라이브를 붙이는 루트(wsl.conf {@code [automount] root}, 기본 {@code /mnt/}, #90). 배포판마다 다를 수 있다 —
- * 배포판별 값은 #53(M5)이 읽는다.
+ * 배포판별 값은 {@link WslMounts}(#53).
  */
 public record WslMount(String root) {
     /** WSL 기본값. */
