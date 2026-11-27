@@ -41,8 +41,9 @@ public final class TanagerApp {
         switch (selection) {
             case Result.Ok<PlatformModule, PlatformSelectionError>(PlatformModule platform) -> {
                 LOG.log(System.Logger.Level.INFO, "플랫폼: {0} ({1})", platform.id(), os.describe());
-                Assembly assembly = Assembly.assemble(platform, new Pty4jLauncher());
-                AppEvents events = new UiAppEvents(assembly.state(), new SwingUiDispatcher());
+                SwingUiDispatcher ui = new SwingUiDispatcher();
+                Assembly assembly = Assembly.assemble(platform, new Pty4jLauncher(), ui);
+                AppEvents events = new UiAppEvents(assembly.state(), ui);
                 // 외부 명령(Windows: reg.exe)을 쓸 수 있어 EDT 가 아닌 여기서 한 번 읽는다
                 SystemAppearance appearance = platform.appearance();
                 SwingUi.showMainWindow(
@@ -54,6 +55,7 @@ public final class TanagerApp {
                         assembly.panes(),
                         assembly.settings(),
                         events,
+                        assembly.resources(),
                         appearance,
                         assembly::shutdown);
                 // UI 가 구독한 뒤라 시작 때의 SettingsChanged 를 UI 가 받는다

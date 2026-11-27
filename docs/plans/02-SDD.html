@@ -388,7 +388,7 @@ public record CpuWindow(List&lt;Double&gt; recent) {                            
 <li><code>WatchResourcesUseCase</code> 가 가상 스레드 하나에서 주기(기본 2초)마다 <code>PlatformModule.resources()</code> 를 부른다. 결과는 저장 상태가 아니므로 StateActor 를 거치지 않고 <code>ResourceSampled</code> 이벤트로 바로 UiDispatcher 에 보낸다.</li>
 <li>호스트 CPU · 메모리: <code>com.sun.management.OperatingSystemMXBean</code>(<code>getCpuLoad</code> · <code>getTotalMemorySize</code> · <code>getFreeMemorySize</code>). JDK 만으로 Windows · macOS 모두 된다 ✱(Windows 에서 값이 작업 관리자와 맞는지 M5 구현 때 확인).</li>
 <li>디스크: 포커스 창 cwd 의 루트(<code>C:\</code> 등)에 대해 <code>FileStore.getTotalSpace / getUsableSpace</code>.</li>
-<li>WSL: 실행 중인 WSL 세션이 있을 때만, 그 배포판에 <code>wsl.exe -d &lt;배포판&gt; -- sh -c 'cat /proc/meminfo; df -kP /'</code> 를 5초 이상 간격으로 실행해 파싱(<code>MeminfoParser</code> · <code>DfParser</code> 는 픽스처로 테스트하는 순수 함수).</li>
+<li>WSL: 실행 중인 WSL 세션이 있을 때만, 그 배포판에 <code>wsl.exe -d &lt;배포판&gt; --exec sh -c "cat /proc/meminfo; LC_ALL=C df -kP /"</code>(로그인 셸을 거치지 않게 <code>--exec</code>, 환경 <code>WSL_UTF8=1</code>, 시간 초과 1초 — #187) 를 5초 이상 간격으로 실행해 파싱(<code>MeminfoParser</code> · <code>DfParser</code> 는 픽스처로 테스트하는 순수 함수).</li>
 <li>판정: <code>CpuWindow.level</code> · <code>Usage.ratio</code> 와 <code>Thresholds</code> 비교 → 상태줄 항목 색. 상태줄에서 항목을 끄면 그 수집도 멈춘다.</li>
 </ol>
 <h3>6.7 테마 적용</h3>

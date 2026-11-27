@@ -6,6 +6,7 @@ import java.lang.System.Logger;
 import java.lang.System.Logger.Level;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -17,13 +18,13 @@ final class ProcessCommandRunner implements CommandRunner {
     private static final Duration MIN_DRAIN_GRACE = Duration.ofMillis(200);
 
     @Override
-    public CommandOutcome run(List<String> command, Duration timeout) {
+    public CommandOutcome run(List<String> command, Map<String, String> env, Duration timeout) {
         long start = System.nanoTime();
         Process process;
         try {
-            process = new ProcessBuilder(command)
-                    .redirectError(ProcessBuilder.Redirect.DISCARD)
-                    .start();
+            ProcessBuilder builder = new ProcessBuilder(command).redirectError(ProcessBuilder.Redirect.DISCARD);
+            builder.environment().putAll(env);
+            process = builder.start();
         } catch (IOException | RuntimeException e) {
             return new CommandOutcome.NotStarted(String.valueOf(e.getMessage()));
         }

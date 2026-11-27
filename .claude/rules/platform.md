@@ -12,7 +12,9 @@ paths:
   - 기존 `WSLENV` 는 지우지 않고 보존한다(빈 항목 · 기존 `TANAGER_RC` 항목만 정리).
   - `--rcfile` 은 `-l` 과 못 쓰므로 `tanager.bash` 가 로그인 셸 순서를 흉내 낸다. `/etc/bash.bashrc` 가 있는 배포판에서만 `/etc/profile` 을 읽는 동안 `PS1` 을 비워 이중 실행을 막고(Fedora 계열 `/etc/bashrc` 는 건드리지 않음), 그 때문에 빠진 bash-completion 은 다시 불러온다.
 - 위 `--cd` 검사는 wsl.exe 인자 분리만 막는다. cmd `/c` · `/k` · PowerShell `-Command` 문자열에 사용자 경로를 넣지 않는다(`lpCurrentDirectory` · 환경 변수로 넘긴다). 불가피하면 셸별 이스케이프와 테스트를 둔다(ADR-0014 #107).
-- WSL 리소스 수집은 **실행 중인 WSL 세션이 있을 때만** `wsl.exe -d <배포판> -- sh -c 'cat /proc/meminfo; df -kP /'` 로, 5초 이상 간격. 세션이 없을 때 `wsl.exe` 를 부르면 VM 이 깨어난다.
+- WSL 리소스 수집은 **실행 중인 WSL 세션이 있을 때만** `wsl.exe -d <배포판> --exec sh -c "cat /proc/meminfo; LC_ALL=C df -kP /"` + 환경 `WSL_UTF8=1` 로, 5초 이상 간격 · 시간 초과 1초(`WindowsResourceProbe`, #187). 세션이 없을 때 `wsl.exe` 를 부르면 VM 이 깨어난다.
+  - `--` 가 아니라 `--exec` 다: `--` 뒤는 사용자의 로그인 셸(zsh · fish …)이 다시 해석하지만 `--exec` 는 argv 를 그대로 넘긴다(2.5.10 실측 — 공백 있는 `sh -c` 스크립트가 한 인자로 간다). `df` 머리줄은 로캘을 타므로(ko_KR "파일 시스템 1024-블록") `LC_ALL=C` 를 주고, `DfParser` 도 머리줄 대신 마운트 위치 `/` 줄을 찾는다.
+  - WSL2 `/proc/meminfo` 의 `MemTotal` 은 `.wslconfig` 의 `memory` 를 반영한다(memory=11GB → 11216076 kB, 커널 예약분만 빠짐) — `.wslconfig` 를 따로 읽지 않는다.
 - 다크/라이트: `HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize\AppsUseLightTheme`(0 = 다크). 애니메이션 끄기: `HKCU\Control Panel\Desktop\WindowMetrics` 의 `MinAnimate`("0" = 끔)를 `reg.exe query` 로 읽는다(`WindowsAppearance`, #152). 읽지 못하면 켬. `SystemParametersInfo(SPI_GETCLIENTAREAANIMATION)` 가 더 정확하지만 platform/windows 는 JNA 에 의존하지 않는다.
 - 지원 셸: WSL · **Windows PowerShell 5.1** · cmd. PowerShell 7(`pwsh`)은 범위 밖(사용자 결정) — 탐지·기동·셸 통합·테스트 대상 아님. 사용자 정의 프로파일도 없으므로 Tanager 가 띄우는 셸은 자동 탐지한 이 셋뿐이다.
 - bash OSC 7 퍼센트 인코딩 함수 첫 줄에 `local LC_ALL=C` 필수 — 없으면 UTF-8 로캘에서 한글이 코드 포인트(`%D55C`)로 나간다(M0 에서 재현).
