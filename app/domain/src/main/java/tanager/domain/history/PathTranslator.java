@@ -11,6 +11,7 @@ import java.util.Optional;
  */
 public final class PathTranslator {
     private static final List<String> WSL_UNC_HOSTS = List.of("wsl.localhost", "wsl$");
+    private static final ShellEnvironment WINDOWS = new ShellEnvironment.Windows();
 
     private PathTranslator() {}
 
@@ -32,7 +33,8 @@ public final class PathTranslator {
                 switch (to) {
                     case ShellEnvironment.Windows _ -> wslToWindows(from, mounts.of(source));
                     // 리눅스 쪽 경로는 배포판마다 다르다 — 드라이브 아래만 옮긴다
-                    case ShellEnvironment.Wsl(String target) -> wslToOtherWsl(from, mounts.of(source), target, mounts);
+                    case ShellEnvironment.Wsl(String target) ->
+                        wslToOtherWsl(from, mounts.of(source), target, mounts.of(target));
                 };
             case ShellEnvironment.Windows _ ->
                 switch (to) {
@@ -43,15 +45,15 @@ public final class PathTranslator {
         return raw.flatMap(path -> WorkspacePath.of(to, path).value());
     }
 
+    // 루트가 같으면 경로가 그대로고, 다르면 드라이브 경로를 거쳐 상대 배포판의 루트로 붙인다
     private static Optional<String> wslToOtherWsl(
-            WorkspacePath from, WslMount source, String target, WslMounts mounts) {
+            WorkspacePath from, WslMount source, String target, WslMount targetMount) {
         Optional<String> drive = wslToWindows(from, source);
-        if (source.equals(mounts.of(target))) {
+        if (source.equals(targetMount)) {
             return drive.map(_ -> from.path());
         }
-        return drive.flatMap(path ->
-                        WorkspacePath.of(new ShellEnvironment.Windows(), path).value())
-                .flatMap(windows -> windowsToWsl(windows, target, mounts.of(target)));
+        return drive.flatMap(path -> WorkspacePath.of(WINDOWS, path).value())
+                .flatMap(windows -> windowsToWsl(windows, target, targetMount));
     }
 
     // /mnt/c/a/b → C:\a\b. 마운트 루트 바로 아래가 드라이브 문자 한 글자일 때만
