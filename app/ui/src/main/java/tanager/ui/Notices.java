@@ -35,6 +35,8 @@ record Notices(List<String> messages) {
             case AppEvent.SessionCwdChanged moved -> Optional.empty();
             case AppEvent.SessionsChanged sessions -> Optional.empty();
             case AppEvent.EnvironmentsChanged environments -> Optional.empty();
+            case AppEvent.LayoutChanged layout -> Optional.empty();
+            case AppEvent.LastPaneClosed closed -> Optional.empty();
         };
     }
 

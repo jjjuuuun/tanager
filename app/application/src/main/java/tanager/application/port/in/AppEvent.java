@@ -9,6 +9,7 @@ import tanager.domain.history.WorkHistory;
 import tanager.domain.history.WorkspacePath;
 import tanager.domain.session.LiveSessions;
 import tanager.domain.shared.PaneId;
+import tanager.domain.workspace.Workspace;
 
 /** 명령이 상태를 바꾼 뒤 구독자에게 알리는 이벤트. 세부 변경 대신 바뀐 값을 싣는다(ADR-0012). */
 public sealed interface AppEvent {
@@ -83,6 +84,16 @@ public sealed interface AppEvent {
             }
         }
     }
+
+    /** 창 배치 · 포커스가 바뀌었다(#88). UI 는 이 값대로 창을 만들고 지운다. */
+    record LayoutChanged(Workspace workspace) implements AppEvent {
+        public LayoutChanged {
+            Objects.requireNonNull(workspace, "workspace");
+        }
+    }
+
+    /** 마지막 창을 닫았다 — 앱을 끝낸다(ADR-0011). 작업 공간은 그대로다. */
+    record LastPaneClosed() implements AppEvent {}
 
     /** 셸 탐지가 끝나 환경 순서(트리의 환경 노드 순서)가 정해졌다. 탐지 순서대로 한 번씩. */
     record EnvironmentsChanged(List<ShellEnvironment> environments) implements AppEvent {
