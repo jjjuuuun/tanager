@@ -9,6 +9,7 @@ import javax.swing.Icon;
 import javax.swing.JTree;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeCellRenderer;
+import tanager.ui.html.Html;
 import tanager.ui.theme.ColorToken;
 import tanager.ui.theme.ThemeColors;
 
@@ -24,8 +25,8 @@ final class SidebarRenderer extends DefaultTreeCellRenderer {
             return this;
         }
         setText(item.secondary()
-                .map(alias -> "<html>" + escape(item.label()) + " <font color=\"" + hex(ColorToken.MUTED) + "\">"
-                        + escape(alias) + "</font></html>")
+                .map(alias -> "<html>" + Html.escape(item.label()) + " <font color=\"" + hex(ColorToken.MUTED) + "\">"
+                        + Html.escape(alias) + "</font></html>")
                 .orElse(item.label()));
         setToolTipText(item.tooltip().orElse(null));
         setForeground(ThemeColors.get(colorOf(item)));
@@ -52,10 +53,6 @@ final class SidebarRenderer extends DefaultTreeCellRenderer {
 
     private static String hex(ColorToken token) {
         return String.format("#%06x", ThemeColors.get(token).getRGB() & 0xFFFFFF);
-    }
-
-    private static String escape(String text) {
-        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 
     /** 세션 상태 점(실행 중 = ok, 끝남 = bad). */

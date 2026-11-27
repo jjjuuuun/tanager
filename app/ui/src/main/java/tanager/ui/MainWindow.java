@@ -62,6 +62,7 @@ import tanager.domain.session.ShellProfile;
 import tanager.domain.shared.PaneId;
 import tanager.domain.shared.Result;
 import tanager.domain.workspace.Workspace;
+import tanager.ui.html.Html;
 import tanager.ui.i18n.Msg;
 import tanager.ui.i18n.NoticeText;
 import tanager.ui.keys.KeyAction;
@@ -440,7 +441,7 @@ final class MainWindow {
         notices = notices.add(messages);
         notices.summary().ifPresent(summary -> {
             statusRight.setText(summary);
-            statusRight.setToolTipText(tooltip(notices.messages()));
+            statusRight.setToolTipText(Html.lines(notices.messages()));
         });
         fitResources();
     }
@@ -693,29 +694,14 @@ final class MainWindow {
     }
 
     private static void appendKeys(StringBuilder html, Msg title, List<KeyHelp.Row> rows) {
-        html.append("<b>").append(escape(title.text())).append("</b><table>");
+        html.append("<b>").append(Html.escape(title.text())).append("</b><table>");
         for (KeyHelp.Row row : rows) {
             html.append("<tr><td>")
-                    .append(escape(row.action()))
+                    .append(Html.escape(row.action()))
                     .append("</td><td>")
-                    .append(escape(row.keys()))
+                    .append(Html.escape(row.keys()))
                     .append("</td></tr>");
         }
         html.append("</table>");
-    }
-
-    private static String tooltip(List<String> messages) {
-        StringBuilder html = new StringBuilder("<html>");
-        for (int i = 0; i < messages.size(); i++) {
-            if (i > 0) {
-                html.append("<br>");
-            }
-            html.append(escape(messages.get(i)));
-        }
-        return html.append("</html>").toString();
-    }
-
-    private static String escape(String text) {
-        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 }

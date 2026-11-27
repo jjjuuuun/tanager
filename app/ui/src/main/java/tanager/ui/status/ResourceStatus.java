@@ -26,6 +26,7 @@ import tanager.application.port.in.WatchResourcesUseCase;
 import tanager.application.port.out.MonitorItem;
 import tanager.application.port.out.Subscription;
 import tanager.domain.monitor.UsageLevel;
+import tanager.ui.html.Html;
 import tanager.ui.i18n.Msg;
 import tanager.ui.theme.ColorToken;
 import tanager.ui.theme.ThemeColors;
@@ -168,17 +169,6 @@ public final class ResourceStatus {
         };
     }
 
-    private static String tooltip(List<String> lines) {
-        StringBuilder html = new StringBuilder("<html>");
-        for (int i = 0; i < lines.size(); i++) {
-            if (i > 0) {
-                html.append("<br>");
-            }
-            html.append(lines.get(i).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"));
-        }
-        return html.append("</html>").toString();
-    }
-
     // Windows 는 놓을 때, macOS 는 누를 때가 팝업 신호다
     private final class PopupTrigger extends MouseAdapter {
         @Override
@@ -224,7 +214,7 @@ public final class ResourceStatus {
             setText(text.text());
             setForeground(ThemeColors.get(token));
             setIcon(text.bar().map(ratio -> new UsageBar(ratio, text.level())).orElse(null));
-            setToolTipText(tooltip(text.tooltip()));
+            setToolTipText(Html.lines(text.tooltip()));
         }
 
         // 부모 생성자가 필드보다 먼저 부른다 — 그때 token 은 아직 없다
