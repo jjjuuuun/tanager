@@ -19,3 +19,4 @@
 *.ico   binary
 *.icns  binary
 *.ttf   binary
+*.bin   binary

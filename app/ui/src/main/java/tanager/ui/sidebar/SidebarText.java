@@ -1,0 +1,49 @@
+package tanager.ui.sidebar;
+
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.Optional;
+import tanager.domain.history.Alias;
+import tanager.domain.history.SessionLeaf;
+import tanager.domain.history.SessionStatus;
+import tanager.domain.history.ShellEnvironment;
+import tanager.domain.history.VisitedDirectory;
+import tanager.domain.history.WorkspacePath;
+
+/** 사이드바 노드의 글자 · 툴팁(순수 계산, #84). */
+final class SidebarText {
+    static final String PINNED_SECTION = "고정됨";
+    private static final DateTimeFormatter WHEN = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+
+    private SidebarText() {}
+
+    /** "WSL · 배포판" 또는 "Windows". */
+    static String environment(ShellEnvironment env) {
+        return switch (env) {
+            case ShellEnvironment.Wsl(String distro) -> "WSL · " + distro;
+            case ShellEnvironment.Windows _ -> "Windows";
+        };
+    }
+
+    /** "#1 bash", 끝났으면 "#1 bash · 종료 3". */
+    static String session(SessionLeaf session) {
+        String name = "#" + session.number() + " " + session.shellName();
+        return switch (session.status()) {
+            case SessionStatus.Running _ -> name;
+            case SessionStatus.Exited(int code) -> name + " · 종료 " + code;
+        };
+    }
+
+    /** 전체 경로, 방문 기록이 있으면 " · 방문 N회 · 최근 날짜 시각"(현지 시각). */
+    static String folderTooltip(WorkspacePath path, Optional<VisitedDirectory> visit, ZoneId zone) {
+        return path.path()
+                + visit.map(v -> " · 방문 " + v.visitCount() + "회 · 최근 "
+                                + WHEN.format(v.lastVisited().atZone(zone)))
+                        .orElse("");
+    }
+
+    /** 별칭(보조 글자). */
+    static Optional<String> secondary(Optional<Alias> alias) {
+        return alias.map(Alias::value);
+    }
+}

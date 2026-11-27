@@ -19,6 +19,9 @@ argument-hint: "[vX.Y.Z]"
 6. 버전이 맞는지 SemVer 로 검사: `!`/`BREAKING CHANGE` → MAJOR(1.0 전에는 MINOR), `feat` → MINOR, `fix`/`perf` → PATCH. 다르면 사용자에게 알리고 제안 버전을 같이 적는다.
 7. WSL 통합 테스트(CI 에서 안 도는 `@Tag("wsl")`): `cmd.exe /c gradlew.bat :platform:windows:test` 결과를 기록한다(M1 이후).
 7-1. 포함된 PR 모으기: `gh pr list --base dev --state merged --search 'milestone:"<마일스톤>"' --json number,title,url,mergedAt` → PR 마다 `gh api repos/{owner}/{repo}/pulls/<n>/reviews` 에서 `## Claude 리뷰` 로 시작하는 마지막 코멘트의 **권고 줄**과 **남은 지적** 항목을 뽑는다. 사용자가 손으로 확인해야 하는 항목(UI · 한글 입력 · 설치 등)은 따로 모은다.
+7-2. **배포 문서(영어) PR** — 배포 문서는 영어로 쓰고, README 는 dev 가 아니라 **main(이번 릴리스) 기준**으로 쓴다(사용자 결정 2026-11-27, #115). 릴리스 PR 을 열기 전에 작업 PR 하나로 dev 에 넣는다(`/issue` → `docs/<n>-release-vX-Y-Z`(브랜치 이름에는 점을 쓸 수 없다 — 버전의 `.` 은 `-` 로) → `/pr`).
+   - `docs/releases/<버전>.md`: 영어 Release 노트. release 워크플로가 이 파일을 Release 본문으로 쓴다(없으면 git-cliff 로 대신). 구성: 제목(`## Tanager X.Y.Z — <영어 마일스톤 이름> (날짜)`) · 한 줄 요약 · Highlights · Under the hood · Documentation · Known limitations · Downloads. 커밋 제목을 옮기지 말고 사용자가 얻는 것으로 쓴다. PR 번호는 남긴다.
+   - `README.md`(영어) · `README.ko.md`: 이번 릴리스 기준으로 갱신 — 맨 위 최신 릴리스 안내, Release 배지 버전(정적 배지 `badge/release-<버전>-blue`), "What works in <버전>", 로드맵 ✅. 다음 릴리스 내용은 "예정"으로만 쓴다. 빌드 안내에 dev 로 전환하라는 줄을 넣지 않는다.
 
 ## C. 릴리스 PR (dev → main)
 8. `gh pr create --base main --head dev --title "chore(release): <버전>" --label release --milestone "<마일스톤>" --body-file <파일>` — 본문:
@@ -50,4 +53,4 @@ argument-hint: "[vX.Y.Z]"
 14. `git switch dev && git pull --ff-only` 로 돌아와 다음 마일스톤을 알린다.
 
 ## E. hotfix 패치 릴리스
-hotfix PR 이 main 에 병합됐으면 C 를 건너뛰고 D 의 10~13 을 패치 버전으로 한 뒤, `/pr` D 의 역병합 PR 을 연다.
+hotfix PR 에는 영어 노트 `docs/releases/<패치 버전>.md` 와 README 배지 · 안내 갱신을 함께 넣는다(태그가 main 에 붙으므로). hotfix PR 이 main 에 병합됐으면 C 를 건너뛰고 D 의 10~13 을 패치 버전으로 한 뒤, `/pr` D 의 역병합 PR 을 연다.

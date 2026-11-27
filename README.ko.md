@@ -2,14 +2,14 @@
 
 [English](README.md) | **한국어**
 
-[![CI](https://github.com/jjjuuuun/tanager/actions/workflows/ci.yml/badge.svg?branch=dev)](https://github.com/jjjuuuun/tanager/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/jjjuuuun/tanager?include_prereleases)](https://github.com/jjjuuuun/tanager/releases)
+[![CI](https://github.com/jjjuuuun/tanager/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/jjjuuuun/tanager/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/badge/release-v0.3.0-blue)](https://github.com/jjjuuuun/tanager/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 Windows 용 데스크톱 터미널 관리 프로그램입니다. **WSL**, **Windows PowerShell 5.1**, **cmd** 터미널을 tmux 처럼 한 창에서 나눠 쓰고, 지금까지 작업한 모든 경로를 **폴더 트리**로 남겨 둡니다. 컴퓨터를 다시 켜도 어디서 무엇을 하고 있었는지 바로 알 수 있습니다.
 
-> [!IMPORTANT]
-> **v0.1.0 은 골격(스캐폴딩) 릴리스입니다.** 빈 창이 하나 뜨고, 빌드 · 테스트 · 패키징 과정이 처음부터 끝까지 동작하는지 확인하는 버전입니다. 실제 터미널은 **v0.2.0** 부터 들어갑니다. [로드맵](#로드맵)을 보세요.
+> [!NOTE]
+> **최신 릴리스: v0.3.0 — 이력과 폴더 트리.** 창 하나에 터미널 하나이고, 지금까지 작업한 모든 경로가 왼쪽 폴더 트리에 남습니다. 분할과 트리에서 폴더 열기는 **v0.4.0** 에 들어갑니다. [로드맵](#로드맵)을 보세요.
 
 ## 왜 만들었나
 
@@ -43,11 +43,25 @@ PowerShell 7(`pwsh`)과 사용자 정의 셸 프로파일은 일부러 지원 �
 
 ## 사용 방법
 
-### v0.1.0 에서 되는 것
+### v0.3.0 에서 되는 것
 
-`Tanager.exe` 를 실행하면 제목이 **"Tanager — windows"** 인 창이 뜹니다. 제목은 Windows 플랫폼 모듈을 제대로 찾았다는 뜻입니다. 아직 그 밖의 기능은 없습니다.
+1. `Tanager.exe` 를 실행하면 이 PC 에서 찾은 셸 목록이 뜹니다 — WSL 배포판, Windows PowerShell 5.1, cmd.
+2. 화살표 키와 <kbd>Enter</kbd>(또는 <kbd>1</kbd>–<kbd>9</kbd>)로 고릅니다. "다음부터 이 셸로 바로 열기"를 켜 두면 다음부터는 목록 없이 바로 열립니다.
+3. 셸은 실제 터미널(ConPTY)에서 돕니다. 번들된 D2Coding 글꼴로 한글 표시와 입력이 됩니다.
+4. `cd` 하면 창 머리줄 · 상태줄에 지금 경로가 보이고, 그 폴더가 **사이드바**의 환경("WSL · Ubuntu", "Windows") 아래에 나타납니다. 실행 중인 세션은 그 폴더 아래에 매달립니다.
+5. 사이드바에서 할 수 있는 것:
+   - <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd> 로 트리를 검색하고, <kbd>Esc</kbd> 로 검색을 지웁니다.
+   - <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd> 로 사이드바를 숨기거나 보입니다.
+   - 폴더를 오른쪽 클릭하면(또는 메뉴 키 · <kbd>Shift</kbd>+<kbd>F10</kbd>) 메뉴가 뜹니다. 경로 복사 · 고정 · 별칭 · 숨기기 · 기록 삭제를 할 수 있습니다.
+   - <kbd>Delete</kbd> 는 고른 항목의 기록을 지웁니다.
+6. 셸이 끝나면 종료 코드가 보입니다.
+   - <kbd>Enter</kbd>: 셸이 마지막으로 알린 경로에서 다시 시작합니다.
+   - <kbd>Tab</kbd>: 다른 셸을 고릅니다.
+   - <kbd>Esc</kbd>: 창을 닫습니다.
 
-### 예정 (v0.2.0 부터)
+이력은 `%APPDATA%\Tanager\state.json` 에 저장됩니다.
+
+### 예정 키 바인딩 (v0.4.0 부터)
 
 기본 키 바인딩(Windows)입니다. 모든 동작은 마우스로도 할 수 있습니다 — 창 머리줄 버튼, 경계선 드래그, 창이나 사이드바 폴더를 끌어다 놓기. v1.0 전까지 바뀔 수 있습니다.
 
@@ -61,8 +75,7 @@ PowerShell 7(`pwsh`)과 사용자 정의 셸 프로파일은 일부러 지원 �
 | 창 이동 / 교환 | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>←→</kbd>(교환) | 머리줄 ≡ 를 다른 창의 가장자리(이동) · 가운데(교환)로 끌기 |
 | 새 탭 / 탭 전환 | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd> / <kbd>Ctrl</kbd>+<kbd>Tab</kbd> | 탭 막대 |
 | 이력의 폴더 열기 | 사이드바에서 <kbd>Enter</kbd> | 더블클릭, 또는 창 위로 끌어다 놓기 |
-| 사이드바 / 도구함 토글 | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>K</kbd> | — |
-| 폴더 트리 검색 | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd> | — |
+| 도구함 토글 | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>K</kbd> | — |
 
 Tanager 는 셸 통합 스크립트가 프롬프트마다 알려 주는 현재 경로(bash 는 OSC 7, PowerShell · cmd 는 OSC 9;9)로 각 셸의 위치를 압니다. 입력한 명령이나 출력은 기록하지 않고 **경로만** 남깁니다.
 
@@ -77,8 +90,6 @@ Tanager 는 셸 통합 스크립트가 프롬프트마다 알려 주는 현재 �
 ```bash
 git clone https://github.com/jjjuuuun/tanager.git
 cd tanager
-git switch dev                         # 개발은 dev 에서, main 은 최신 릴리스
-
 ./gradlew check                      # 포맷 검사 + 전체 테스트 + 아키텍처 규칙 + 커버리지
 ./gradlew :bootstrap:run             # 앱 실행
 ./gradlew :bootstrap:jpackageImage   # Windows: app/bootstrap/build/jpackage/Tanager/Tanager.exe
@@ -135,9 +146,9 @@ docs/                      계획서(HTML) · ADR
 
 | 버전 | 마일스톤 |
 |---|---|
-| **v0.1.0** | 골격 — 모듈, 아키텍처 규칙, 플랫폼 선택, 패키징 ✅ |
-| v0.2.0 | 단일 터미널 — 셸 탐지, 터미널 창 하나, 종료 후 재시작, 소프트 테마 |
-| v0.3.0 | 이력과 폴더 트리 — 경로 추적, 폴더 → 세션 트리, 고정 · 검색 |
+| v0.1.0 | 골격 — 모듈, 아키텍처 규칙, 플랫폼 선택, 패키징 ✅ |
+| v0.2.0 | 단일 터미널 — 셸 탐지, 터미널 창 하나, 종료 후 재시작, 소프트 테마 ✅ |
+| **v0.3.0** | 이력과 폴더 트리 — 경로 추적, 폴더 → 세션 트리, 고정 · 검색 ✅ |
 | v0.4.0 | 분할 — 키보드와 마우스 |
 | v0.5.0 | 복원 · 탭 · 설정 · 테마 · 리소스 표시 |
 | v1.0.0 | 도구함 패널과 안정화 |

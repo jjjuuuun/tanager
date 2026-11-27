@@ -1,0 +1,232 @@
+package tanager.ui;
+
+import com.formdev.flatlaf.FlatClientProperties;
+import java.awt.BorderLayout;
+import java.awt.Dimension;
+import java.awt.KeyEventDispatcher;
+import java.awt.KeyboardFocusManager;
+import java.awt.event.KeyEvent;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
+import java.util.List;
+import java.util.Objects;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
+import javax.swing.BorderFactory;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JMenuBar;
+import javax.swing.JPanel;
+import javax.swing.SwingUtilities;
+import javax.swing.border.EmptyBorder;
+import tanager.application.port.in.ListProfilesUseCase;
+import tanager.application.port.in.ManageHistoryUseCase;
+import tanager.application.port.in.QueryHistoryTreeUseCase;
+import tanager.application.port.in.StartSessionUseCase;
+import tanager.domain.history.WorkspacePath;
+import tanager.domain.shared.PaneId;
+import tanager.ui.pane.PaneController;
+import tanager.ui.sidebar.SidebarPanel;
+import tanager.ui.terminal.TerminalSettings;
+import tanager.ui.theme.ColorToken;
+import tanager.ui.theme.ThemeColors;
+
+/**
+ * 메인 창(시안 D 의 M2 부분): 제목 표시줄 안 탭 · 터미널 창 하나 · 상태줄. EDT 에서만 만진다.
+ *
+ * <p>앱 종료 순서(ADR-0011): 셸 닫기(기동 중이면 기동이 끝난 뒤) → 창 dispose(바로 사라진다) → 비데몬 스레드가 앱 종료 훅(남은 명령 처리 ·
+ * 미저장 이력 저장 최대 2초)을 데몬 스레드에서 돌리고 기한까지만 기다림 → 셸 종료 대기 → {@code System.exit(0)}. 훅과 셸 대기는 닫은 때부터 4초 안에 끝내고, 훅이
+ * 멈추거나 Error 가 나도 끝낸다({@link ExitSequence}).
+ */
+final class MainWindow implements PaneController.Host {
+    private static final System.Logger LOG = System.getLogger(MainWindow.class.getName());
+    private static final int WIDTH = 1200;
+    private static final int HEIGHT = 800;
+    private static final int MIN_WIDTH = 640;
+    private static final int MIN_HEIGHT = 400;
+    private static final int GAP = 6;
+    private static final int STATUS_HEIGHT = 28;
+    // pty 어댑터는 close 뒤 3초 유예하고 남은 자손을 강제 종료한다(그 뒤에야 루트의 onExit 가 완료될 수 있다). 그보다 길게
+    // 기다려 강제 종료 경로까지 덮는다. 루트가 유예 안에 끝나면 자손 정리 스레드(어댑터의 가상 스레드)가 System.exit 와
+    // 경합할 수 있다 — 포트에 "정리 끝" 신호가 없어서 남은 한계다(ADR-0011)
+    private static final long EXIT_WAIT_SECONDS = 4;
+    // M3 는 창이 하나다. 분할(M4)부터는 레이아웃 트리의 Leaf 가 창 ID 를 준다
+    private static final PaneId ONLY_PANE = new PaneId("p1");
+
+    private final JFrame frame = new JFrame("Tanager");
+    private final JLabel tab = new JLabel("Tanager");
+    private final JLabel statusLeft = new JLabel();
+    private final JLabel statusRight = new JLabel();
+    private Notices notices = new Notices(List.of());
+    private final PaneController pane;
+    private final SidebarPanel sidebar;
+    private final KeyEventDispatcher shortcuts = this::shortcut;
+    private final Runnable onShutdown;
+    private boolean closing;
+
+    MainWindow(
+            StartSessionUseCase sessions,
+            ListProfilesUseCase profiles,
+            QueryHistoryTreeUseCase historyTree,
+            ManageHistoryUseCase historyManager,
+            Runnable onShutdown,
+            TerminalSettings settings,
+            Executor background) {
+        this.onShutdown = Objects.requireNonNull(onShutdown, "onShutdown");
+        Executor ui = SwingUtilities::invokeLater;
+        this.pane = new PaneController(ONLY_PANE, ui, background, sessions, profiles, settings, this);
+        this.sidebar = new SidebarPanel(historyTree, historyManager, ui);
+        sidebar.onLeave(pane::focus);
+        frame.getContentPane().add(sidebar.component(), BorderLayout.WEST);
+        // 터미널(JediTerm)이 키를 먼저 먹지 않게 포커스와 상관없이 가로챈다
+        KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher(shortcuts);
+        frame.setJMenuBar(titleBarTabs());
+        frame.getContentPane().add(paneArea(), BorderLayout.CENTER);
+        frame.getContentPane().add(statusBar(), BorderLayout.SOUTH);
+        frame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
+        frame.addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent e) {
+                exit();
+            }
+        });
+        frame.setSize(WIDTH, HEIGHT);
+        frame.setMinimumSize(new Dimension(MIN_WIDTH, MIN_HEIGHT));
+        frame.setLocationRelativeTo(null);
+    }
+
+    /** 창을 띄우고(아직 연결하지 않은 위젯이 놓인다) 첫 셸을 띄운다. */
+    void show(List<String> warnings) {
+        frame.setVisible(true);
+        sidebar.requestRefresh();
+        if (!warnings.isEmpty()) {
+            notify(warnings);
+        }
+        pane.start();
+    }
+
+    /** 이력 · 세션 · 환경 순서가 바뀌었다 — 사이드바를 다음 틱에 한 번 다시 그린다(#84). EDT 에서 부른다. */
+    void historyChanged() {
+        sidebar.requestRefresh();
+    }
+
+    // Ctrl+Shift+E: 사이드바 보이기 · 숨기기, Ctrl+Shift+F: 사이드바 검색(SDD §8.2). 전환 효과는 M4(FR-UI-04)
+    private boolean shortcut(KeyEvent event) {
+        boolean ours = event.getID() == KeyEvent.KEY_PRESSED
+                && event.isControlDown()
+                && event.isShiftDown()
+                && !event.isAltDown()
+                && SwingUtilities.getWindowAncestor(event.getComponent()) == frame;
+        if (ours && event.getKeyCode() == KeyEvent.VK_E) {
+            sidebar.component().setVisible(!sidebar.component().isVisible());
+            frame.getContentPane().revalidate();
+            return true;
+        }
+        if (ours && event.getKeyCode() == KeyEvent.VK_F) {
+            sidebar.component().setVisible(true);
+            frame.getContentPane().revalidate();
+            sidebar.focusSearch();
+            return true;
+        }
+        return false;
+    }
+
+    /** 셸 통합이 알린 경로를 그 창에 넘긴다(#82). 모르는 창이면 버린다. EDT 에서 부른다. */
+    void cwdChanged(PaneId paneId, WorkspacePath cwd) {
+        if (ONLY_PANE.equals(paneId)) {
+            pane.cwdReported(cwd);
+        }
+    }
+
+    @Override
+    public void viewChanged(String tabTitle, String status) {
+        tab.setText(tabTitle);
+        statusLeft.setText(status);
+    }
+
+    @Override
+    public void notify(List<String> messages) {
+        for (String message : messages) {
+            LOG.log(System.Logger.Level.WARNING, "알림: {0}", message);
+        }
+        notices = notices.add(messages);
+        notices.summary().ifPresent(summary -> {
+            statusRight.setText(summary);
+            statusRight.setToolTipText(tooltip(notices.messages()));
+        });
+    }
+
+    /** M2 는 창이 하나라 마지막 창이 닫히면 확인 없이 앱을 끝낸다(ADR-0011). */
+    @Override
+    public void removed() {
+        exit();
+    }
+
+    private void exit() {
+        if (closing) {
+            return;
+        }
+        closing = true;
+        KeyboardFocusManager.getCurrentKeyboardFocusManager().removeKeyEventDispatcher(shortcuts);
+        CompletionStage<?> exited = pane.shutdown();
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(EXIT_WAIT_SECONDS);
+        frame.dispose();
+        // 비데몬 스레드: 마지막 창이 사라져도 이 대기가 끝나기 전에 JVM 이 멈추지 않는다. 셸이 끝나는 동안 이력을 저장한다
+        Thread.ofPlatform()
+                .daemon(false)
+                .name("tanager-exit")
+                .start(() -> ExitSequence.run(onShutdown, exited, deadline, () -> System.exit(0)));
+    }
+
+    // FlatLaf 창 장식이 메뉴 막대를 제목 표시줄 안에 끼운다. 탭은 누르는 기능이 없고 그 자리로 창을 끌 수 있다
+    private JMenuBar titleBarTabs() {
+        JMenuBar bar = new JMenuBar();
+        bar.setOpaque(false);
+        bar.setBorder(new EmptyBorder(0, 0, 0, 0));
+        tab.setForeground(ThemeColors.get(ColorToken.TEXT));
+        tab.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(2, 0, 0, 0, ThemeColors.get(ColorToken.ACCENT)),
+                new EmptyBorder(0, 14, 0, 14)));
+        tab.putClientProperty(FlatClientProperties.COMPONENT_TITLE_BAR_CAPTION, true);
+        bar.add(tab);
+        return bar;
+    }
+
+    private JPanel paneArea() {
+        JPanel area = new JPanel(new BorderLayout());
+        area.setBackground(ThemeColors.get(ColorToken.WINDOW));
+        area.setBorder(new EmptyBorder(GAP, GAP, GAP, GAP));
+        area.add(pane.component(), BorderLayout.CENTER);
+        return area;
+    }
+
+    private JPanel statusBar() {
+        JPanel bar = new JPanel(new BorderLayout());
+        bar.setBackground(ThemeColors.get(ColorToken.HEADER));
+        bar.setPreferredSize(new Dimension(0, STATUS_HEIGHT));
+        bar.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(1, 0, 0, 0, ThemeColors.get(ColorToken.BORDER)),
+                new EmptyBorder(0, 10, 0, 10)));
+        statusLeft.setForeground(ThemeColors.get(ColorToken.MUTED));
+        statusRight.setForeground(ThemeColors.get(ColorToken.WARN));
+        bar.add(statusLeft, BorderLayout.WEST);
+        bar.add(statusRight, BorderLayout.EAST);
+        return bar;
+    }
+
+    private static String tooltip(List<String> messages) {
+        StringBuilder html = new StringBuilder("<html>");
+        for (int i = 0; i < messages.size(); i++) {
+            if (i > 0) {
+                html.append("<br>");
+            }
+            html.append(escape(messages.get(i)));
+        }
+        return html.append("</html>").toString();
+    }
+
+    private static String escape(String text) {
+        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+    }
+}

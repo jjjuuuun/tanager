@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - 스택: Java 25(최신 LTS, preview 금지) · Gradle 9.9 · Swing + FlatLaf · JediTerm(에뮬레이터) · pty4j(ConPTY/Unix PTY) · Jackson · jpackage
 - 설계 문서: `docs/plans/01-프로젝트-구성-설계.html`(개발 체계), `docs/plans/02-SDD.html`(요구사항·설계). 결정 기록: `docs/adr/`
-- 상태: **M1 스캐폴딩 완료**(2026-11-24) — Gradle 멀티 모듈 10개 · build-logic · ArchUnit 규칙 · `Result` · `PlatformModule` 포트와 ServiceLoader 선택 · FlatLaf 빈 창 · jpackage(jdeps 축소). **v0.1.0 릴리스**(2026-11-25, MIT 라이선스, Windows zip). 다음은 **M2 단일 터미널(v0.2.0)**. M0 결과는 ADR-0001 · 0003.
+- 상태: **v0.2.0 릴리스**(2026-11-26, M2 단일 터미널) — 실제 터미널(JediTerm + ConPTY), 시작 셸 선택 화면 · 기본 셸 기억, 소프트 다크 테마 · D2Coding, MSI 설치 파일. 다음은 **M3 이력 · 트리(v0.3.0)** — 트리에서 여는 것은 M4(#94). M0 결과는 ADR-0001 · 0003, M1 스캐폴딩은 v0.1.0(2026-11-25, MIT).
 
 ## 명령 (M1 스캐폴딩 이후 유효)
 
@@ -16,8 +16,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ./gradlew check                                   # 포맷 검사 + 전체 테스트 + ArchUnit + 커버리지
 ./gradlew spotlessApply                           # 포맷 자동 수정 (손으로 맞추지 말 것)
 ./gradlew :domain:test                            # 모듈 하나
-./gradlew :domain:test --tests 'dev.tanager.domain.layout.LayoutNodeTest'           # 클래스 하나
-./gradlew :domain:test --tests 'dev.tanager.domain.layout.LayoutNodeTest.split*'    # 메서드 패턴
+./gradlew :domain:test --tests 'tanager.domain.layout.LayoutNodeTest'           # 클래스 하나
+./gradlew :domain:test --tests 'tanager.domain.layout.LayoutNodeTest.split*'    # 메서드 패턴
 ./gradlew check -PexcludeTags=wsl                 # WSL 통합 테스트 제외 (CI 와 동일)
 ./gradlew :bootstrap:run                          # 앱 실행
 ./gradlew :bootstrap:jpackageImage                # 실행 파일 폴더(app-image) 생성 — jdeps 로 모듈 축소(목록: build/jpackage/runtime-modules.txt)

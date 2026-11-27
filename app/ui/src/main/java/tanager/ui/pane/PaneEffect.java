@@ -1,0 +1,45 @@
+package tanager.ui.pane;
+
+import java.util.List;
+import java.util.Objects;
+import tanager.application.port.in.StartNotice;
+import tanager.application.port.in.StartedSession;
+import tanager.application.port.out.TerminalStream;
+
+/** 상태 전이가 요구하는 부수 효과. {@link PaneController} 가 실행한다. */
+sealed interface PaneEffect {
+
+    /** 백그라운드에서 셸을 띄운다. */
+    record Launch(Attempt attempt) implements PaneEffect {
+        public Launch {
+            Objects.requireNonNull(attempt, "attempt");
+        }
+    }
+
+    /** 뜬 셸을 위젯에 붙이고 출력 읽기를 시작한다. */
+    record Connect(StartedSession session) implements PaneEffect {
+        public Connect {
+            Objects.requireNonNull(session, "session");
+        }
+    }
+
+    /** 사용자에게 알린다(상태줄). */
+    record ShowNotices(List<StartNotice> notices) implements PaneEffect {
+        public ShowNotices {
+            notices = List.copyOf(notices);
+        }
+    }
+
+    /** 스트림을 닫는다(프로세스 정리). */
+    record CloseStream(TerminalStream stream) implements PaneEffect {
+        public CloseStream {
+            Objects.requireNonNull(stream, "stream");
+        }
+    }
+
+    /** 창을 화면에서 뺀다(마지막 창이면 앱이 끝난다). */
+    record RemovePane() implements PaneEffect {}
+
+    /** 백그라운드에서 셸 목록을 읽어 {@link PaneEvent.ShellsListed} 로 돌려준다(첫 호출은 블로킹이라 EDT 에서 부르지 않는다). */
+    record ListShells() implements PaneEffect {}
+}

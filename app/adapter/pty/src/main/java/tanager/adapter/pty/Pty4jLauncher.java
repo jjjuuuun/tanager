@@ -1,0 +1,86 @@
+package tanager.adapter.pty;
+
+import com.pty4j.PtyProcess;
+import com.pty4j.PtyProcessBuilder;
+import com.pty4j.windows.winpty.WinPtyProcess;
+import java.io.IOException;
+import java.lang.System.Logger.Level;
+import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
+import java.nio.file.Path;
+import java.util.Optional;
+import tanager.application.port.out.LaunchCommand;
+import tanager.application.port.out.LaunchError;
+import tanager.application.port.out.PtyLauncher;
+import tanager.application.port.out.TerminalSize;
+import tanager.application.port.out.TerminalStream;
+import tanager.domain.shared.Result;
+
+/** pty4j 로 PTY 프로세스를 띄운다. Windows 에서는 ConPTY, 그 밖에서는 Unix PTY(ADR-0001 · 0007). */
+public final class Pty4jLauncher implements PtyLauncher {
+    private static final System.Logger LOG = System.getLogger(Pty4jLauncher.class.getName());
+
+    @Override
+    public Result<TerminalStream, LaunchError> launch(LaunchCommand command, TerminalSize initialSize) {
+        Optional<LaunchError> invalid = precheck(command);
+        if (invalid.isPresent()) {
+            return Result.err(invalid.get());
+        }
+        PtyProcess process;
+        try {
+            process = new PtyProcessBuilder(command.argv().toArray(String[]::new))
+                    .setDirectory(command.workingDirectory().orElse(null))
+                    .setEnvironment(command.environmentOver(System.getenv()))
+                    .setInitialColumns(initialSize.columns())
+                    .setInitialRows(initialSize.rows())
+                    .setUseWinConPty(true)
+                    .start();
+        } catch (IOException e) {
+            return Result.err(new LaunchError.StartFailed(detail(e)));
+        } catch (LinkageError e) {
+            // conpty.dll · JNA 를 읽지 못했다 — 앱 전체가 아니라 이 세션만 실패로 돌린다. 배포 문제라 스택을 남긴다
+            LOG.log(Level.WARNING, "PTY 네이티브 라이브러리를 읽지 못했다", e);
+            return Result.err(new LaunchError.StartFailed(detail(e)));
+        }
+        if (process instanceof WinPtyProcess) {
+            LOG.log(
+                    Level.WARNING,
+                    "ConPTY 를 쓰지 못해 winpty 로 시작했다(pid {0}) — 출력 인코딩 · 크기 반영이 다를 수 있다",
+                    String.valueOf(process.pid()));
+        }
+        return Result.ok(new Pty4jTerminalStream(process));
+    }
+
+    // 없는 실행 파일 · 작업 디렉터리에 대한 pty4j 의 오류는 어느 쪽이 없는지 알 수 없을 만큼 모호하다 — 먼저 확인해 구별한다.
+    // (pty4j 0.14 가 winpty 로 넘어가는 것은 ConPTY 네이티브 로드가 UnsatisfiedLinkError 로 실패할 때뿐이다)
+    private static Optional<LaunchError> precheck(LaunchCommand command) {
+        String executable = command.argv().getFirst();
+        // 상대 이름(cmd.exe 등)은 PATH 검색 결과라 여기서 판단하지 않는다
+        boolean missingExecutable = parse(executable)
+                .filter(Path::isAbsolute)
+                .filter(path -> !Files.isRegularFile(path))
+                .isPresent();
+        if (missingExecutable) {
+            return Optional.of(new LaunchError.ExecutableNotFound(executable));
+        }
+        Optional<String> directory = command.workingDirectory();
+        if (directory.isPresent()
+                && parse(directory.get()).filter(Files::isDirectory).isEmpty()) {
+            return Optional.of(new LaunchError.WorkingDirectoryNotFound(directory.get()));
+        }
+        return Optional.empty();
+    }
+
+    private static Optional<Path> parse(String path) {
+        try {
+            return Optional.of(Path.of(path));
+        } catch (InvalidPathException e) {
+            return Optional.empty();
+        }
+    }
+
+    private static String detail(Throwable e) {
+        String message = e.getMessage();
+        return message == null || message.isBlank() ? e.getClass().getName() : message;
+    }
+}

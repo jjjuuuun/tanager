@@ -14,11 +14,11 @@ trim = true
 conventional_commits = true
 filter_unconventional = true
 commit_parsers = [
-  { message = "^feat", group = "<!-- 0 -->새 기능" },
-  { message = "^fix", group = "<!-- 1 -->버그 수정" },
-  { message = "^perf", group = "<!-- 2 -->성능" },
-  { message = "^refactor", group = "<!-- 3 -->리팩터링" },
-  { message = "^docs", group = "<!-- 4 -->문서" },
+  { message = "^feat", group = "<!-- 0 -->Features" },
+  { message = "^fix", group = "<!-- 1 -->Bug Fixes" },
+  { message = "^perf", group = "<!-- 2 -->Performance" },
+  { message = "^refactor", group = "<!-- 3 -->Refactoring" },
+  { message = "^docs", group = "<!-- 4 -->Documentation" },
   { message = "^(build|ci|chore|test)", skip = true },
 ]
 tag_pattern = "v[0-9].*"

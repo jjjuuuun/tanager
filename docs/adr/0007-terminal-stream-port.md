@@ -20,6 +20,7 @@ M2 에서 셸을 실제로 띄운다. 터미널 출력은 화면(JediTerm), cwd 
 **기동 명령 조립**
 1. pty 어댑터가 `ShellProfile` 을 받아 직접 조립한다. 어댑터가 WSL · PowerShell 을 알게 되고, macOS 가 들어오면 어댑터를 고쳐야 한다.
 2. **`PlatformModule.launchCommand(profile, cwd)` 가 `LaunchCommand(argv, workingDirectory, environment)` 를 만들고, `PtyLauncher` 는 그것만 실행한다.** 셸 통합 주입(M3)도 같은 자리에 들어간다.
+   - 개정: 시그니처는 ADR-0009 에서 `launchCommand(ShellProfile, WorkingDir)`, ADR-0014(#55)에서 셸 통합 결과를 받는 `launchCommand(ShellProfile, WorkingDir, Integration)` 가 됐다. 순수 계산이라는 점은 같다.
 
 **구독 전 출력**
 1. 첫 구독 때 읽기를 시작한다. 두 번째 구독자는 첫 프롬프트를 놓친다.
@@ -45,6 +46,7 @@ M2 에서 셸을 실제로 띄운다. 터미널 출력은 화면(JediTerm), cwd 
   - `close()` 는 기다리지 않고 바로 돌아온다. 정리는 따로 진행한다: 자식 프로세스 목록을 먼저 잡아 두고 → 루트를 종료하고 → 정해진 시간 안에 끝나지 않은 자식을 강제 종료한다.
 - 바이트는 UTF-8 로 본다. ConPTY 는 콘솔 코드 페이지(949)와 상관없이 UTF-8 을 준다(M0, ADR-0001). 그래서 `chcp 65001` 을 쓰지 않는다.
 - 환경 변수는 앱의 환경을 물려받고, 그 위에 `TERM=xterm-256color` 와 `LaunchCommand.environment` 를 덮어쓴다.
+  - 개정(#54): 병합 규칙은 `LaunchCommand.environmentOver` 순수 함수다. 플랫폼이 이름 비교 방식(`EnvNames`)을 정한다 — Windows 는 대소문자 무시(글자마다 단순 대문자, 덮는 이름 하나만 남김), 그 밖은 구분. 어댑터는 결과만 쓴다.
 
 ## 결과
 - 소비자를 더할 때 포트를 바꾸지 않는다(구독만 하나 더 붙인다).

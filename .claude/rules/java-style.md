@@ -14,12 +14,14 @@ paths:
 ## 구체 규칙
 1. 값 객체·이벤트·DTO 는 `record`. compact constructor 에서 불변식 검증.
 2. 닫힌 계층은 `sealed` + `permits` 생략 가능한 같은 파일 내 선언. `switch` 는 `default` 없이 전 케이스 처리(컴파일러가 누락 검출).
-3. `null` 반환·인자 금지. 없을 수 있음 → `Optional<T>`, 실패 가능 → `Result<T, E>` (`dev.tanager.domain.shared.Result`).
+3. `null` 반환·인자 금지. 없을 수 있음 → `Optional<T>`, 실패 가능 → `Result<T, E>` (`tanager.domain.shared.Result`).
 4. 도메인 오류는 예외가 아니라 `sealed interface XxxError` 값. 예외는 진짜 예외(I/O 실패, 버그)에만.
 5. 컬렉션은 `List.copyOf` / `Map.copyOf` 로 방어 복사, 외부에는 불변 뷰만.
 6. 상속보다 합성. 추상 클래스 대신 인터페이스 + default 메서드 최소화.
 7. 클래스는 기본 `final`. 패키지 전용(package-private)을 기본 가시성으로.
 8. 가변 상태는 adapter 와 `StateActor` 안에만. `static` 가변 필드 금지.
+   - 예외: 스트림 구독 콜백 안의 스레드 한정 파서 상태는 application 에 둘 수 있다(ADR-0015).
+   - 예외: 출력 포트 일정 조율용 가변 상태는 단일 monitor 로 지켜 application.service 에 둘 수 있다(`HistorySaver`, ADR-0013).
 9. 스트림은 읽기 쉬울 때만. 3단계 넘는 체인·부수효과 있는 `forEach` 대신 for 문.
 10. 이름: 유스케이스 `XxxUseCase`(port.in), 출력 포트 `XxxPort` 대신 역할명(`HistoryRepository`, `PtyLauncher`), 구현체는 기술명 접두(`JsonHistoryRepository`, `Pty4jLauncher`).
 11. 주석은 "왜"만. 공개 포트·도메인 타입에는 Javadoc 한 줄 이상.
