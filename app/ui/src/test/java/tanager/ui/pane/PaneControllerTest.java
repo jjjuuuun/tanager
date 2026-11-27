@@ -131,6 +131,49 @@ class PaneControllerTest {
     }
 
     @Test
+    @DisplayName("명세로 시작하면 그 프로파일 · 경로로 띄운다 — 트리에서 연 창(#89)")
+    void startWithSpec() {
+        // given
+        WorkspacePath a = WorkspacePath.of(new ShellEnvironment.Windows(), "C:\\a")
+                .value()
+                .orElseThrow();
+        PaneSpec spec = new PaneSpec(new PaneId("p1"), Optional.of(PaneFixtures.CMD.id()), Optional.of(a));
+
+        // when
+        onEdt(() -> {
+            controller.start(spec);
+            return null;
+        });
+        drain();
+
+        // then
+        StartRequest request = sessions.requests.getLast();
+        assertThat(request.profile()).contains(PaneFixtures.CMD.id());
+        assertThat(request.dir()).contains(new WorkingDir.At(a));
+        assertThat(request.rememberAsDefault()).isFalse();
+        assertThat(onEdt(controller::running)).isTrue();
+    }
+
+    @Test
+    @DisplayName("창 안으로 포커스가 들어오면 Host 에 한 번 알린다(클릭 포커스, #89)")
+    void focusGainedNotifiesHost() {
+        // given
+        startAndConnect();
+
+        // when
+        onEdt(() -> {
+            controller.focusChanged(true);
+            controller.focusChanged(true);
+            controller.focusChanged(false);
+            controller.focusChanged(true);
+            return null;
+        });
+
+        // then
+        assertThat(host.focusGained.get()).isEqualTo(2);
+    }
+
+    @Test
     @DisplayName("기동 중에 앱을 끝내면 늦게 뜬 셸의 스트림을 닫고, 돌려준 단계는 그 셸이 끝난 뒤 완료된다")
     void shutdownWhileLaunchingClosesLateStream() {
         // given
@@ -490,49 +533,6 @@ class PaneControllerTest {
             }
         }
         return null;
-    }
-
-    @Test
-    @DisplayName("명세로 시작하면 그 프로파일 · 경로로 띄운다 — 트리에서 연 창(#89)")
-    void startWithSpec() {
-        // given
-        WorkspacePath a = WorkspacePath.of(new ShellEnvironment.Windows(), "C:\\a")
-                .value()
-                .orElseThrow();
-        PaneSpec spec = new PaneSpec(new PaneId("p1"), Optional.of(PaneFixtures.CMD.id()), Optional.of(a));
-
-        // when
-        onEdt(() -> {
-            controller.start(spec);
-            return null;
-        });
-        drain();
-
-        // then
-        StartRequest request = sessions.requests.getLast();
-        assertThat(request.profile()).contains(PaneFixtures.CMD.id());
-        assertThat(request.dir()).contains(new WorkingDir.At(a));
-        assertThat(request.rememberAsDefault()).isFalse();
-        assertThat(onEdt(controller::running)).isTrue();
-    }
-
-    @Test
-    @DisplayName("창 안으로 포커스가 들어오면 Host 에 한 번 알린다(클릭 포커스, #89)")
-    void focusGainedNotifiesHost() {
-        // given
-        startAndConnect();
-
-        // when
-        onEdt(() -> {
-            controller.focusChanged(true);
-            controller.focusChanged(true);
-            controller.focusChanged(false);
-            controller.focusChanged(true);
-            return null;
-        });
-
-        // then
-        assertThat(host.focusGained.get()).isEqualTo(2);
     }
 
     private void startAndConnect() {
