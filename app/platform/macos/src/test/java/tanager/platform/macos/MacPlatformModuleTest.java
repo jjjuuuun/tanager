@@ -68,4 +68,11 @@ class MacPlatformModuleTest {
                         .translate(path, new tanager.domain.history.ShellEnvironment.Wsl("U")))
                 .isEmpty();
     }
+
+    @Test
+    @DisplayName("appearance() 는 애니메이션을 켠다(M7 에서 OS 설정을 읽는다)")
+    void appearanceEnablesAnimations() {
+        // when / then
+        assertThat(new MacPlatformModule().appearance().animations()).isTrue();
+    }
 }

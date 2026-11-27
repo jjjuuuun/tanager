@@ -49,6 +49,11 @@ class PlatformSelectionTest {
         public tanager.application.port.out.PathTranslation paths() {
             throw new UnsupportedOperationException("선택 테스트에서는 쓰지 않는다");
         }
+
+        @Override
+        public tanager.application.port.out.SystemAppearance appearance() {
+            throw new UnsupportedOperationException("선택 테스트에서는 쓰지 않는다");
+        }
     }
 
     private static final PlatformModule WIN = new FakePlatform("windows", "Windows");

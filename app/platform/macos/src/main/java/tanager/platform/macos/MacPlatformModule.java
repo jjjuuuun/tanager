@@ -9,6 +9,7 @@ import tanager.application.port.out.PathTranslation;
 import tanager.application.port.out.PlatformDirs;
 import tanager.application.port.out.PlatformModule;
 import tanager.application.port.out.ShellIntegration;
+import tanager.application.port.out.SystemAppearance;
 import tanager.domain.session.ShellProfile;
 import tanager.domain.session.WorkingDir;
 
@@ -53,5 +54,11 @@ public final class MacPlatformModule implements PlatformModule {
     @Override
     public PathTranslation paths() {
         return (from, to) -> from.env().equals(to) ? Optional.of(from) : Optional.empty();
+    }
+
+    /** M7 에서 NSWorkspace 의 '동작 줄이기'를 읽는다. 그때까지 애니메이션을 켠다. */
+    @Override
+    public SystemAppearance appearance() {
+        return SystemAppearance.DEFAULT;
     }
 }

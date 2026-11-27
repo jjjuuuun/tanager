@@ -32,6 +32,7 @@ public final class FakePlatformModule implements PlatformModule {
     private Optional<ShellIntegration> customIntegration = Optional.empty();
     private CountDownLatch shellsGate;
     private Optional<RuntimeException> shellsFailure = Optional.empty();
+    private SystemAppearance appearance = SystemAppearance.DEFAULT;
 
     public FakePlatformModule(List<ShellProfile> shells) {
         this.shells = List.copyOf(shells);
@@ -67,6 +68,12 @@ public final class FakePlatformModule implements PlatformModule {
 
     private static ShellIntegration defaultIntegrationFor(Path appData) {
         return FakeShellIntegration.installedAt(appData.resolve("shell-integration"));
+    }
+
+    /** {@code appearance()} 가 돌려줄 OS 외관 설정. 주지 않으면 {@link SystemAppearance#DEFAULT}(애니메이션 켬). */
+    public synchronized FakePlatformModule withAppearance(SystemAppearance appearance) {
+        this.appearance = Objects.requireNonNull(appearance, "appearance");
+        return this;
     }
 
     /** {@code launchCommand} 에 넘어온 인자 하나. */
@@ -155,5 +162,10 @@ public final class FakePlatformModule implements PlatformModule {
     @Override
     public PathTranslation paths() {
         return (from, to) -> PathTranslator.translate(from, to, WslMount.DEFAULT);
+    }
+
+    @Override
+    public synchronized SystemAppearance appearance() {
+        return appearance;
     }
 }
