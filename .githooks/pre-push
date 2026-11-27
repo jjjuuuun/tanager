@@ -24,9 +24,10 @@ while read -r local_ref _ remote_ref _; do
 done
 
 if $pushes_branch && [[ -f ./gradlew ]]; then
-  # WSL/Linux 에서는 Windows 전용(ConPTY · PowerShell) 테스트를 뺀다. Windows 에서 돌릴 때는 전부.
+  # WSL/Linux 에서는 Windows 전용(ConPTY · PowerShell) 테스트를 뺀다. 처리량 측정(perf)은 다른 빌드와 겹친 부하에 흔들려
+  # push 를 막은 적이 있어(#145) 로컬에서는 빼고 CI 에서만 돌린다.
   case "$(uname -s)" in
-    Linux*|Darwin*) sh ./gradlew --quiet check -PexcludeTags=windows,wsl ;;
-    *)              sh ./gradlew --quiet check ;;
+    Linux*|Darwin*) sh ./gradlew --quiet check -PexcludeTags=windows,wsl,perf ;;
+    *)              sh ./gradlew --quiet check -PexcludeTags=perf ;;
   esac
 fi

@@ -62,7 +62,7 @@ OS 차이(셸 탐지, 경로 변환, 앱 디렉터리, 셸 통합, 기동 명령
 - 설계: DDD(전략적 설계 + 전술 패턴 일부), 구현: TDD, 코드: Functional Core / Imperative Shell. 세부 규칙은 `.claude/rules/` (Java 파일·테스트·플랫폼 파일을 열 때 해당 규칙이 자동 로드됨).
 - 기능 구현은 `/tdd [이슈번호] <설명>` — (이슈 없으면 `/issue`) → architect → test-author → implementer → reviewer → `/pr`.
 - **브랜치**: `dev` 는 통합 브랜치(작업 브랜치 → dev squash), `main` 은 릴리스 전용이자 GitHub 기본 브랜치(dev → main merge commit + 태그). PR 은 항상 `--base` 를 명시한다(GitHub 화면의 기본 base 는 main). 긴급 수정만 `hotfix/*` → main.
-- **역할**: 이슈·브랜치·커밋·푸시·PR·CI 대응·리뷰 코멘트, 그리고 **작업 PR 의 dev squash 병합**(CI green · 차단 0건일 때)은 Claude. **사용자는 마일스톤마다 릴리스 PR(dev → main) 병합 하나만** 한다. hotfix → main · 역병합(merge commit) · 태그 · Release · PR 닫기는 Claude 가 묻지 않고 한다(2026-11-25). 권장안이 있는 선택은 고르고 결과만 알린다. 세부는 `.claude/rules/git.md`.
+- **역할**: 이슈·브랜치·커밋·푸시·PR·CI 대응·리뷰 코멘트, 그리고 **작업 PR 의 dev squash 병합**(CI green · 차단 0건일 때)은 Claude. **사용자는 v1.0.0 이상 릴리스 PR(dev → main) 병합만** 한다 — v1.0.0 미만 릴리스 병합 · hotfix → main · 역병합(merge commit) · 태그 · Release · PR 닫기는 Claude 가 묻지 않고 한다(2026-11-25, 2026-11-27 개정). 6시간마다 메일로 상황 보고. 서브에이전트로 속도를 내되 Gradle 동시 실행은 2개까지(WSL 10GB, OOM 주의). 권장안이 있는 선택은 고르고 결과만 알린다. 세부는 `.claude/rules/git.md`.
 - 커밋 `/commit`, 이슈 `/issue`, PR `/pr`, 릴리스 `/release`, 결정 기록 `/adr`. 마일스톤은 `.github/milestones.json`(SDD §13.1)이 원본.
 - 여러 모듈을 동시에 바꾸는 큰 기능은 에이전트 팀을 쓸 수 있다(실험 기능, 기본 꺼짐). 켜는 법과 역할 분담은 `docs/plans/01-프로젝트-구성-설계.html` §11.
 
