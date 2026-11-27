@@ -694,6 +694,33 @@ class PaneControllerTest {
         assertThat(host.layout).isEmpty();
     }
 
+    @Test
+    @DisplayName("머리줄 왼쪽 손잡이(≡)와 머리줄 · 경로 글자가 끌기 손잡이다 — 손잡이는 툴팁 · 이동 커서를 갖는다(#151)")
+    void headerOffersDragHandles() {
+        // when
+        List<JComponent> handles = onEdt(controller::dragHandles);
+        JComponent grip = onEdt(controller::grip);
+
+        // then
+        assertThat(handles).contains(grip, controller.header());
+        String tooltip = onEdt(grip::getToolTipText);
+        assertThat(tooltip).isEqualTo("끌어서 옮기기 — 다른 창의 가장자리에 놓으면 그쪽으로, 가운데에 놓으면 교환");
+        assertThat(onEdt(() -> grip.getCursor().getType())).isEqualTo(java.awt.Cursor.MOVE_CURSOR);
+    }
+
+    @Test
+    @DisplayName("손잡이를 두 번 눌러도 머리줄처럼 줌을 알린다 — 끌지 않은 클릭은 그대로다(#151)")
+    void gripDoubleClickZooms() {
+        // when
+        onEdt(() -> {
+            click(controller.grip(), 2, MouseEvent.BUTTON1, false);
+            return null;
+        });
+
+        // then
+        assertThat(host.layout).containsExactly(new LayoutAction.Zoom());
+    }
+
     // 누름 · 뗌 · 클릭을 차례로 보낸다. 팝업 트리거는 누름에만 싣는다(뗌에서 또 띄우지 않게)
     private static void click(JComponent target, int count, int button, boolean popup) {
         long now = System.currentTimeMillis();

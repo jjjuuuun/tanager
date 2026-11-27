@@ -12,17 +12,18 @@ import javax.swing.Icon;
 import tanager.ui.theme.ColorToken;
 import tanager.ui.theme.ThemeColors;
 
-/** 창 머리줄 버튼의 인라인 아이콘(#149) — 글꼴에 기대지 않게 직접 그린다. 색은 테마 토큰이다. */
+/** 창 머리줄 버튼 · 끌기 손잡이의 인라인 아이콘(#149 · #151) — 글꼴에 기대지 않게 직접 그린다. 색은 테마 토큰이다. */
 final class HeaderIcon implements Icon {
     private static final int SIZE = 14;
     private static final float STROKE = 1.4f;
 
-    /** 그릴 모양: 오른쪽 분할 ▥ · 아래 분할 ▤ · 줌 □ · 닫기 ×. */
+    /** 그릴 모양: 오른쪽 분할 ▥ · 아래 분할 ▤ · 줌 □ · 닫기 × · 끌기 손잡이 ≡. */
     enum Shape {
         SPLIT_RIGHT,
         SPLIT_DOWN,
         ZOOM,
-        CLOSE
+        CLOSE,
+        GRIP
     }
 
     private final Shape shape;
@@ -59,6 +60,13 @@ final class HeaderIcon implements Icon {
                     float pad = 1.5f;
                     g2.draw(new Line2D.Float(left + pad, top + pad, left + span - pad, top + span - pad));
                     g2.draw(new Line2D.Float(left + span - pad, top + pad, left + pad, top + span - pad));
+                }
+                case GRIP -> {
+                    float pad = 1.5f;
+                    for (int line = 1; line <= 3; line++) {
+                        float y0 = top + span * line / 4f;
+                        g2.draw(new Line2D.Float(left + pad, y0, left + span - pad, y0));
+                    }
                 }
             }
         } finally {

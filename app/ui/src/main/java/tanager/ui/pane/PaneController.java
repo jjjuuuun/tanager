@@ -3,6 +3,7 @@ package tanager.ui.pane;
 import java.awt.BasicStroke;
 import java.awt.BorderLayout;
 import java.awt.Component;
+import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.FontMetrics;
 import java.awt.Graphics;
@@ -115,6 +116,8 @@ public final class PaneController {
 
     private final JLabel header = new JLabel();
     private final JLabel warning = new JLabel(WARNING_MARK);
+    // 머리줄 왼쪽 끌기 손잡이(#151). 머리줄 어디를 끌어도 되지만 끌 수 있다는 표시와 안내를 여기에 둔다
+    private final JLabel grip = new JLabel(new HeaderIcon(HeaderIcon.Shape.GRIP, ColorToken.MUTED));
     private final JPanel headerBar = new JPanel(new BorderLayout());
     // 머리줄 오른쪽 버튼(#149): 오른쪽 분할 · 아래 분할 · 줌 · 닫기
     private final Map<LayoutAction, JButton> headerButtons = new LinkedHashMap<>();
@@ -246,6 +249,19 @@ public final class PaneController {
     /** 머리줄 글자(테스트용). */
     JLabel header() {
         return header;
+    }
+
+    /**
+     * 끌어서 이 창을 옮기는 손잡이들(#151): 왼쪽 손잡이(≡) · 머리줄 · 경로 글자 · 경고 표시. 버튼은 빠진다. 끌기 판정은 창 영역({@code
+     * LayoutView#addDragHandle})이 한다 — 여기서는 클릭(포커스) · 더블클릭(줌)만 받는다.
+     */
+    public List<JComponent> dragHandles() {
+        return List.of(grip, headerBar, header, warning);
+    }
+
+    /** 끌기 손잡이(테스트용). */
+    JComponent grip() {
+        return grip;
     }
 
     /** 머리줄 버튼(테스트용). */
@@ -494,13 +510,18 @@ public final class PaneController {
         header.setForeground(ThemeColors.get(ColorToken.MUTED));
         warning.setForeground(ThemeColors.get(ColorToken.WARN));
         warning.setVisible(false);
+        grip.setToolTipText(Msg.PANE_DRAG.text());
+        grip.setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
+        grip.setBorder(new EmptyBorder(0, 0, 0, 6));
+        headerBar.add(grip, BorderLayout.WEST);
         headerBar.add(header, BorderLayout.CENTER);
         headerBar.add(headerRight(), BorderLayout.EAST);
-        // 라벨은 툴팁 때문에 마우스 사건을 직접 받는다 — 머리줄 어디를 눌러도 같게 셋 모두에 단다
+        // 라벨은 툴팁 때문에 마우스 사건을 직접 받는다 — 머리줄 어디를 눌러도 같게 넷 모두에 단다
         MouseAdapter headerMouse = headerMouse();
         headerBar.addMouseListener(headerMouse);
         header.addMouseListener(headerMouse);
         warning.addMouseListener(headerMouse);
+        grip.addMouseListener(headerMouse);
         // 폭이 바뀌면 경로 줄임을 다시 계산한다
         header.addComponentListener(new ComponentAdapter() {
             @Override

@@ -55,6 +55,7 @@ public enum Msg {
     LAYOUT_SWAP("layout.swap"),
     LAYOUT_WITH_KEY("layout.withKey"),
     LAYOUT_KEYS_TITLE("layout.keysTitle"),
+    PANE_DRAG("pane.drag"),
     PANE_MENU_SPLIT("pane.menu.split"),
     PANE_MENU_SPLIT_WITH("pane.menu.splitWith"),
     PANE_MENU_SWAP("pane.menu.swap"),

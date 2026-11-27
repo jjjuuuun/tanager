@@ -13,6 +13,7 @@ import tanager.application.port.in.OpenPaneUseCase;
 import tanager.application.port.out.OpenPlacement;
 import tanager.domain.history.ShellEnvironment;
 import tanager.domain.history.WorkspacePath;
+import tanager.domain.layout.DropZone;
 import tanager.domain.session.ProfileId;
 import tanager.domain.shared.PaneId;
 import tanager.domain.shared.Result;
@@ -52,6 +53,11 @@ final class PaneOpener implements SidebarOpener {
     @Override
     public void openSame(PaneId pane, OpenPlacement placement) {
         run(() -> useCase.openSame(pane, Optional.of(placement)));
+    }
+
+    /** 창 영역에 놓은 폴더(#151): 놓은 창 {@code zone} 의 변에 그 경로를 연다. 그사이 창이 닫혔으면 알린다. EDT 에서 부른다. */
+    void openAt(WorkspacePath path, DropZone zone) {
+        run(() -> useCase.openAt(path, zone));
     }
 
     @Override
