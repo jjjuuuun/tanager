@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "history": {
     "entries": { "C:\\work\\infra": { "env": { "kind": "windows" }, "visitCount": 5 } }
   }

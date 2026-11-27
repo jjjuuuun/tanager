@@ -1,8 +1,8 @@
 # 0013. 이력 저장: state.json 의 history · 저장 시점 · 손상 처리
 
-- 상태: 채택(#78, 2026-11-26) — 형식 · 원자적 쓰기 · `.bak` · 손상 · 상위 버전 · 잠금은 #78 에서, 저장 시점(throttle) · 불러오기 전 방문 · 종료 시 저장은 #79(2026-11-27)에서 구현했다.
+- 상태: 채택(#78, 2026-11-26) · 개정(#79, #178) — 형식 · 원자적 쓰기 · `.bak` · 손상 · 상위 버전 · 잠금은 #78 에서, 저장 시점(throttle) · 불러오기 전 방문 · 종료 시 저장은 #79(2026-11-27)에서 구현했다.
 - 날짜: 2026-11-26
-- 관련: #78 · #79, FR-HIS-01 · FR-RES-01 · FR-RES-04(이력 부분), NFR-03, SDD §6.4 · §9.1 · §9.2 · §9.4, ADR-0009 · 0012
+- 관련: #78 · #79 · #178, FR-HIS-01 · FR-RES-01 · FR-RES-02 · FR-RES-03 · FR-RES-04, NFR-03, SDD §6.4 · §9.1 · §9.2 · §9.4, ADR-0009 · 0012
 
 ## 맥락
 SDD 는 이력 · 작업 공간 · 창을 한 파일(`state.json`)에 둔다. 작업 공간 · 창은 M5 에서 쓴다. M3 는 이력만 먼저 저장해야 한다. 재시작하면 이력이 사라질 경우 사이드바 트리가 쓸모없기 때문이다.
@@ -62,7 +62,7 @@ SDD 는 이력 · 작업 공간 · 창을 한 파일(`state.json`)에 둔다. �
 
 ## 결과
 - FR-RES-01 · 04 의 이력 부분이 M3 에서 먼저 충족된다. M5 는 같은 adapter 가 `WorkspaceRepository` 도 구현해 같은 파일의 다른 키를 쓴다. 그때 "다른 최상위 키 보존"은 두 저장소가 한 문서를 나눠 쓰는 구조로 바뀐다.
-- 계약은 `HistoryRepositoryContract` 로 고정한다. 메모리 Fake(`InMemoryHistoryRepository`)와 `JsonStateRepository` 가 함께 통과한다. 저장 거부 규칙(load 전 · `READ_ONLY` · load 실패 뒤 `save` → `ReadOnly`)도 계약에 있고, 구현마다 훅 `arrangeReadOnly()` · `arrangeLoadFailure()` 로 상황을 만든다(Json 은 v2 픽스처 · `state.json` 자리의 폴더). 손상 · 잠금 · 백업 · 형식은 `JsonStateRepositoryTest` 가 본다.
+- 계약은 `HistoryRepositoryContract` 로 고정한다. 메모리 Fake(`InMemoryHistoryRepository`)와 `JsonStateRepository` 가 함께 통과한다. 저장 거부 규칙(load 전 · `READ_ONLY` · load 실패 뒤 `save` → `ReadOnly`)도 계약에 있고, 구현마다 훅 `arrangeReadOnly()` · `arrangeLoadFailure()` 로 상황을 만든다(Json 은 상위 버전 픽스처 — #178 부터 v3 — · `state.json` 자리의 폴더). 손상 · 잠금 · 백업 · 형식은 `JsonStateRepositoryTest` 가 본다.
 - `save` 는 블로킹 I/O 다. actor · EDT 에서 부르지 않는다(ADR-0012).
 - POSIX(WSL · macOS)에서는 한 프로세스가 같은 파일에 연 채널 하나를 닫으면 그 프로세스의 잠금이 OS 수준에서 모두 풀린다. 한 프로세스에 저장소가 하나뿐이면 문제가 없다. 그래서 bootstrap 은 저장소를 하나만 만들고, **같은 프로세스에 같은 파일의 저장소 둘을 두는 것은 지원하지 않는다**. 같은 JVM 의 두 저장소 테스트는 JVM 잠금 표 수준만 검증하고, 프로세스 사이 잠금은 자식 JVM 이 `state.lock` 을 쥐는 테스트가 본다.
 
@@ -71,3 +71,27 @@ SDD 는 이력 · 작업 공간 · 창을 한 파일(`state.json`)에 둔다. �
 - `HistorySaver` 의 예약 · 저장 중 여부 · 저장 중 기한 도래 · 미저장 표시 · 파일에 있다고 아는 이력 · 쓰는 중인 이력 · 직전 실패 · 불러오는 중 여부 · 불러오는 동안 방문 여부는 도메인 상태가 아니라 `HistoryRepository` · `Scheduler` 를 부르는 시점을 정하는 상태다. 이벤트 콜백(actor) · 예약(스케줄러) · 저장(I/O) · `flush`(종료) 네 스레드가 만지므로 모두 `monitor` 하나로 지키고, 블로킹 I/O(`save`)는 monitor 밖에서 한다.
 - StateActor 에 넣지 않은 까닭: 저장 결과를 기다리는 동안 actor 를 막을 수 없고, 저장 시점은 도메인 · 트리에 보이는 상태가 아니다. adapter 에 두면 throttle 규칙(FR-RES-01 "1초 안")이 저장소 구현마다 갈라진다.
 - 이 예외는 위 조건(출력 포트 호출 시점 조율 · monitor 하나 · I/O 는 monitor 밖)을 모두 만족할 때만 쓴다. 도메인 규칙을 담는 상태는 여전히 StateActor 의 명령으로 바꾼다.
+
+## 개정 (#178, 2026-11-28) — state.json v2: 작업 공간 · 창 상태
+- **버전**: `schemaVersion` 을 2 로 올린다. v1 문서(SDD §9.2 v1 예시)의 workspace 모양(문자열 `lastCwd`, 탭 `title`)과 v2 모양이 달라 의미가 바뀌기 때문이다(SDD §9.4).
+  - 위 규칙의 "1 보다 큰 정수"는 이제 "2 보다 큰 정수"다 — 상위 버전(`NewerSchema`) · 뼈대 검사 생략 기준이 `schemaVersion > 2` 가 된다.
+  - 대가: v0.3 · v0.4 는 v2 파일을 읽기 전용으로 연다(위 다운그레이드 보호). 이력은 보이지만 저장되지 않는다. v0.5 가 v1 파일에 처음 저장하기 직전의 v1 파일은 `.bak` 으로 남는다.
+- **형식(v2)**: v1 에 다음을 더하고 바꾼다.
+  - `workspace = {"activeTab":n,"tabs":[{"id":"t1","name":s|null,"focused":"p1","zoomed":"p1"|null,"layout":L}],"panes":{"p1":{"profile":s|null,"lastCwd":{"env":{…},"path":"…"}|null}}}`, `L = {"pane":"p1"} | {"split":"ROW"|"COLUMN","ratio":0.1~0.9,"first":L,"second":L}`.
+  - 탭 `name` 이 `null` 이면 자동 이름(포커스 창 제목). `lastCwd` 는 이력 항목과 같은 `env` 표기를 써서 프로파일이 사라져도 경로의 환경을 안다.
+  - `nextPane` · `nextTab` 은 저장하지 않고 읽을 때 쓰인 가장 큰 `p<n>` · `t<n>` 다음으로 계산한다(`Workspace.restore`). 재시작 전 창의 이벤트는 남아 있지 않으므로 닫은 번호를 다시 써도 된다.
+  - `window = {"x","y","width","height","maximized","sidebar":{"visible","width"},"toolkit":{"visible","width"}}`. 좌표 넷이 모두 없으면 OS 가 정한 자리다. 빠진 필드는 기본값(`WindowState.DEFAULT`: 사이드바 236px · 도구함 264px, 둘 다 보임).
+- **두 포트가 한 문서를 나눠 쓴다**: `JsonStateRepository` 가 `HistoryRepository` 와 `WorkspaceRepository`(`loadWorkspace` · `saveWorkspace` — 한 클래스가 둘을 구현해 `load` 와 시그니처가 겹치지 않게)를 함께 구현한다.
+  - 읽기 · 잠금 · 손상 판정 · `.bak` 복구 · 마이그레이션은 문서 단위로 한 번 한다. 한 번 읽은 문서의 두 부분은 각각 한 번씩 꺼낸다 — `load` 와 `loadWorkspace` 가 어느 순서로 와도 파일을 한 번만 읽고, 이미 꺼낸 쪽을 다시 부르면 문서를 다시 읽는다. 문서 단위의 알림(복구 · 상위 버전 · 잠금)은 이력 쪽 `HistoryLoadNotice` 에만 온다.
+  - 저장 거부 규칙은 두 포트가 같다(마지막 문서 읽기가 `WRITABLE` 일 때만). 어댑터가 두 부분의 마지막 값(읽었거나 저장에 성공한 값)을 들고 있다가 어느 쪽 save 든 문서 전체를 한 번에 원자적으로 쓴다(`synchronized`). 쓰기가 실패하면 그 부분의 마지막 값을 바꾸지 않는다.
+  - "모르는 최상위 키 보존"은 `schemaVersion` · `history` · `workspace` · `window` 를 뺀 키에 적용한다. `window` 객체 안의 모르는 필드(예: M6 의 `toolkit.tab`)는 load 때 읽은 객체 위에 아는 필드만 덮어써 보존한다. workspace 안의 모르는 필드는 보존하지 않는다(이력 항목과 같은 한계). 작업 공간이 없으면 읽은 `window` 를 그대로 다시 쓴다.
+- **마이그레이션 위치**: `Migration(from, to)` 는 JSON 트리 → JSON 트리 순수 함수이고 체인(`Migrations`)은 adapter/persistence 안에 둔다. Jackson 이 domain · application 에 들어가지 않게 하려는 것이다. 뼈대 검사 뒤, 해석 전에 돈다. `schemaVersion` 이 없으면 1 로 본다. 올렸으면 `Migrated(from, 2)` 를 알린다.
+  - v1 → v2: history 는 그대로. 탭 `title` → `name`(이미 `name` 이 있으면 `title` 을 버림). 문자열 `lastCwd` 는 프로파일 ID 로 환경을 정해 `{env, path}` 로 바꾼다(`wsl:<배포판>` → WSL, `powershell` · `cmd` → Windows). 정할 수 없으면 workspace 만 버리고 `PartDiscarded("workspace", …)`. 그 밖의 모양은 그대로 두어 v2 읽기가 판정한다.
+- **부분 손상**: workspace · window 의 값이 틀려도 문서 전체를 손상으로 보지 않는다(옆으로 옮기지 않고 `.bak` 으로 바꾸지 않는다). 이력은 그대로 읽는다.
+  - 창의 명세(`profile` · `lastCwd`)가 틀렸거나 명세가 없거나 이미 다른 자리에 쓰인 창은 트리에서 빼고 형제로 축약한다. 틀린 분할 노드(모르는 방향 · 범위 밖 비율 · 자식 없음)는 그 아래 창과 함께 뺀다. 뺀 창 수를 `PanesDropped(n)` 으로 알린다.
+  - 창이 모두 빠진 탭 · ID 가 없거나 겹치는 탭은 버린다. 남는 탭이 없으면 스냅샷은 비고 `PartDiscarded("workspace", …)`. workspace 가 객체가 아니거나 `tabs` 가 배열이 아니거나 `panes` 가 객체가 아니어도 같다.
+  - 고칠 수 있는 값은 고친다: 포커스가 트리에 없으면 첫 창, 줌한 창이 없으면 줌 없음, `activeTab` 이 범위 밖이거나 그 탭이 버려졌으면 0, 틀린 탭 이름은 자동 이름.
+  - window 의 값이 틀리면(객체가 아님 · 좌표 일부만 · 크기 < 1 · 폭 < 0 · 형식 오류) 창 상태만 기본값으로 하고 `PartDiscarded("window", …)`.
+- **뼈대 손상 · `.bak` 복구**(FR-RES-04)는 위 규칙 그대로 문서 단위로 한다. `.bak` 으로 복구하면 이력과 작업 공간을 모두 되살린다. `.bak` 이 v1 이면 복구한 뒤 마이그레이션한다.
+- 계약은 `WorkspaceRepositoryContract` 로 고정한다. 메모리 Fake(`InMemoryWorkspaceRepository`)와 `JsonStateRepository` 가 함께 통과한다. 마이그레이션은 `MigrationV1ToV2Test`, 부분 손상 · 두 포트 나눠 쓰기는 `JsonStateWorkspaceTest` 가 본다. 픽스처 `v1-history-only.json`(v0.4 가 쓴 파일) · `v1-sdd-example.json` · `v2.json` 은 지우지 않는다. 상위 버전 픽스처는 `v3-*.json` 이다.
+- 시작할 때 복원(스냅샷으로 창을 띄우기 · 화면 밖 판정)과 저장 시점은 #179 의 범위다.

@@ -25,7 +25,10 @@ import tanager.application.port.out.HistoryLoadNotice;
 import tanager.application.port.out.HistoryRepository;
 import tanager.application.port.out.HistoryStoreError;
 import tanager.application.port.out.LoadedHistory;
+import tanager.application.port.out.LoadedWorkspace;
 import tanager.application.port.out.StoreAccess;
+import tanager.application.port.out.WorkspaceLoadNotice;
+import tanager.application.port.out.WorkspaceRepository;
 import tanager.domain.history.Alias;
 import tanager.domain.history.HistoryPolicy;
 import tanager.domain.history.ShellEnvironment;
@@ -33,6 +36,7 @@ import tanager.domain.history.VisitedDirectory;
 import tanager.domain.history.WorkHistory;
 import tanager.domain.history.WorkspacePath;
 import tanager.domain.shared.Result;
+import tanager.domain.workspace.WorkspaceSnapshot;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectWriter;
@@ -41,21 +45,23 @@ import tools.jackson.databind.node.ArrayNode;
 import tools.jackson.databind.node.ObjectNode;
 
 /**
- * state.json 의 history 부분(ADR-0013, SDD §9.2)을 읽고 쓴다. 앱이 쓰는 파일이라 손상은 .bak → 옆으로 옮기기로 복구하고, 상위 버전 ·
- * 다른 인스턴스(state.lock)면 읽기 전용으로 연다. .bak 으로 복구하면 손상 원본을 복사해 두고 state.json 을 .bak 내용으로 원자적으로 바꾼다 —
- * 저장 없이 끝나도 다음 실행이 이력을 잃지 않게. 저장할 때 load 때 읽은 다른 최상위 키(workspace · window …)와 항목별 sources 를 그대로
- * 다시 쓴다(디스크를 다시 읽지 않는다). .bak 은 인스턴스(실행)마다 첫 저장 직전에 한 번 만든다.
+ * state.json(ADR-0013, SDD §9.2)을 읽고 쓴다. history 부분은 {@link HistoryRepository}, workspace · window 부분은 {@link
+ * WorkspaceRepository} 로 나눠 내보내지만 문서는 하나다 — 읽기 · 잠금 · 손상 판정 · .bak 복구 · 마이그레이션은 문서 단위로 한 번 하고, 어느 쪽
+ * 저장이든 두 부분의 마지막 값을 한 번에 원자적으로 쓴다. 앱이 쓰는 파일이라 손상은 .bak → 옆으로 옮기기로 복구하고, 상위 버전 · 다른
+ * 인스턴스(state.lock)면 읽기 전용으로 연다. .bak 으로 복구하면 손상 원본을 복사해 두고 state.json 을 .bak 내용으로 원자적으로 바꾼다 — 저장 없이
+ * 끝나도 다음 실행이 이력을 잃지 않게. 저장할 때 load 때 읽은 모르는 최상위 키 · window 의 모르는 필드 · 항목별 sources 를 그대로 다시 쓴다(디스크를
+ * 다시 읽지 않는다). .bak 은 인스턴스(실행)마다 첫 저장 직전에 한 번 만든다.
  */
-public final class JsonStateRepository implements HistoryRepository, AutoCloseable {
+public final class JsonStateRepository implements HistoryRepository, WorkspaceRepository, AutoCloseable {
     private static final System.Logger LOG = System.getLogger(JsonStateRepository.class.getName());
-    private static final long SCHEMA_VERSION = 1;
+    private static final long SCHEMA_VERSION = Migrations.CURRENT;
 
     private static final String KEY_SCHEMA_VERSION = "schemaVersion";
     private static final String KEY_HISTORY = "history";
+    private static final String KEY_WORKSPACE = "workspace";
+    private static final String KEY_WINDOW = "window";
     private static final String KEY_ENTRIES = "entries";
     private static final String KEY_SOURCES = "sources";
-    private static final String KIND_WSL = "wsl";
-    private static final String KIND_WINDOWS = "windows";
     private static final String SOURCE_SHELL = "shell";
 
     private static final DateTimeFormatter CORRUPT_SUFFIX =
@@ -66,7 +72,7 @@ public final class JsonStateRepository implements HistoryRepository, AutoCloseab
 
     // 저장 순서: 환경 → 경로. 파일 내용이 Map 순회 순서와 무관하게 결정적이다.
     private static final Comparator<VisitedDirectory> FILE_ORDER = Comparator.comparing(
-                    (VisitedDirectory v) -> envOrderKey(v.path().env()))
+                    (VisitedDirectory v) -> Environments.orderKey(v.path().env()))
             .thenComparing(v -> v.path().path());
 
     private final Path file;
@@ -83,6 +89,14 @@ public final class JsonStateRepository implements HistoryRepository, AutoCloseab
     private ObjectNode otherKeys = MAPPER.createObjectNode();
     private Map<WorkspacePath, ArrayNode> sources = Map.of();
     private boolean backupTaken;
+    // 문서의 두 부분: 마지막으로 읽었거나 저장에 성공한 값. 어느 쪽 저장이든 둘을 함께 쓴다
+    private WorkHistory lastHistory;
+    private Optional<WorkspaceSnapshot> snapshot = Optional.empty();
+    // load 때 읽은 window 객체 — 저장할 때 모르는 필드를 보존하는 바탕
+    private Optional<ObjectNode> windowBase = Optional.empty();
+    // 한 번의 문서 읽기에서 아직 꺼내지 않은 부분. 두 load 가 어느 순서로 와도 문서를 한 번만 읽는다
+    private Optional<LoadedHistory> unreadHistory = Optional.empty();
+    private Optional<LoadedWorkspace> unreadWorkspace = Optional.empty();
 
     /** {@code file} 은 보통 {@code PlatformDirs.appData()/state.json}. 만들 때 파일을 건드리지 않는다. */
     public JsonStateRepository(Path file, HistoryPolicy policy, InstantSource clock) {
@@ -98,6 +112,7 @@ public final class JsonStateRepository implements HistoryRepository, AutoCloseab
         this.copier = Objects.requireNonNull(copier, "copier");
         this.backup = file.resolveSibling(file.getFileName() + ".bak");
         this.lockFile = file.resolveSibling("state.lock");
+        this.lastHistory = WorkHistory.empty(policy);
     }
 
     /** 손상 파일을 옆으로 옮긴다(.bak 도 못 쓸 때). 대상이 이미 있으면 실패해야 한다. */
@@ -122,10 +137,50 @@ public final class JsonStateRepository implements HistoryRepository, AutoCloseab
         record Closed() implements Mode {}
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * <p>바로 앞의 {@link #loadWorkspace} 가 읽은 문서의 이력 부분을 아직 꺼내지 않았으면 그것을 돌려주고, 아니면 문서를 다시 읽는다.
+     */
     @Override
     public synchronized Result<LoadedHistory, HistoryStoreError> load() {
+        Optional<LoadedHistory> unread = unreadHistory;
+        unreadHistory = Optional.empty();
+        if (unread.isPresent()) {
+            return Result.ok(unread.get());
+        }
+        return readDocument().map(document -> {
+            unreadWorkspace = Optional.of(document.workspace());
+            return document.history();
+        });
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>바로 앞의 {@link #load} 가 읽은 문서의 작업 공간 부분을 아직 꺼내지 않았으면 그것을 돌려주고, 아니면 문서를 다시 읽는다.
+     */
+    @Override
+    public synchronized Result<LoadedWorkspace, HistoryStoreError> loadWorkspace() {
+        Optional<LoadedWorkspace> unread = unreadWorkspace;
+        unreadWorkspace = Optional.empty();
+        if (unread.isPresent()) {
+            return Result.ok(unread.get());
+        }
+        return readDocument().map(document -> {
+            unreadHistory = Optional.of(document.history());
+            return document.workspace();
+        });
+    }
+
+    private record Document(LoadedHistory history, LoadedWorkspace workspace) {}
+
+    // 문서 단위로 한 번: 잠금 → 읽기 → 손상이면 .bak 복구 → 마이그레이션 → 두 부분 해석
+    private Result<Document, HistoryStoreError> readDocument() {
         // 이번 load 가 끝까지 성공해야 쓸 수 있다 — 실패하면 이전 load 의 다른 최상위 키로 덮어쓰지 않는다
         mode = new Mode.ReadOnly(HistoryStoreError.ReadOnlyReason.LOAD_FAILED);
+        unreadHistory = Optional.empty();
+        unreadWorkspace = Optional.empty();
         LockState lockState = holdLock();
         Disk primary;
         try {
@@ -145,6 +200,21 @@ public final class JsonStateRepository implements HistoryRepository, AutoCloseab
                 }
                 root = recovered.value().orElseThrow();
             }
+        }
+        List<WorkspaceLoadNotice> workspaceNotices = new ArrayList<>();
+        if (root.isPresent()) {
+            long version = version(root.get());
+            Migration.Step migrated = Migrations.upgrade(root.get(), version);
+            if (version < SCHEMA_VERSION) {
+                LOG.log(
+                        System.Logger.Level.INFO,
+                        "state.json 을 schemaVersion {0} 에서 {1} 로 읽었다: {2}",
+                        version,
+                        SCHEMA_VERSION,
+                        file);
+            }
+            root = Optional.of(migrated.root());
+            workspaceNotices.addAll(migrated.notices());
         }
         Contents contents = root.map(JsonStateRepository::parse).orElseGet(Contents::empty);
         if (contents.skipped() > 0) {
@@ -169,34 +239,74 @@ public final class JsonStateRepository implements HistoryRepository, AutoCloseab
                 readOnly = Optional.of(HistoryStoreError.ReadOnlyReason.LOCK_UNAVAILABLE);
             }
         }
+        WorkspaceJson.Read workspace =
+                WorkspaceJson.read(root.map(r -> r.get(KEY_WORKSPACE)), root.map(r -> r.get(KEY_WINDOW)));
+        workspaceNotices.addAll(workspace.notices());
         mode = readOnly.<Mode>map(Mode.ReadOnly::new).orElseGet(Mode.Writable::new);
-        otherKeys = root.map(JsonStateRepository::withoutHistory).orElseGet(MAPPER::createObjectNode);
+        otherKeys = root.map(JsonStateRepository::unknownKeys).orElseGet(MAPPER::createObjectNode);
+        windowBase = root.map(r -> r.get(KEY_WINDOW))
+                .filter(ObjectNode.class::isInstance)
+                .map(w -> ((ObjectNode) w).deepCopy());
         sources = contents.sources();
+        lastHistory = WorkHistory.restore(contents.entries(), policy);
+        snapshot = workspace.snapshot();
         StoreAccess access = readOnly.isPresent() ? StoreAccess.READ_ONLY : StoreAccess.WRITABLE;
-        return Result.ok(new LoadedHistory(WorkHistory.restore(contents.entries(), policy), access, notices));
+        return Result.ok(new Document(
+                new LoadedHistory(lastHistory, access, notices),
+                new LoadedWorkspace(snapshot, access, workspaceNotices)));
     }
 
     @Override
     public synchronized Result<WorkHistory, HistoryStoreError> save(WorkHistory history) {
         Objects.requireNonNull(history, "history");
-        switch (mode) {
-            case Mode.NotLoaded _ -> {
-                return Result.err(new HistoryStoreError.ReadOnly(HistoryStoreError.ReadOnlyReason.NOT_LOADED));
-            }
-            case Mode.Closed _ -> {
-                return Result.err(new HistoryStoreError.ReadOnly(HistoryStoreError.ReadOnlyReason.CLOSED));
-            }
-            case Mode.ReadOnly readOnly -> {
-                return Result.err(new HistoryStoreError.ReadOnly(readOnly.reason()));
-            }
-            case Mode.Writable _ -> {}
+        Optional<HistoryStoreError> refused = refusal();
+        if (refused.isPresent()) {
+            return Result.err(refused.get());
         }
+        Optional<HistoryStoreError> failed = write(history, snapshot);
+        if (failed.isPresent()) {
+            return Result.err(failed.get());
+        }
+        lastHistory = history;
+        unreadHistory = Optional.empty();
+        return Result.ok(history);
+    }
+
+    @Override
+    public synchronized Result<WorkspaceSnapshot, HistoryStoreError> saveWorkspace(WorkspaceSnapshot snapshot) {
+        Objects.requireNonNull(snapshot, "snapshot");
+        Optional<HistoryStoreError> refused = refusal();
+        if (refused.isPresent()) {
+            return Result.err(refused.get());
+        }
+        Optional<HistoryStoreError> failed = write(lastHistory, Optional.of(snapshot));
+        if (failed.isPresent()) {
+            return Result.err(failed.get());
+        }
+        this.snapshot = Optional.of(snapshot);
+        unreadWorkspace = Optional.empty();
+        return Result.ok(snapshot);
+    }
+
+    // 마지막 load 가 성공해 WRITABLE 로 열었을 때만 쓴다 — 두 포트가 같은 규칙
+    private Optional<HistoryStoreError> refusal() {
+        return switch (mode) {
+            case Mode.NotLoaded _ ->
+                Optional.of(new HistoryStoreError.ReadOnly(HistoryStoreError.ReadOnlyReason.NOT_LOADED));
+            case Mode.Closed _ -> Optional.of(new HistoryStoreError.ReadOnly(HistoryStoreError.ReadOnlyReason.CLOSED));
+            case Mode.ReadOnly readOnly -> Optional.of(new HistoryStoreError.ReadOnly(readOnly.reason()));
+            case Mode.Writable _ -> Optional.empty();
+        };
+    }
+
+    // 실패하면 기존 파일은 그대로이고 메모리의 마지막 값도 바꾸지 않는다
+    private Optional<HistoryStoreError> write(WorkHistory history, Optional<WorkspaceSnapshot> workspace) {
         takeBackupOnce();
         try {
-            JsonFiles.writeAtomically(file, WRITER.writeValueAsBytes(document(history)));
-            return Result.ok(history);
+            JsonFiles.writeAtomically(file, WRITER.writeValueAsBytes(document(history, workspace)));
+            return Optional.empty();
         } catch (IOException | JacksonException e) {
-            return Result.err(new HistoryStoreError.Io(file + ": " + e));
+            return Optional.of(new HistoryStoreError.Io(file + ": " + e));
         }
     }
 
@@ -204,6 +314,8 @@ public final class JsonStateRepository implements HistoryRepository, AutoCloseab
     @Override
     public synchronized void close() {
         mode = new Mode.Closed();
+        unreadHistory = Optional.empty();
+        unreadWorkspace = Optional.empty();
         try {
             if (lock.isPresent()) {
                 lock.get().release();
@@ -303,6 +415,13 @@ public final class JsonStateRepository implements HistoryRepository, AutoCloseab
             return new Disk.Parsed(object, bytes);
         }
         return structureProblem(object).<Disk>map(Disk.Corrupt::new).orElseGet(() -> new Disk.Parsed(object, bytes));
+    }
+
+    // 없으면 1 — schemaVersion 이 없는 파일은 v1 로 보고 올린다
+    private static long version(ObjectNode root) {
+        return Optional.ofNullable(root.get(KEY_SCHEMA_VERSION))
+                .flatMap(JsonStateRepository::integralVersion)
+                .orElse(1L);
     }
 
     private static Optional<Long> newerVersion(ObjectNode root) {
@@ -464,8 +583,8 @@ public final class JsonStateRepository implements HistoryRepository, AutoCloseab
         if (!(node instanceof ObjectNode o)) {
             return Optional.empty();
         }
-        Optional<ShellEnvironment> env = environment(o.get("env"));
-        Optional<String> rawPath = string(o.get("path"));
+        Optional<ShellEnvironment> env = Environments.read(o.get("env"));
+        Optional<String> rawPath = JsonValues.string(o.get("path"));
         Optional<Instant> first = instant(o.get("firstVisited"));
         Optional<Instant> last = instant(o.get("lastVisited"));
         JsonNode count = o.get("visitCount");
@@ -506,27 +625,9 @@ public final class JsonStateRepository implements HistoryRepository, AutoCloseab
         return Optional.of(new ReadEntry(directory, repaired, entrySources));
     }
 
-    private static Optional<ShellEnvironment> environment(JsonNode node) {
-        if (node == null) {
-            return Optional.empty();
-        }
-        Optional<String> kind = string(node.get("kind"));
-        if (kind.equals(Optional.of(KIND_WINDOWS))) {
-            return Optional.of(new ShellEnvironment.Windows());
-        }
-        if (kind.equals(Optional.of(KIND_WSL))) {
-            return string(node.get("distro")).filter(d -> !d.isBlank()).map(ShellEnvironment.Wsl::new);
-        }
-        return Optional.empty();
-    }
-
-    private static Optional<String> string(JsonNode node) {
-        return node != null && node.isString() ? Optional.of(node.stringValue()) : Optional.empty();
-    }
-
     private static Optional<Instant> instant(JsonNode node) {
         try {
-            return string(node).map(Instant::parse);
+            return JsonValues.string(node).map(Instant::parse);
         } catch (DateTimeParseException e) {
             return Optional.empty();
         }
@@ -537,7 +638,7 @@ public final class JsonStateRepository implements HistoryRepository, AutoCloseab
         if (node == null || node.isNull()) {
             return Optional.of(Optional.empty());
         }
-        return string(node).flatMap(s -> Alias.of(s).value()).map(Optional::of);
+        return JsonValues.string(node).flatMap(s -> Alias.of(s).value()).map(Optional::of);
     }
 
     // 대소문자만 다른 Windows 경로처럼 합쳐지는 항목은 sources 도 합친다(먼저 나온 순서 유지).
@@ -555,10 +656,10 @@ public final class JsonStateRepository implements HistoryRepository, AutoCloseab
         return merged;
     }
 
-    private static ObjectNode withoutHistory(ObjectNode root) {
+    // 이 앱이 해석하지 않는 최상위 키 — 저장할 때 그대로 다시 쓴다
+    private static ObjectNode unknownKeys(ObjectNode root) {
         ObjectNode rest = root.deepCopy();
-        rest.remove(KEY_SCHEMA_VERSION);
-        rest.remove(KEY_HISTORY);
+        rest.remove(List.of(KEY_SCHEMA_VERSION, KEY_HISTORY, KEY_WORKSPACE, KEY_WINDOW));
         return rest;
     }
 
@@ -579,7 +680,8 @@ public final class JsonStateRepository implements HistoryRepository, AutoCloseab
         }
     }
 
-    private ObjectNode document(WorkHistory history) {
+    // 작업 공간이 없으면 load 때 읽은 window 를 그대로 둔다 — 이력만 저장해도 창 상태를 잃지 않게
+    private ObjectNode document(WorkHistory history, Optional<WorkspaceSnapshot> workspace) {
         ObjectNode root = MAPPER.createObjectNode();
         root.put(KEY_SCHEMA_VERSION, SCHEMA_VERSION);
         ArrayNode entries = root.putObject(KEY_HISTORY).putArray(KEY_ENTRIES);
@@ -587,6 +689,12 @@ public final class JsonStateRepository implements HistoryRepository, AutoCloseab
                 history.entries().values().stream().sorted(FILE_ORDER).toList();
         for (VisitedDirectory v : sorted) {
             entries.add(entryNode(v));
+        }
+        if (workspace.isPresent()) {
+            root.set(KEY_WORKSPACE, WorkspaceJson.workspace(workspace.get().workspace()));
+            root.set(KEY_WINDOW, WorkspaceJson.window(workspace.get().window(), windowBase));
+        } else {
+            windowBase.ifPresent(window -> root.set(KEY_WINDOW, window.deepCopy()));
         }
         for (Map.Entry<String, JsonNode> other : otherKeys.properties()) {
             root.set(other.getKey(), other.getValue().deepCopy());
@@ -596,11 +704,7 @@ public final class JsonStateRepository implements HistoryRepository, AutoCloseab
 
     private ObjectNode entryNode(VisitedDirectory v) {
         ObjectNode node = MAPPER.createObjectNode();
-        ObjectNode env = node.putObject("env");
-        switch (v.path().env()) {
-            case ShellEnvironment.Wsl wsl -> env.put("kind", KIND_WSL).put("distro", wsl.distro());
-            case ShellEnvironment.Windows _ -> env.put("kind", KIND_WINDOWS);
-        }
+        Environments.write(node.putObject("env"), v.path().env());
         node.put("path", v.path().path());
         node.put("firstVisited", v.firstVisited().toString());
         node.put("lastVisited", v.lastVisited().toString());
@@ -615,12 +719,5 @@ public final class JsonStateRepository implements HistoryRepository, AutoCloseab
 
     private static ArrayNode shellOnly() {
         return MAPPER.createArrayNode().add(SOURCE_SHELL);
-    }
-
-    private static String envOrderKey(ShellEnvironment env) {
-        return switch (env) {
-            case ShellEnvironment.Windows _ -> KIND_WINDOWS;
-            case ShellEnvironment.Wsl wsl -> KIND_WSL + ":" + wsl.distro();
-        };
     }
 }

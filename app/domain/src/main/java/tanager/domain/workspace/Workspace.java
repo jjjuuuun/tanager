@@ -100,9 +100,31 @@ public record Workspace(List<Tab> tabs, int active, Map<PaneId, PaneSpec> specs,
     public static Workspace single(Tab tab, Map<PaneId, PaneSpec> specs, int nextPane) {
         Objects.requireNonNull(tab, "tab");
         long used = number(tab.id().value(), TAB_PREFIX).orElse(0);
-        // 너무 큰 번호는 그대로 넘겨 불변식 검사가 거부하게 한다
-        int nextTab = (int) Math.min(used + 1, Integer.MAX_VALUE);
-        return new Workspace(List.of(tab), 0, specs, nextPane, nextTab);
+        return new Workspace(List.of(tab), 0, specs, nextPane, following(used));
+    }
+
+    /**
+     * 저장한 탭 · 명세로 되살린다(#178). 다음 창 · 탭 번호는 저장하지 않고 쓰인 가장 큰 {@code p<n>} · {@code t<n>} 다음으로 계산한다 — 번호 꼴
+     * ID 가 없으면 1. 닫은 번호를 다시 쓸 수 있지만 재시작 전 창의 이벤트는 남아 있지 않다.
+     *
+     * @throws IllegalArgumentException 불변식을 어길 때(다음 번호를 int 로 나타낼 수 없을 때 포함)
+     */
+    public static Workspace restore(List<Tab> tabs, int active, Map<PaneId, PaneSpec> specs) {
+        Objects.requireNonNull(tabs, "tabs");
+        long usedPane = 0;
+        long usedTab = 0;
+        for (Tab tab : tabs) {
+            usedTab = Math.max(usedTab, number(tab.id().value(), TAB_PREFIX).orElse(0));
+            for (PaneId pane : tab.root().panes()) {
+                usedPane = Math.max(usedPane, number(pane.value(), PANE_PREFIX).orElse(0));
+            }
+        }
+        return new Workspace(tabs, active, specs, following(usedPane), following(usedTab));
+    }
+
+    // 너무 큰 번호는 그대로 넘겨 불변식 검사가 거부하게 한다
+    private static int following(long used) {
+        return (int) Math.min(used + 1, Integer.MAX_VALUE);
     }
 
     /** 연 결과: 새 작업 공간과 새 창. */

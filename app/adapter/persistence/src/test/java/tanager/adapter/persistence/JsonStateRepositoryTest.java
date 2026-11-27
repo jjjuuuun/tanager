@@ -649,10 +649,10 @@ class JsonStateRepositoryTest {
 
     static Stream<Arguments> reshapedNewerFiles() {
         return Stream.of(
-                Arguments.of("history 가 배열 · .bak 있음", "v2-reshaped.json", true),
-                Arguments.of("history 가 배열 · .bak 없음", "v2-reshaped.json", false),
-                Arguments.of("entries 가 객체 · .bak 있음", "v2-reshaped-entries.json", true),
-                Arguments.of("entries 가 객체 · .bak 없음", "v2-reshaped-entries.json", false));
+                Arguments.of("history 가 배열 · .bak 있음", "v3-reshaped.json", true),
+                Arguments.of("history 가 배열 · .bak 없음", "v3-reshaped.json", false),
+                Arguments.of("entries 가 객체 · .bak 있음", "v3-reshaped-entries.json", true),
+                Arguments.of("entries 가 객체 · .bak 없음", "v3-reshaped-entries.json", false));
     }
 
     @ParameterizedTest(name = "{0}")
@@ -674,7 +674,7 @@ class JsonStateRepositoryTest {
 
         // then
         assertThat(result.access()).isEqualTo(StoreAccess.READ_ONLY);
-        assertThat(result.notices()).containsExactly(new HistoryLoadNotice.NewerSchema(2));
+        assertThat(result.notices()).containsExactly(new HistoryLoadNotice.NewerSchema(3));
         assertThat(result.history()).isEqualTo(WorkHistory.empty(HistoryPolicy.DEFAULT));
         assertThat(saved.error()).containsInstanceOf(HistoryStoreError.ReadOnly.class);
         assertThat(Files.readAllBytes(file())).isEqualTo(before);
@@ -708,10 +708,10 @@ class JsonStateRepositoryTest {
     }
 
     @Test
-    @DisplayName("schemaVersion 2 는 읽을 수 있는 만큼 읽고 읽기 전용이며 저장은 ReadOnly 이고 파일은 그대로다")
+    @DisplayName("schemaVersion 3 은 읽을 수 있는 만큼 읽고 읽기 전용이며 저장은 ReadOnly 이고 파일은 그대로다")
     void newerSchemaOpensReadOnly() throws IOException {
         // given
-        write(file(), fixture("v2-newer.json"));
+        write(file(), fixture("v3-newer.json"));
         byte[] before = Files.readAllBytes(file());
         JsonStateRepository repository = repository();
 
@@ -722,7 +722,7 @@ class JsonStateRepositoryTest {
         // then
         assertThat(result.history().find(path(WINDOWS, "C:\\work\\infra"))).isPresent();
         assertThat(result.access()).isEqualTo(StoreAccess.READ_ONLY);
-        assertThat(result.notices()).containsExactly(new HistoryLoadNotice.NewerSchema(2));
+        assertThat(result.notices()).containsExactly(new HistoryLoadNotice.NewerSchema(3));
         assertThat(saved.error()).containsInstanceOf(HistoryStoreError.ReadOnly.class);
         assertThat(Files.readAllBytes(file())).isEqualTo(before);
         assertThat(dir.resolve("state.json.bak")).doesNotExist();
@@ -731,15 +731,15 @@ class JsonStateRepositoryTest {
     static Stream<Arguments> integralNewerVersions() {
         return Stream.of(
                 Arguments.of("int 범위를 넘는 정수", "3000000000", 3_000_000_000L),
-                Arguments.of("정수 값인 소수", "2.0", 2L),
+                Arguments.of("정수 값인 소수", "3.0", 3L),
                 Arguments.of("long 범위를 넘는 정수", "100000000000000000000000000000", Long.MAX_VALUE),
                 Arguments.of("long 범위를 넘는 정수 값인 소수", "1e30", Long.MAX_VALUE));
     }
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("integralNewerVersions")
-    @DisplayName("정수 값인 schemaVersion 이 1 보다 크면 형식과 범위에 상관없이 상위 버전이다 — 읽기 전용 · 파일 그대로 · 옮기지 않음")
-    void integralVersionAboveOneIsNewerSchema(String caseName, String version, long expected) throws IOException {
+    @DisplayName("정수 값인 schemaVersion 이 2 보다 크면 형식과 범위에 상관없이 상위 버전이다 — 읽기 전용 · 파일 그대로 · 옮기지 않음")
+    void integralVersionAboveCurrentIsNewerSchema(String caseName, String version, long expected) throws IOException {
         // given
         String content = "{ \"schemaVersion\": " + version + ", \"history\": { \"entries\": ["
                 + entryJson("{ \"kind\": \"windows\" }", "C:\\work\\infra", 5) + "] } }";
@@ -1073,7 +1073,7 @@ class JsonStateRepositoryTest {
     }
 
     @Test
-    @DisplayName("저장하면 SDD 9.2 형식(schemaVersion 1, history.entries)으로 쓴다")
+    @DisplayName("저장하면 SDD 9.2 형식(schemaVersion 2, history.entries)으로 쓴다")
     void saveWritesSddFormat() throws IOException {
         // given
         JsonStateRepository repository = repository();
@@ -1103,7 +1103,7 @@ class JsonStateRepositoryTest {
 
         // then
         JsonNode root = JSON.readTree(Files.readAllBytes(file()));
-        assertThat(root.get("schemaVersion").intValue()).isEqualTo(1);
+        assertThat(root.get("schemaVersion").intValue()).isEqualTo(2);
         JsonNode wsl = entryAt(root, "/home/me/proj");
         assertThat(wsl.get("env")).isEqualTo(JSON.readTree("{\"kind\":\"wsl\",\"distro\":\"Ubuntu-24.04\"}"));
         assertThat(wsl.get("firstVisited").stringValue()).isEqualTo("2026-11-20T09:12:03Z");
@@ -1129,7 +1129,7 @@ class JsonStateRepositoryTest {
     }
 
     @Test
-    @DisplayName("workspace · window · 모르는 최상위 키는 읽고 저장해도 그대로 남는다")
+    @DisplayName("이력만 저장해도 읽은 작업 공간 · 창 상태(모르는 필드 포함) · 모르는 최상위 키가 남는다")
     void unknownTopLevelKeysSurviveLoadThenSave() throws IOException {
         // given
         write(file(), fixture("v1-full.json"));
@@ -1140,12 +1140,15 @@ class JsonStateRepositoryTest {
         // when
         repository.save(result.history().recordVisit(path(WINDOWS, "C:\\work\\new"), NOW));
 
-        // then
+        // then: 작업 공간은 v2 모양으로 바뀌어 남는다
         JsonNode after = JSON.readTree(Files.readAllBytes(file()));
-        assertThat(after.get("workspace")).isEqualTo(original.get("workspace"));
+        assertThat(after.get("workspace").get("tabs").get(0).get("name").stringValue())
+                .isEqualTo("dev");
+        assertThat(after.get("workspace").get("panes").get("p3").get("lastCwd"))
+                .isEqualTo(JSON.readTree("{\"env\":{\"kind\":\"windows\"},\"path\":\"C:\\\\work\\\\infra\"}"));
         assertThat(after.get("window")).isEqualTo(original.get("window"));
         assertThat(after.get("futureFeature")).isEqualTo(original.get("futureFeature"));
-        assertThat(after.get("schemaVersion").intValue()).isEqualTo(1);
+        assertThat(after.get("schemaVersion").intValue()).isEqualTo(2);
         assertThat(after.get("history").get("entries")).hasSize(3);
     }
 
