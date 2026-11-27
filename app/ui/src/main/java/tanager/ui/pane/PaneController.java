@@ -97,6 +97,9 @@ public final class PaneController {
     private PaneState state = new PaneState.Launching(new Attempt.Fresh());
     private TanagerTermWidget widget;
     private boolean widgetConnected;
+    // 지금 본문에 놓인 것(#143). 처음에는 아무것도 없다
+    private Optional<Body> laidOut = Optional.empty();
+    private Optional<TanagerTermWidget> laidOutWidget = Optional.empty();
     private boolean disposed;
     // 진행 중인 기동이 내놓을 스트림. 기동 중에 앱이 끝나도 그 스트림을 닫고 종료를 기다리려고 들고 있다
     private CompletableFuture<Optional<TerminalStream>> launching = CompletableFuture.completedFuture(Optional.empty());
@@ -310,41 +313,63 @@ public final class PaneController {
         PaneView view = PaneView.of(state);
         renderHeader(view);
         host.viewChanged(PaneView.tabTitle(state), view.status());
-        body.removeAll();
+        Body next = switch (state) {
+            case PaneState.Exited _ -> Body.EXITED;
+            case PaneState.Failed _, PaneState.Errored _ -> Body.NOTICE;
+            case PaneState.Picking _ -> Body.PICKER;
+            case PaneState.Launching _, PaneState.Running _, PaneState.Closed _ -> Body.TERMINAL;
+        };
         switch (state) {
-            case PaneState.Exited _ -> {
+            case PaneState.Exited _ ->
+                notice.band(view.overlay().orElse("") + " · " + view.hint().orElse(""));
+            case PaneState.Failed _, PaneState.Errored _ ->
+                notice.screen(view.overlay().orElse(""), view.hint().orElse(""));
+            case PaneState.Picking picking -> picker.render(PickerView.of(picking));
+            case PaneState.Launching _, PaneState.Running _, PaneState.Closed _ -> {}
+        }
+        // 놓을 것이 그대로면 떼었다 붙이지 않는다. 포커스를 가진 터미널이 잠깐이라도 빠지면 Swing 이 포커스를 창의 첫 컴포넌트(사이드바
+        // 검색칸)로 옮긴다 — 셸이 경로를 알릴 때마다 입력이 검색칸으로 갔다(#143)
+        if (laidOut.equals(Optional.of(next)) && laidOutWidget.equals(Optional.of(widget))) {
+            return;
+        }
+        laidOut = Optional.of(next);
+        laidOutWidget = Optional.of(widget);
+        body.removeAll();
+        switch (next) {
+            case EXITED -> {
                 // 끝난 터미널을 눌러도 포커스가 띠에 남아 Enter · Esc 가 창으로 온다(JediTerm 패널은 키 바인딩을 거치지 않는다)
                 widget.getTerminalPanel().setFocusable(false);
                 body.add(widget, BorderLayout.CENTER);
-                notice.band(view.overlay().orElse("") + " · " + view.hint().orElse(""));
                 body.add(notice, BorderLayout.SOUTH);
             }
-            case PaneState.Failed _, PaneState.Errored _ -> {
-                notice.screen(view.overlay().orElse(""), view.hint().orElse(""));
-                body.add(notice, BorderLayout.CENTER);
-            }
-            case PaneState.Picking picking -> {
-                // 위젯은 빼기만 하고 닫지 않는다 — Esc 로 돌아오면 끝난 출력과 함께 다시 놓는다
-                picker.render(PickerView.of(picking));
-                body.add(picker, BorderLayout.CENTER);
-            }
-            case PaneState.Launching _ -> {
-                // 연결 전에는 포커스를 받지 않는다 — 선택 화면에서 누른 키(숫자 · Enter)의 글자가 새 터미널로 새지 않게.
-                // connect 에서 다시 켠다
-                widget.getTerminalPanel().setFocusable(false);
+            case NOTICE -> body.add(notice, BorderLayout.CENTER);
+            // 위젯은 빼기만 하고 닫지 않는다 — Esc 로 돌아오면 끝난 출력과 함께 다시 놓는다
+            case PICKER -> body.add(picker, BorderLayout.CENTER);
+            case TERMINAL -> {
+                if (state instanceof PaneState.Launching) {
+                    // 연결 전에는 포커스를 받지 않는다 — 선택 화면에서 누른 키(숫자 · Enter)의 글자가 새 터미널로 새지 않게.
+                    // connect 에서 다시 켠다
+                    widget.getTerminalPanel().setFocusable(false);
+                }
                 body.add(widget, BorderLayout.CENTER);
             }
-            case PaneState.Running _, PaneState.Closed _ -> body.add(widget, BorderLayout.CENTER);
         }
         body.revalidate();
         body.repaint();
-        // 배치가 끝난 뒤에 포커스를 옮긴다
-        switch (state) {
-            case PaneState.Exited _, PaneState.Failed _, PaneState.Errored _ ->
-                ui.execute(notice::requestFocusInWindow);
-            case PaneState.Picking _ -> ui.execute(picker::requestFocusInWindow);
-            case PaneState.Launching _, PaneState.Running _, PaneState.Closed _ -> {}
+        // 배치가 끝난 뒤에 포커스를 옮긴다 — 본문이 바뀔 때만(다시 그리기가 다른 곳의 포커스를 빼앗지 않게)
+        switch (next) {
+            case EXITED, NOTICE -> ui.execute(notice::requestFocusInWindow);
+            case PICKER -> ui.execute(picker::requestFocusInWindow);
+            case TERMINAL -> {}
         }
+    }
+
+    /** 본문에 놓인 것의 종류. 같은 종류 · 같은 위젯이면 다시 놓지 않는다. */
+    private enum Body {
+        TERMINAL,
+        EXITED,
+        NOTICE,
+        PICKER
     }
 
     // 경로는 폭에 맞게 가운데를 줄이고(PathEllipsis) 전체 경로는 툴팁으로 보인다. 아직 배치 전(폭 0)이면 그대로 둔다
