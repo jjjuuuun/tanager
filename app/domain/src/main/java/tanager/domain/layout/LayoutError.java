@@ -26,4 +26,26 @@ public sealed interface LayoutError {
             Objects.requireNonNull(pane, "pane");
         }
     }
+
+    /** 그 창을 감싼 Split 중 그 방향으로 경계를 옮길 수 있는 것이 없다(예: 위아래로만 나뉜 트리를 좌우로). */
+    record NoSplitInDirection(PaneId pane, Direction direction) implements LayoutError {
+        public NoSplitInDirection {
+            Objects.requireNonNull(pane, "pane");
+            Objects.requireNonNull(direction, "direction");
+        }
+    }
+
+    /** 경로가 Split 을 가리키지 않는다(창이거나 트리 밖) — 드래그하는 사이 트리가 바뀌었을 때 생긴다. */
+    record UnknownSplit(SplitPath path) implements LayoutError {
+        public UnknownSplit {
+            Objects.requireNonNull(path, "path");
+        }
+    }
+
+    /** 교환 · 이동의 두 창이 같다. */
+    record SamePane(PaneId pane) implements LayoutError {
+        public SamePane {
+            Objects.requireNonNull(pane, "pane");
+        }
+    }
 }

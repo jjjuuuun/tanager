@@ -72,16 +72,20 @@ public record Workspace(Tab tab, Map<PaneId, PaneSpec> specs, int nextPane) {
         return new Opened(new Workspace(new Tab(root, created), next, nextPane + 1), created);
     }
 
-    /** {@code pane} 을 닫는다. 포커스 창이면 남는 형제 쪽의 첫 창에 포커스한다. 마지막 창이면 {@link LayoutError.LastPane}. */
+    /**
+     * {@code pane} 을 닫는다. 포커스 창이면 남는 형제 쪽의 첫 창에 포커스한다. 줌한 창이면 줌이 풀린다(다른 창을 닫으면 줌은 그대로). 마지막 창이면
+     * {@link LayoutError.LastPane}.
+     */
     public Result<Workspace, LayoutError> close(PaneId pane) {
         Objects.requireNonNull(pane, "pane");
         Optional<LayoutNode> sibling = siblingOf(tab.root(), pane);
         return tab.root().close(pane).map(root -> {
             PaneId focused =
                     tab.focused().equals(pane) ? sibling.orElseThrow().panes().getFirst() : tab.focused();
+            Optional<PaneId> zoomed = tab.zoomed().filter(z -> !z.equals(pane));
             Map<PaneId, PaneSpec> next = new HashMap<>(specs);
             next.remove(pane);
-            return new Workspace(new Tab(root, focused), next, nextPane);
+            return new Workspace(new Tab(root, focused, zoomed), next, nextPane);
         });
     }
 

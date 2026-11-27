@@ -116,6 +116,36 @@ class WorkspaceTest {
     }
 
     @Test
+    @DisplayName("탭은 줌 없이 시작하고, 줌한 창은 트리 안의 창이어야 한다")
+    void tabZoomInvariant() {
+        // given
+        LayoutNode two =
+                new LayoutNode.Split(Orientation.ROW, Ratio.HALF, new LayoutNode.Leaf(P1), new LayoutNode.Leaf(P2));
+
+        // then
+        assertThat(new Tab(two, P1).zoomed()).isEmpty();
+        assertThat(Workspace.initial().tab().zoomed()).isEmpty();
+        assertThat(new Tab(two, P1, Optional.of(P2)).zoomed()).contains(P2);
+        assertThatIllegalArgumentException().isThrownBy(() -> new Tab(two, P1, Optional.of(P3)));
+    }
+
+    @Test
+    @DisplayName("줌한 창을 닫으면 줌이 풀리고, 다른 창을 닫으면 줌은 그대로다")
+    void closeClearsZoomOfClosedPane() {
+        // given: p1 | (p2 / p3), 포커스 p3
+        Workspace w = opened(opened(Workspace.initial(), Orientation.ROW), Orientation.COLUMN);
+        Workspace zoomedOnP3 = new Workspace(new Tab(w.tab().root(), P3, Optional.of(P3)), w.specs(), w.nextPane());
+
+        // when
+        Workspace closedZoomed = zoomedOnP3.close(P3).value().orElseThrow();
+        Workspace closedOther = zoomedOnP3.close(P1).value().orElseThrow();
+
+        // then
+        assertThat(closedZoomed.tab().zoomed()).isEmpty();
+        assertThat(closedOther.tab().zoomed()).contains(P3);
+    }
+
+    @Test
     @DisplayName("명세와 트리의 창이 다르거나, 명세의 창이 키와 다르거나, 다음 번호가 0 이면 만들 수 없다")
     void workspaceInvariants() {
         Tab one = new Tab(new LayoutNode.Leaf(P1), P1);
