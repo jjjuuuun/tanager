@@ -69,6 +69,8 @@ class AssemblyTest {
     private Assembly assemble(FakePlatformModule platform, ScriptedPtyLauncher launcher) {
         Assembly assembly = Assembly.assemble(platform, launcher, new DirectUiDispatcher());
         assemblies.add(assembly);
+        // 앱은 UI 가 구독한 뒤에 부른다(#179). 이 테스트들은 UI 가 없으니 바로 부른다
+        assembly.startStore();
         return assembly;
     }
 

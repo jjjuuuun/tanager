@@ -105,6 +105,14 @@ public final class PaneController {
          * @param shell 이 창의 셸. 모르면(선택 화면 · 기동 중) 비어 있다
          */
         void menuRequested(Optional<ShellProfile> shell, Component invoker, int x, int y);
+
+        /**
+         * 이 창이 작업 공간의 포커스 창이다. 아니면 셸이 뜨거나 화면이 바뀌어도 키보드 포커스를 가져가지 않는다 — 복원한 여러 창이 차례로 뜨면서
+         * 저장된 포커스를 빼앗지 않게(#179). 창이 하나뿐인 쪽은 늘 그렇다.
+         */
+        default boolean focused() {
+            return true;
+        }
     }
 
     private final PaneId id;
@@ -391,8 +399,9 @@ public final class PaneController {
             case Attempt.Fresh(var profile, var dir) ->
                 sessions.start(new StartRequest(id, profile, false, dir.map(WorkingDir.At::new), size));
             case Attempt.Restart(var exited) -> sessions.restart(id, exited, size);
-            case Attempt.Chosen(ShellProfile profile, boolean remember) ->
-                sessions.start(StartRequest.chosen(id, profile.id(), remember, size));
+            case Attempt.Chosen(ShellProfile profile, boolean remember, var dir) ->
+                sessions.start(
+                        new StartRequest(id, Optional.of(profile.id()), remember, dir.map(WorkingDir.At::new), size));
         };
     }
 
@@ -412,7 +421,9 @@ public final class PaneController {
                 LOG.log(System.Logger.Level.ERROR, "셸 종료를 받지 못했다", error);
             }
         });
-        widget.requestFocusInWindow();
+        if (host.focused()) {
+            widget.requestFocusInWindow();
+        }
     }
 
     private void render() {
@@ -467,6 +478,9 @@ public final class PaneController {
         body.revalidate();
         body.repaint();
         // 배치가 끝난 뒤에 포커스를 옮긴다 — 본문이 바뀔 때만(다시 그리기가 다른 곳의 포커스를 빼앗지 않게)
+        if (!host.focused()) {
+            return;
+        }
         switch (next) {
             case EXITED, NOTICE -> ui.execute(notice::requestFocusInWindow);
             case PICKER -> ui.execute(picker::requestFocusInWindow);

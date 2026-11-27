@@ -472,4 +472,40 @@ class PaneStateTest {
         assertThat(t.next()).isEqualTo(new PaneState.Closed());
         assertThat(t.effects()).isEmpty();
     }
+
+    // ---- 복원한 창의 프로파일이 사라짐(#179) ----
+
+    private static PaneState restoredPicking(WorkspacePath saved) {
+        return new PaneState.Launching(new Attempt.Fresh(Optional.of(new ProfileId("wsl:Old")), Optional.of(saved)))
+                .on(new PaneEvent.StartFailed(choiceRequired(Optional.of(new ProfileId("wsl:Old")), List.of())))
+                .next();
+    }
+
+    @Test
+    @DisplayName("복원한 창의 프로파일이 없어 연 선택 화면에서 같은 환경의 셸을 고르면 저장된 경로에서 연다")
+    void restoredPaneChoosingSameEnvironmentKeepsSavedPath() {
+        // given
+        WorkspacePath saved = wsl("/home/me/project");
+
+        // when Ubuntu(2번)를 고른다
+        Transition t = restoredPicking(saved).on(new PaneEvent.PickerInput(new PickerKey.Digit(2)));
+
+        // then
+        Attempt chosen = new Attempt.Chosen(UBUNTU, true, Optional.of(saved));
+        assertThat(t.next()).isEqualTo(new PaneState.Launching(chosen));
+        assertThat(t.effects()).containsExactly(new PaneEffect.Launch(chosen));
+    }
+
+    @Test
+    @DisplayName("복원한 창의 선택 화면에서 다른 환경의 셸을 고르면 그 셸의 시작 경로에서 연다")
+    void restoredPaneChoosingOtherEnvironmentDropsSavedPath() {
+        // given
+        WorkspacePath saved = wsl("/home/me/project");
+
+        // when cmd(1번)를 Enter 로 고른다
+        Transition t = restoredPicking(saved).on(new PaneEvent.EnterPressed());
+
+        // then
+        assertThat(t.next()).isEqualTo(new PaneState.Launching(new Attempt.Chosen(PROFILE, true)));
+    }
 }

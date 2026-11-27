@@ -32,7 +32,8 @@ public final class WorkspaceSaver {
     /**
      * 만들면서 {@code state} 의 이벤트를 구독한다. 다른 스레드가 작업 공간 · 세션을 바꾸기 전에 만든다.
      *
-     * @param loaded 시작할 때 읽은 작업 공간. 있으면 파일에 그 값이 있다고 알아 같으면 쓰지 않는다
+     * @param loaded 시작할 때 읽은 작업 공간. 있으면 파일에 그 값이 있다고 안다. 없으면 시작 상태(처음 작업 공간)가 파일과 같다고 본다 —
+     *     다시 읽어도 같은 작업 공간으로 시작하므로, 아무것도 바꾸지 않으면 종료 때도 파일을 건드리지 않는다
      */
     public WorkspaceSaver(
             StateActor state,
@@ -52,7 +53,7 @@ public final class WorkspaceSaver {
                 repository::saveWorkspace,
                 () -> state.snapshot().store() instanceof HistoryStore.Writable,
                 this::announce);
-        loaded.ifPresent(saver::known);
+        saver.known(loaded.orElseGet(() -> capture(state.snapshot())));
         state.subscribe(this::onEvent);
     }
 

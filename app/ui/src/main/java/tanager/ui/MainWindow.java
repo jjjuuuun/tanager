@@ -61,6 +61,7 @@ import tanager.domain.layout.SplitPath;
 import tanager.domain.session.ShellProfile;
 import tanager.domain.shared.PaneId;
 import tanager.domain.shared.Result;
+import tanager.domain.workspace.Tab;
 import tanager.domain.workspace.Workspace;
 import tanager.ui.html.Html;
 import tanager.ui.i18n.Msg;
@@ -124,7 +125,7 @@ final class MainWindow {
     // 창 ID → 컨트롤러(트리의 창 순서). 작업 공간(StateActor)의 사본만 들고, 바꾸는 일은 유스케이스로 한다(#89)
     private final Map<PaneId, PaneController> panes = new LinkedHashMap<>();
     private final Map<PaneId, View> views = new HashMap<>();
-    private Workspace workspace = Workspace.initial();
+    private Workspace workspace;
     private final LayoutView layout;
     private final SidebarPanel sidebar;
     private final SidebarSlot sidebarSlot;
@@ -155,7 +156,9 @@ final class MainWindow {
             Runnable onShutdown,
             TerminalSettings settings,
             Motion motion,
-            Executor background) {
+            Executor background,
+            Workspace initial) {
+        this.workspace = Objects.requireNonNull(initial, "initial");
         this.onShutdown = Objects.requireNonNull(onShutdown, "onShutdown");
         this.settingsFile = Objects.requireNonNull(settingsFile, "settingsFile");
         this.sessions = Objects.requireNonNull(sessions, "sessions");
@@ -176,7 +179,8 @@ final class MainWindow {
                 this::paneMinimum,
                 this::resizeTo,
                 new LayoutView.Drops(this::movePane, opener::openAt));
-        for (PaneId id : workspace.tab().root().panes()) {
+        // 복원한 모든 탭의 창을 만든다(#179). 활성 탭이 아닌 창은 LayoutView 가 숨긴다
+        for (PaneId id : panesOf(workspace)) {
             panes.put(id, newPane(id));
         }
         this.sidebar = new SidebarPanel(historyTree, historyManager, ui);
@@ -211,9 +215,21 @@ final class MainWindow {
             notify(warnings);
         }
         layout.show(workspace.tab().root(), workspace.tab().zoomed(), components());
-        for (PaneId id : workspace.tab().root().panes()) {
+        // 창마다 명세(저장된 프로파일 · 마지막 cwd)대로 띄운다. 기동은 창마다 백그라운드라 병렬이다(NFR-02)
+        for (PaneId id : panesOf(workspace)) {
             panes.get(id).start(workspace.spec(id).orElseThrow());
         }
+        focused().focus();
+        showStatusOf(workspace.tab().focused());
+    }
+
+    // 탭 순서 → 트리 순서
+    private static List<PaneId> panesOf(Workspace workspace) {
+        List<PaneId> all = new ArrayList<>();
+        for (Tab tab : workspace.tabs()) {
+            all.addAll(tab.root().panes());
+        }
+        return all;
     }
 
     /** 이력 · 세션 · 환경 순서가 바뀌었다 — 사이드바를 다음 틱에 한 번 다시 그린다(#84). EDT 에서 부른다. */
@@ -564,6 +580,11 @@ final class MainWindow {
             if (!closing && panes.containsKey(id)) {
                 showMenu(id, shell, invoker, x, y);
             }
+        }
+
+        @Override
+        public boolean focused() {
+            return workspace.tab().focused().equals(id);
         }
 
         @Override

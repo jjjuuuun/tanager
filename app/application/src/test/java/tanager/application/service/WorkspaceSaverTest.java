@@ -330,6 +330,24 @@ class WorkspaceSaverTest {
     }
 
     @Test
+    @DisplayName("저장한 작업 공간이 없어도 아무것도 바꾸지 않으면 불러온 뒤 · 종료 때 쓰지 않는다")
+    void withoutSavedWorkspaceNothingChangedWritesNothing() {
+        // given 이력만 있는 v1 파일처럼 작업 공간이 없다
+        Rig rig = new Rig(Optional.empty(), new HistoryStore.Loading(List.of()));
+
+        // when
+        rig.actor.submit(new HistoryLoaded(
+                new LoadedHistory(WorkHistory.empty(HistoryPolicy.DEFAULT), StoreAccess.WRITABLE, List.of())));
+        rig.settle();
+        rig.advance(Duration.ofSeconds(2));
+        boolean flushed = rig.saver.flush(SECOND);
+
+        // then
+        assertThat(flushed).isTrue();
+        assertThat(rig.repository.saves()).isEmpty();
+    }
+
+    @Test
     @DisplayName("불러온 창 상태는 그대로 다시 쓴다(창 상태 저장은 #180)")
     void loadedWindowIsKept() {
         // given

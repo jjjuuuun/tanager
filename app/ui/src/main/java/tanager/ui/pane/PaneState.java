@@ -70,11 +70,21 @@ sealed interface PaneState {
         }
     }
 
-    /** 셸 선택 화면. 고르면 그 셸을 띄우고 Esc 는 {@code exit} 를 따른다. */
-    record Picking(ShellPicker picker, PickerExit exit) implements PaneState {
+    /**
+     * 셸 선택 화면. 고르면 그 셸을 띄우고 Esc 는 {@code exit} 를 따른다.
+     *
+     * @param saved 이 화면을 연 시도의 시작 경로(복원한 창, #179). 같은 환경의 셸을 고르면 그 경로에서 연다
+     */
+    record Picking(ShellPicker picker, PickerExit exit, Optional<WorkspacePath> saved) implements PaneState {
         public Picking {
             Objects.requireNonNull(picker, "picker");
             Objects.requireNonNull(exit, "exit");
+            Objects.requireNonNull(saved, "saved");
+        }
+
+        /** 시작 경로를 이어받지 않는 선택 화면. */
+        public Picking(ShellPicker picker, PickerExit exit) {
+            this(picker, exit, Optional.empty());
         }
     }
 
@@ -108,7 +118,10 @@ sealed interface PaneState {
             case PaneEvent.StartFailed(StartFailure.ChoiceRequired required) -> {
                 List<PaneEffect> effects = new ArrayList<>();
                 addNotices(effects, required.notices());
-                Picking picking = new Picking(ShellPicker.atStartup(required.choice()), new PickerExit.CloseWindow());
+                Optional<WorkspacePath> saved =
+                        state.attempt() instanceof Attempt.Fresh(var _, var dir) ? dir : Optional.empty();
+                Picking picking =
+                        new Picking(ShellPicker.atStartup(required.choice()), new PickerExit.CloseWindow(), saved);
                 yield new Transition(picking, effects);
             }
             case PaneEvent.StartFailed(StartFailure failure) -> {
@@ -219,11 +232,13 @@ sealed interface PaneState {
 
     private static Transition picking(Picking state, PaneEvent event) {
         return switch (event) {
-            case PaneEvent.EnterPressed _ -> launch(state.picker().pickSelected());
+            case PaneEvent.EnterPressed _ ->
+                launch(state.picker().pickSelected().at(state.saved()));
             case PaneEvent.PickerInput(PickerKey key) ->
                 switch (state.picker().on(key)) {
-                    case PickerStep.Stay(ShellPicker next) -> Transition.stay(new Picking(next, state.exit()));
-                    case PickerStep.Picked(Attempt.Chosen chosen) -> launch(chosen);
+                    case PickerStep.Stay(ShellPicker next) ->
+                        Transition.stay(new Picking(next, state.exit(), state.saved()));
+                    case PickerStep.Picked(Attempt.Chosen chosen) -> launch(chosen.at(state.saved()));
                 };
             case PaneEvent.EscPressed _ ->
                 switch (state.exit()) {

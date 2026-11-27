@@ -3,8 +3,10 @@ package tanager.bootstrap;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.InstantSource;
+import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
-import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -23,10 +25,12 @@ import tanager.application.port.in.WatchResourcesUseCase;
 import tanager.application.port.out.HistoryStoreError;
 import tanager.application.port.out.Integration;
 import tanager.application.port.out.LoadedHistory;
+import tanager.application.port.out.LoadedWorkspace;
 import tanager.application.port.out.PlatformModule;
 import tanager.application.port.out.PtyLauncher;
 import tanager.application.port.out.Subscription;
 import tanager.application.port.out.UiDispatcher;
+import tanager.application.port.out.WorkspaceLoadNotice;
 import tanager.application.service.AppearanceWatcher;
 import tanager.application.service.DefaultProfileMemory;
 import tanager.application.service.EnvironmentRecorder;
@@ -40,14 +44,19 @@ import tanager.application.service.ResourceWatcher;
 import tanager.application.service.SessionStarter;
 import tanager.application.service.SettingsReloader;
 import tanager.application.service.VisitRecorder;
+import tanager.application.service.WorkspaceRestorer;
+import tanager.application.service.WorkspaceSaver;
 import tanager.application.state.AppState;
 import tanager.application.state.Command;
 import tanager.application.state.HistoryLoadFailed;
 import tanager.application.state.HistoryLoaded;
 import tanager.application.state.StateActor;
+import tanager.application.state.WorkspaceLoaded;
 import tanager.domain.history.HistoryPolicy;
 import tanager.domain.history.WorkHistory;
 import tanager.domain.shared.Result;
+import tanager.domain.workspace.Workspace;
+import tanager.domain.workspace.WorkspaceSnapshot;
 
 /**
  * 조립한 유스케이스들과 앱 생명주기. 포트 구현을 골라 서비스에 넣는 일은 여기서만 한다(ADR-0002). 이력 저장소(state.json)는 프로세스에
@@ -66,6 +75,8 @@ final class Assembly {
     private final StateActor state;
     private final ExecutorService stateExecutor;
     private final HistorySaver saver;
+    private final WorkspaceSaver workspaceSaver;
+    private final StoredState stored;
     private final ExecutorScheduler scheduler;
     private final JsonStateRepository history;
     private final PaneManager panes;
@@ -82,6 +93,8 @@ final class Assembly {
             StateActor state,
             ExecutorService stateExecutor,
             HistorySaver saver,
+            WorkspaceSaver workspaceSaver,
+            StoredState stored,
             ExecutorScheduler scheduler,
             JsonStateRepository history,
             PaneManager panes,
@@ -95,6 +108,8 @@ final class Assembly {
         this.state = state;
         this.stateExecutor = stateExecutor;
         this.saver = saver;
+        this.workspaceSaver = workspaceSaver;
+        this.stored = stored;
         this.scheduler = scheduler;
         this.history = history;
         this.panes = panes;
@@ -107,7 +122,11 @@ final class Assembly {
 
     /**
      * 셸 탐지는 수 초 걸릴 수 있어 창을 띄우는 동안 가상 스레드에서 미리 돌린다 — 첫 {@code start} 는 그 결과를 기다린다(탐지는
-     * 한 번뿐이다). 셸 통합 설치 · 이력 불러오기도 같은 방식이다(ADR-0013 · 0014). 불러오기 전 방문은 불러온 이력 위에 합쳐진다.
+     * 한 번뿐이다). 셸 통합 설치도 같은 방식이다(ADR-0014).
+     *
+     * <p>state.json 은 <b>창을 만들기 전에</b> 읽는다(ADR-0013 개정 #179) — 가상 스레드에서 셸 탐지와 나란히 읽기 시작하고, 상태를 만들기
+     * 직전에 기다린다(로컬 파일이라 수 ms). 복원할 배치를 모르고 p1 셸을 먼저 띄우면 그 셸을 버려야 하기 때문이다. 처음 작업 공간은
+     * 복원 계획이고, 불러온 이력 · 알림은 UI 가 구독한 뒤 {@link #startStore} 가 넣는다.
      *
      * @param ui 리소스 표시(#187) · 테마 변경 알림(#184)을 UI 스레드로 넘긴다
      */
@@ -120,13 +139,26 @@ final class Assembly {
         JsonConfigRepository config = new JsonConfigRepository(configFile);
         JsonStateRepository history =
                 new JsonStateRepository(appData.resolve(STATE_FILE), HistoryPolicy.DEFAULT, InstantSource.system());
+        CompletableFuture<StoredState> reading = readState(history);
+        warmShells(catalog);
+        StoredState stored = reading.join();
+        Workspace planned = new WorkspaceRestorer().plan(stored.snapshot());
         ExecutorService stateExecutor = StateActor.serialExecutor();
-        StateActor state = new StateActor(AppState.initial(WorkHistory.empty(HistoryPolicy.DEFAULT)), stateExecutor);
-        ExecutorScheduler scheduler = new ExecutorScheduler("tanager-history-timer");
-        Executor io = task -> Thread.ofVirtual().name("tanager-history-save").start(task);
-        // 불러오기 명령보다 먼저 구독해야 불러온 이력을 "저장할 것 없음"으로 안다
-        HistorySaver saver = new HistorySaver(state, history, scheduler, io);
-        loadHistory(history, state);
+        StateActor state =
+                new StateActor(AppState.initial(WorkHistory.empty(HistoryPolicy.DEFAULT), planned), stateExecutor);
+        ExecutorScheduler scheduler = new ExecutorScheduler("tanager-save-timer");
+        // 불러오기 명령보다 먼저 구독해야 불러온 이력 · 작업 공간을 "저장할 것 없음"으로 안다
+        HistorySaver saver = new HistorySaver(
+                state,
+                history,
+                scheduler,
+                task -> Thread.ofVirtual().name("tanager-history-save").start(task));
+        WorkspaceSaver workspaceSaver = new WorkspaceSaver(
+                state,
+                history,
+                scheduler,
+                task -> Thread.ofVirtual().name("tanager-workspace-save").start(task),
+                stored.snapshot());
         detectShells(catalog, new EnvironmentRecorder(state));
         VisitRecorder visits = new VisitRecorder(state, InstantSource.system());
         SessionStarter starter = new SessionStarter(
@@ -156,6 +188,8 @@ final class Assembly {
                 state,
                 stateExecutor,
                 saver,
+                workspaceSaver,
+                stored,
                 scheduler,
                 history,
                 panes,
@@ -164,6 +198,17 @@ final class Assembly {
                 resources,
                 monitorScheduler,
                 appearance);
+    }
+
+    // 상태를 만들기 전에 시작한다 — state.json 을 기다리는 동안에도 탐지가 돈다(탐지는 한 번뿐이고 뒤의 호출은 그 결과를 기다린다)
+    private static void warmShells(ProfileCatalog catalog) {
+        Thread.ofVirtual().name("tanager-shell-warm").start(() -> {
+            try {
+                catalog.list();
+            } catch (RuntimeException e) {
+                LOG.log(System.Logger.Level.ERROR, "셸 탐지 실패", e);
+            }
+        });
     }
 
     // 탐지가 끝나면 그 순서를 트리의 환경 순서로 알린다(#83). 실패하면 트리는 이력의 환경을 이름순으로 놓는다
@@ -233,23 +278,50 @@ final class Assembly {
     }
 
     /**
-     * 앱을 끝낼 때 한 번 부른다(ADR-0011 · 0012): 설정 감시를 끊고 → 상태 실행기를 닫고 남은 명령을 처리한 뒤 → 미저장 이력을 바로 저장(최대 2초) → 저장소를
-     * 닫는다(잠금을 푼다). 저장하지 못했으면 저장소를 닫지 않는다. 이 뒤의 명령은 실패한 응답을 받는다.
+     * 불러온 이력(또는 불러오기 실패)과 작업 공간 불러오기 알림을 상태에 넣는다(#179). UI 가 이벤트를 구독한 뒤에 한 번 부른다 — 그 전에
+     * 부르면 불러오기 알림을 UI 가 받지 못한다. 그때까지 저장소는 불러오는 중(Loading)이라 방문은 쌓였다가 불러온 이력 위에 합쳐진다.
+     */
+    void startStore() {
+        // 종료가 먼저 와 결과를 넘기지 못하면 잡은 잠금을 푼다
+        state.submit(stored.history()).whenComplete((reply, failure) -> {
+            if (rejected(failure)) {
+                history.close();
+            }
+        });
+        state.submit(new WorkspaceLoaded(stored.notices()));
+    }
+
+    /**
+     * 앱을 끝낼 때 한 번 부른다(ADR-0011 · 0012): 설정 감시를 끊고 → 상태 실행기를 닫고 남은 명령을 처리한 뒤 → 미저장 이력 · 작업 공간을 바로 저장(합쳐
+     * 최대 2초) → 저장소를 닫는다(잠금을 푼다). 저장하지 못했으면 저장소를 닫지 않는다. 이 뒤의 명령은 실패한 응답을 받는다.
      */
     void shutdown() {
         watchingSettings.cancel();
         // 리소스 수집 예약을 먼저 버린다 — 종료 중에 wsl.exe 를 띄우지 않게
         monitorScheduler.close();
-        shutdownInOrder(stateExecutor, saver, FLUSH_TIMEOUT, scheduler::close, history::close);
+        shutdownInOrder(
+                stateExecutor,
+                List.of(saver::flush, workspaceSaver::flush),
+                FLUSH_TIMEOUT,
+                scheduler::close,
+                history::close);
+    }
+
+    /** 종료 때 미저장 변경을 바로 쓰는 일 하나({@link HistorySaver#flush} · {@link WorkspaceSaver#flush}). */
+    @FunctionalInterface
+    interface Flush {
+        /** 저장할 것이 없었거나 저장했으면(쓸 수 없는 상태라 건너뛴 것 포함) {@code true}. */
+        boolean flush(Duration timeout);
     }
 
     /**
-     * {@link #shutdown} 의 순서. flush 가 실패하면(막힌 저장이 시간을 넘김 · 저장 실패) 저장소를 닫지 않는다 — 닫기는 진행 중인 저장과 같은
-     * 잠금을 기다려 종료를 붙잡을 수 있다. 프로세스가 끝나면 OS 가 파일 잠금을 푼다(ADR-0011 개정).
+     * {@link #shutdown} 의 순서. {@code flushes} 는 순서대로 하나의 기한({@code flushTimeout}) 안에서 돈다. 하나라도 실패하면(막힌 저장이 시간을
+     * 넘김 · 저장 실패) 저장소를 닫지 않는다 — 닫기는 진행 중인 저장과 같은 잠금을 기다려 종료를 붙잡을 수 있다. 프로세스가 끝나면 OS 가 파일
+     * 잠금을 푼다(ADR-0011 개정).
      */
     static void shutdownInOrder(
             ExecutorService stateExecutor,
-            HistorySaver saver,
+            List<Flush> flushes,
             Duration flushTimeout,
             Runnable stopTimers,
             Runnable closeStore) {
@@ -261,35 +333,60 @@ final class Assembly {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
-        boolean flushed = saver.flush(flushTimeout);
+        long deadline = System.nanoTime() + flushTimeout.toNanos();
+        boolean flushed = true;
+        for (Flush flush : flushes) {
+            Duration left = Duration.ofNanos(Math.max(0, deadline - System.nanoTime()));
+            flushed &= flush.flush(left);
+        }
         stopTimers.run();
         if (flushed) {
             closeStore.run();
         } else {
-            LOG.log(System.Logger.Level.WARNING, "종료 때 이력을 저장하지 못해 저장소를 닫지 않고 끝낸다(잠금은 프로세스가 끝나면 풀린다)");
+            LOG.log(System.Logger.Level.WARNING, "종료 때 이력 · 작업 공간을 저장하지 못해 저장소를 닫지 않고 끝낸다(잠금은 프로세스가 끝나면 풀린다)");
         }
     }
 
-    // 블로킹 I/O 라 가상 스레드에서. 종료가 먼저 와 결과를 넘기지 못하면 다시 잡은 잠금을 푼다
-    private static void loadHistory(JsonStateRepository history, StateActor state) {
-        Thread.ofVirtual().name("tanager-history-load").start(() -> {
-            Command<Boolean> loaded;
+    /** 시작 때 state.json 에서 읽은 것. 이력 쪽은 상태에 넣을 명령(불러옴 · 실패)이다. */
+    private record StoredState(
+            Command<Boolean> history, Optional<WorkspaceSnapshot> snapshot, List<WorkspaceLoadNotice> notices) {}
+
+    // 블로킹 I/O 라 가상 스레드에서. 문서는 한 번만 읽는다 — 작업 공간 · 이력 두 부분을 차례로 꺼낸다(ADR-0013 개정 #178)
+    private static CompletableFuture<StoredState> readState(JsonStateRepository store) {
+        CompletableFuture<StoredState> read = new CompletableFuture<>();
+        Thread.ofVirtual().name("tanager-state-load").start(() -> {
             try {
-                loaded = switch (history.load()) {
-                    case Result.Ok<LoadedHistory, HistoryStoreError>(LoadedHistory result) -> new HistoryLoaded(result);
-                    case Result.Err<LoadedHistory, HistoryStoreError>(HistoryStoreError error) ->
-                        new HistoryLoadFailed(error);
-                };
-            } catch (RuntimeException e) {
-                LOG.log(System.Logger.Level.ERROR, "이력 불러오기 실패", e);
-                loaded = new HistoryLoadFailed(new HistoryStoreError.Io(e.toString()));
+                read.complete(readStateNow(store));
+            } catch (Throwable e) {
+                read.completeExceptionally(e);
             }
-            state.submit(loaded).whenComplete((reply, failure) -> {
-                if (rejected(failure)) {
-                    history.close();
-                }
-            });
         });
+        return read;
+    }
+
+    private static StoredState readStateNow(JsonStateRepository store) {
+        Optional<WorkspaceSnapshot> snapshot = Optional.empty();
+        List<WorkspaceLoadNotice> notices = List.of();
+        try {
+            // 실패는 이력 쪽 load 가 같은 오류로 알린다 — 여기서는 처음 작업 공간으로 시작할 뿐이다
+            Optional<LoadedWorkspace> workspace = store.loadWorkspace().value();
+            snapshot = workspace.flatMap(LoadedWorkspace::snapshot);
+            notices = workspace.map(LoadedWorkspace::notices).orElse(List.of());
+        } catch (RuntimeException e) {
+            LOG.log(System.Logger.Level.ERROR, "작업 공간 불러오기 실패", e);
+        }
+        Command<Boolean> history;
+        try {
+            history = switch (store.load()) {
+                case Result.Ok<LoadedHistory, HistoryStoreError>(LoadedHistory result) -> new HistoryLoaded(result);
+                case Result.Err<LoadedHistory, HistoryStoreError>(HistoryStoreError error) ->
+                    new HistoryLoadFailed(error);
+            };
+        } catch (RuntimeException e) {
+            LOG.log(System.Logger.Level.ERROR, "이력 불러오기 실패", e);
+            history = new HistoryLoadFailed(new HistoryStoreError.Io(e.toString()));
+        }
+        return new StoredState(history, snapshot, notices);
     }
 
     private static boolean rejected(Throwable failure) {
