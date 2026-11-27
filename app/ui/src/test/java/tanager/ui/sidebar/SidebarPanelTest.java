@@ -107,6 +107,21 @@ class SidebarPanelTest {
         throw new AssertionError("행 없음: " + label + " in " + visibleRows(tree));
     }
 
+    // 행 위를 왼쪽 버튼으로 count 번 누른다
+    private static void click(JTree tree, TreePath path, int count) {
+        java.awt.Rectangle bounds = tree.getPathBounds(path);
+        tree.dispatchEvent(new java.awt.event.MouseEvent(
+                tree,
+                java.awt.event.MouseEvent.MOUSE_CLICKED,
+                0,
+                0,
+                bounds.x + 2,
+                bounds.y + 2,
+                count,
+                false,
+                java.awt.event.MouseEvent.BUTTON1));
+    }
+
     @BeforeEach
     void installTheme() {
         onEdt(() -> {
@@ -445,17 +460,7 @@ class SidebarPanelTest {
             JTree tree = panel.tree();
             TreePath session = pathOf(tree, SidebarText.session(RUNNING));
             tree.setSelectionPath(session);
-            java.awt.Rectangle bounds = tree.getPathBounds(session);
-            tree.dispatchEvent(new java.awt.event.MouseEvent(
-                    tree,
-                    java.awt.event.MouseEvent.MOUSE_CLICKED,
-                    0,
-                    0,
-                    bounds.x + 2,
-                    bounds.y + 2,
-                    1,
-                    false,
-                    java.awt.event.MouseEvent.BUTTON1));
+            click(tree, session, 1);
             Object name = tree.getInputMap(javax.swing.JComponent.WHEN_FOCUSED).get(KeyStroke.getKeyStroke("ENTER"));
             tree.getActionMap().get(name).actionPerformed(null);
             return null;
@@ -478,17 +483,7 @@ class SidebarPanelTest {
             panel.opener(opener);
             panel.sessions(sessions);
             JTree tree = panel.tree();
-            java.awt.Rectangle bounds = tree.getPathBounds(pathOf(tree, "a"));
-            tree.dispatchEvent(new java.awt.event.MouseEvent(
-                    tree,
-                    java.awt.event.MouseEvent.MOUSE_CLICKED,
-                    0,
-                    0,
-                    bounds.x + 2,
-                    bounds.y + 2,
-                    1,
-                    false,
-                    java.awt.event.MouseEvent.BUTTON1));
+            click(tree, pathOf(tree, "a"), 1);
             return null;
         });
 
@@ -539,17 +534,7 @@ class SidebarPanelTest {
             JTree tree = panel.tree();
             TreePath a = pathOf(tree, "a");
             tree.setSelectionPath(a);
-            java.awt.Rectangle bounds = tree.getPathBounds(a);
-            tree.dispatchEvent(new java.awt.event.MouseEvent(
-                    tree,
-                    java.awt.event.MouseEvent.MOUSE_CLICKED,
-                    0,
-                    0,
-                    bounds.x + 2,
-                    bounds.y + 2,
-                    2,
-                    false,
-                    java.awt.event.MouseEvent.BUTTON1));
+            click(tree, a, 2);
             Object name = tree.getInputMap(javax.swing.JComponent.WHEN_FOCUSED).get(KeyStroke.getKeyStroke("ENTER"));
             tree.getActionMap().get(name).actionPerformed(null);
             return null;
