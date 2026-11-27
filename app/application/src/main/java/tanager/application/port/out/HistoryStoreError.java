@@ -20,8 +20,8 @@ public sealed interface HistoryStoreError {
         }
     }
 
-    /** 읽기 전용으로 열려 쓰지 않았다(상위 버전 · 다른 인스턴스 등). */
-    record ReadOnly(String reason) implements HistoryStoreError {
+    /** 읽기 전용이라 쓰지 않았다. */
+    record ReadOnly(ReadOnlyReason reason) implements HistoryStoreError {
         public ReadOnly {
             Objects.requireNonNull(reason, "reason");
         }
@@ -30,5 +30,21 @@ public sealed interface HistoryStoreError {
         public String describe() {
             return "이력 파일을 저장하지 않았다: " + reason;
         }
+    }
+
+    /** 이력 파일을 쓰지 않는 이유. */
+    enum ReadOnlyReason {
+        /** 아직 불러오지 않았다. */
+        NOT_LOADED,
+        /** 불러오기가 실패했다 — 모르는 파일을 덮어쓰지 않는다. */
+        LOAD_FAILED,
+        /** 저장소를 닫았다. */
+        CLOSED,
+        /** 이 앱보다 새 버전이 쓴 파일이다. */
+        NEWER_SCHEMA,
+        /** 다른 Tanager 가 쓰고 있다. */
+        OTHER_INSTANCE,
+        /** 잠금 파일을 열 수 없다. */
+        LOCK_UNAVAILABLE
     }
 }

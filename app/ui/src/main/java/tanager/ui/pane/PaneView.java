@@ -12,6 +12,7 @@ import tanager.domain.session.ShellProfile;
 import tanager.domain.session.TerminalSession;
 import tanager.domain.session.WorkingDir;
 import tanager.ui.i18n.Msg;
+import tanager.ui.i18n.NoticeText;
 
 /**
  * 창 상태를 화면 글자로 옮긴 것(순수 계산).
@@ -100,7 +101,7 @@ record PaneView(
                 new PaneView(
                         shell(launch.failed().profile()),
                         status(launch.failed().profile()),
-                        Optional.of(Msg.PANE_LAUNCH_FAILED.text(launch.error().describe())),
+                        Optional.of(Msg.PANE_LAUNCH_FAILED.text(NoticeText.DEFAULT.of(launch.error()))),
                         Optional.of(RETRY_HINT),
                         Optional.empty(),
                         Optional.empty());

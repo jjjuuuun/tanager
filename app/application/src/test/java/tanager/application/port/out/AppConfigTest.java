@@ -48,7 +48,9 @@ class AppConfigTest {
     void errorsDescribeThemselves() {
         assertThat(new ConfigError.Corrupt("줄 3").describe()).isNotBlank().contains("줄 3");
         assertThat(new ConfigError.Unreadable("권한").describe()).isNotBlank().contains("권한");
-        assertThat(new ConfigError.WouldOverwrite("손상").describe()).isNotBlank().contains("손상");
+        assertThat(new ConfigError.WouldOverwrite(ConfigError.Risk.CORRUPT_FILE, "손상").describe())
+                .isNotBlank()
+                .contains("손상");
         assertThat(new ConfigError.WriteFailed("디스크").describe()).isNotBlank().contains("디스크");
     }
 }

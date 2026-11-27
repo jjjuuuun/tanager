@@ -15,9 +15,9 @@ public record Alias(String value) {
 
     public Alias {
         Objects.requireNonNull(value, "value");
-        Optional<String> problem = problem(value);
+        Optional<AliasProblem> problem = problem(value);
         if (problem.isPresent()) {
-            throw new IllegalArgumentException(problem.get());
+            throw new IllegalArgumentException(problem.get().describe());
         }
     }
 
@@ -27,22 +27,22 @@ public record Alias(String value) {
         String stripped = raw.strip();
         return problem(stripped)
                 .<Result<Alias, HistoryError.InvalidAlias>>map(
-                        reason -> Result.err(new HistoryError.InvalidAlias(raw, reason)))
+                        problem -> Result.err(new HistoryError.InvalidAlias(raw, problem)))
                 .orElseGet(() -> Result.ok(new Alias(stripped)));
     }
 
-    private static Optional<String> problem(String s) {
+    private static Optional<AliasProblem> problem(String s) {
         if (s.isEmpty() || !s.equals(s.strip())) {
-            return Optional.of("별칭은 비어 있거나 앞뒤에 공백이 있으면 안 된다");
+            return Optional.of(AliasProblem.BLANK);
         }
         if (s.codePointCount(0, s.length()) > MAX_CODE_POINTS) {
-            return Optional.of("별칭은 " + MAX_CODE_POINTS + " 글자를 넘을 수 없다");
+            return Optional.of(AliasProblem.TOO_LONG);
         }
         if (s.codePoints().anyMatch(Alias::isInvisibleControl)) {
-            return Optional.of("별칭에 제어 · 서식 문자가 들어 있다");
+            return Optional.of(AliasProblem.INVISIBLE_CHARACTER);
         }
         if (s.codePoints().allMatch(cp -> Character.isWhitespace(cp) || Character.isSpaceChar(cp))) {
-            return Optional.of("별칭은 보이는 글자가 있어야 한다");
+            return Optional.of(AliasProblem.NO_VISIBLE_CHARACTER);
         }
         return Optional.empty();
     }

@@ -35,7 +35,8 @@ class FakePlatformModuleTest {
                 .orElseThrow());
 
         // when / then
-        assertThatThrownBy(() -> platform.launchCommand(WSL, windows, new Integration.Unavailable("x")))
+        assertThatThrownBy(() -> platform.launchCommand(
+                        WSL, windows, new Integration.Unavailable(new Integration.Problem.NotSupported())))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThat(platform.launchRequests()).isEmpty();
     }

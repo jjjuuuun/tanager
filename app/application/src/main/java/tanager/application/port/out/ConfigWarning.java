@@ -9,15 +9,15 @@ public sealed interface ConfigWarning {
     String describe();
 
     /** {@code key} 의 값 형식이 틀려 기본값을 썼다. */
-    record IgnoredValue(String key, String detail) implements ConfigWarning {
+    record IgnoredValue(String key, IgnoredReason reason) implements ConfigWarning {
         public IgnoredValue {
             Objects.requireNonNull(key, "key");
-            Objects.requireNonNull(detail, "detail");
+            Objects.requireNonNull(reason, "reason");
         }
 
         @Override
         public String describe() {
-            return "설정 " + key + " 를 무시했다: " + detail;
+            return "설정 " + key + " 를 무시했다: " + reason;
         }
     }
 
@@ -27,5 +27,19 @@ public sealed interface ConfigWarning {
         public String describe() {
             return "새 버전(schemaVersion " + found + ")이 쓴 설정 파일이라 읽기만 한다";
         }
+    }
+
+    /** 설정 값을 쓰지 못한 이유. */
+    enum IgnoredReason {
+        /** 1 이상의 정수가 아니다. */
+        NOT_POSITIVE_INTEGER,
+        /** JSON 객체가 아니다. */
+        NOT_OBJECT,
+        /** 프로파일 id 가 비어 있다. */
+        EMPTY_PROFILE_ID,
+        /** 비어 있지 않은 문자열이 아니다. */
+        NOT_NON_EMPTY_STRING,
+        /** 아는 값이 아니다. */
+        UNKNOWN_VALUE
     }
 }

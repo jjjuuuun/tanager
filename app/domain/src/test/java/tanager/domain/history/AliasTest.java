@@ -71,4 +71,19 @@ class AliasTest {
         // given / when / then
         assertThat(Alias.of("   ").error()).isPresent();
     }
+
+    @Test
+    @DisplayName("거부 이유는 문장이 아니라 AliasProblem 값이다 — 화면 언어는 UI 가 정한다(#137)")
+    void problemIsStructured() {
+        // then
+        assertThat(problemOf("   ")).isEqualTo(AliasProblem.BLANK);
+        assertThat(problemOf("a".repeat(65))).isEqualTo(AliasProblem.TOO_LONG);
+        assertThat(problemOf("a\nb")).isEqualTo(AliasProblem.INVISIBLE_CHARACTER);
+        assertThat(problemOf("a\u202Eb")).isEqualTo(AliasProblem.INVISIBLE_CHARACTER);
+        assertThat(problemOf("\u00A0\u00A0")).isEqualTo(AliasProblem.NO_VISIBLE_CHARACTER);
+    }
+
+    private static AliasProblem problemOf(String raw) {
+        return Alias.of(raw).error().orElseThrow().problem();
+    }
 }

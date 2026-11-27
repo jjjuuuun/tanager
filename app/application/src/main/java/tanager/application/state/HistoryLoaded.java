@@ -26,7 +26,7 @@ public record HistoryLoaded(LoadedHistory loaded) implements Command<Boolean> {
         List<AppEvent> events = new ArrayList<>();
         events.add(new AppEvent.HistoryChanged(history));
         for (HistoryLoadNotice notice : loaded.notices()) {
-            events.add(new AppEvent.StoreNotice(notice.describe()));
+            events.add(new AppEvent.StoreNotice(new AppEvent.StoreProblem.Loaded(notice)));
         }
         return new Transition<>(current.withHistory(history).withStore(storeAfterLoad()), events, true);
     }

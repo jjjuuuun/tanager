@@ -30,9 +30,14 @@ public final class FakeShellIntegration implements ShellIntegration {
         return new FakeShellIntegration(new Integration.Installed(directory));
     }
 
-    /** 항상 {@code Unavailable(reason)} 을 돌려준다. */
-    public static FakeShellIntegration unavailable(String reason) {
-        return new FakeShellIntegration(new Integration.Unavailable(reason));
+    /** 항상 {@code Unavailable(problem)} 을 돌려준다. */
+    public static FakeShellIntegration unavailable(Integration.Problem problem) {
+        return new FakeShellIntegration(new Integration.Unavailable(problem));
+    }
+
+    /** 항상 {@code Unavailable(NotSupported)} 를 돌려준다. */
+    public static FakeShellIntegration unavailable() {
+        return unavailable(new Integration.Problem.NotSupported());
     }
 
     /** {@code install()} 이 이 예외를 던진다(포트 계약 위반 흉내 — 호출 수는 센다). */

@@ -73,7 +73,7 @@ class WindowsPowerShellCmdInjectionTest {
 
     private static final Path INSTALLED_DIR = Path.of("integration-dir", "shell-integration");
     private static final Integration INSTALLED = new Integration.Installed(INSTALLED_DIR);
-    private static final Integration UNAVAILABLE = new Integration.Unavailable("스크립트를 쓸 수 없다");
+    private static final Integration UNAVAILABLE = new Integration.Unavailable(new Integration.Problem.NotSupported());
 
     private static LaunchCommand of(
             ShellProfile profile, WorkingDir dir, Optional<String> prompt, Integration integration) {

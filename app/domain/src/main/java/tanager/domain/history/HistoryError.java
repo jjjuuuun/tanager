@@ -13,10 +13,10 @@ public sealed interface HistoryError {
     }
 
     /** 별칭으로 쓸 수 없는 값이다(빈 값 · 너무 김 · 제어 문자). */
-    record InvalidAlias(String raw, String reason) implements HistoryError {
+    record InvalidAlias(String raw, AliasProblem problem) implements HistoryError {
         public InvalidAlias {
             Objects.requireNonNull(raw, "raw");
-            Objects.requireNonNull(reason, "reason");
+            Objects.requireNonNull(problem, "problem");
         }
     }
 }

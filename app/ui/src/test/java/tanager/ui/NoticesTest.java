@@ -31,7 +31,8 @@ class NoticesTest {
     @DisplayName("저장소 알림 이벤트는 상태줄 문장이 되고 같은 문장은 한 번만 쌓인다")
     void storeNoticeBecomesStatusMessageOnce() {
         // given
-        AppEvent notice = new AppEvent.StoreNotice("이력 파일이 손상돼 백업에서 복구했다");
+        AppEvent notice = new AppEvent.StoreNotice(new AppEvent.StoreProblem.Loaded(
+                new tanager.application.port.out.HistoryLoadNotice.RecoveredFromBackup(java.util.Optional.empty())));
 
         // when
         Notices notices = new Notices(List.of())

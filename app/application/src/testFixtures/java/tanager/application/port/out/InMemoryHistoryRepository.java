@@ -96,8 +96,10 @@ public final class InMemoryHistoryRepository implements HistoryRepository {
 
     private synchronized Result<WorkHistory, HistoryStoreError> saveNow(WorkHistory history) {
         if (!access.equals(Optional.of(StoreAccess.WRITABLE))) {
-            return Result.err(
-                    new HistoryStoreError.ReadOnly(access.isEmpty() ? "불러오지 않았거나 불러오기가 실패했다" : "읽기 전용으로 불러왔다"));
+            return Result.err(new HistoryStoreError.ReadOnly(
+                    access.isEmpty()
+                            ? HistoryStoreError.ReadOnlyReason.NOT_LOADED
+                            : HistoryStoreError.ReadOnlyReason.OTHER_INSTANCE));
         }
         if (saveFailure.isPresent()) {
             return Result.err(saveFailure.get());

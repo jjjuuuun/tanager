@@ -42,7 +42,7 @@ class WslCommandLineRoundTripTest {
             new LaunchTemplate(WSL_EXE, List.of("-d", "Ubuntu")),
             IntegrationMode.OSC7);
     private static final Integration INSTALLED = new Integration.Installed(Path.of("사용자 'x 공백", "shell-integration"));
-    private static final Integration UNAVAILABLE = new Integration.Unavailable("통합 없음");
+    private static final Integration UNAVAILABLE = new Integration.Unavailable(new Integration.Problem.NotSupported());
     private static final String INJECTION = "/tmp/q\" -- touch /tmp/proof #";
 
     private static List<String> launchArgv(WorkspacePath path, Integration integration) {

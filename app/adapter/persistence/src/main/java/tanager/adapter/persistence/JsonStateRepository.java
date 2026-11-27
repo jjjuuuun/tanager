@@ -117,7 +117,7 @@ public final class JsonStateRepository implements HistoryRepository, AutoCloseab
 
         record Writable() implements Mode {}
 
-        record ReadOnly(String reason) implements Mode {}
+        record ReadOnly(HistoryStoreError.ReadOnlyReason reason) implements Mode {}
 
         record Closed() implements Mode {}
     }
@@ -125,7 +125,7 @@ public final class JsonStateRepository implements HistoryRepository, AutoCloseab
     @Override
     public synchronized Result<LoadedHistory, HistoryStoreError> load() {
         // 이번 load 가 끝까지 성공해야 쓸 수 있다 — 실패하면 이전 load 의 다른 최상위 키로 덮어쓰지 않는다
-        mode = new Mode.ReadOnly("불러오지 못해 쓰지 않는다");
+        mode = new Mode.ReadOnly(HistoryStoreError.ReadOnlyReason.LOAD_FAILED);
         LockState lockState = holdLock();
         Disk primary;
         try {
@@ -153,20 +153,20 @@ public final class JsonStateRepository implements HistoryRepository, AutoCloseab
         if (contents.repaired() > 0) {
             LOG.log(System.Logger.Level.WARNING, "이력 항목 {0} 개의 틀린 값을 고쳐 읽었다: {1}", contents.repaired(), file);
         }
-        Optional<String> readOnly = Optional.empty();
+        Optional<HistoryStoreError.ReadOnlyReason> readOnly = Optional.empty();
         if (contents.version() > SCHEMA_VERSION) {
             notices.add(new HistoryLoadNotice.NewerSchema(contents.version()));
-            readOnly = Optional.of("새 버전(schemaVersion " + contents.version() + ")이 쓴 파일이다");
+            readOnly = Optional.of(HistoryStoreError.ReadOnlyReason.NEWER_SCHEMA);
         }
         switch (lockState) {
             case LockState.Held _ -> {}
             case LockState.HeldElsewhere _ -> {
                 notices.add(new HistoryLoadNotice.LockedByOtherInstance());
-                readOnly = Optional.of("다른 Tanager 가 쓰고 있다");
+                readOnly = Optional.of(HistoryStoreError.ReadOnlyReason.OTHER_INSTANCE);
             }
             case LockState.Unavailable unavailable -> {
                 notices.add(new HistoryLoadNotice.LockUnavailable(unavailable.detail()));
-                readOnly = Optional.of("잠금 파일을 열 수 없다");
+                readOnly = Optional.of(HistoryStoreError.ReadOnlyReason.LOCK_UNAVAILABLE);
             }
         }
         mode = readOnly.<Mode>map(Mode.ReadOnly::new).orElseGet(Mode.Writable::new);
@@ -181,10 +181,10 @@ public final class JsonStateRepository implements HistoryRepository, AutoCloseab
         Objects.requireNonNull(history, "history");
         switch (mode) {
             case Mode.NotLoaded _ -> {
-                return Result.err(new HistoryStoreError.ReadOnly("불러오기 전에는 쓰지 않는다"));
+                return Result.err(new HistoryStoreError.ReadOnly(HistoryStoreError.ReadOnlyReason.NOT_LOADED));
             }
             case Mode.Closed _ -> {
-                return Result.err(new HistoryStoreError.ReadOnly("닫힌 저장소에는 쓰지 않는다"));
+                return Result.err(new HistoryStoreError.ReadOnly(HistoryStoreError.ReadOnlyReason.CLOSED));
             }
             case Mode.ReadOnly readOnly -> {
                 return Result.err(new HistoryStoreError.ReadOnly(readOnly.reason()));

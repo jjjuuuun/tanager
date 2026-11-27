@@ -45,6 +45,7 @@ import tanager.domain.history.WorkspacePath;
 import tanager.domain.session.ShellProfile;
 import tanager.domain.shared.PaneId;
 import tanager.domain.shared.Result;
+import tanager.ui.i18n.NoticeText;
 import tanager.ui.terminal.StreamTtyConnector;
 import tanager.ui.terminal.TanagerTermWidget;
 import tanager.ui.terminal.TerminalSettings;
@@ -449,7 +450,7 @@ public final class PaneController {
     private static List<String> describe(List<StartNotice> notices) {
         List<String> messages = new ArrayList<>();
         for (StartNotice notice : notices) {
-            messages.add(notice.describe());
+            messages.add(NoticeText.DEFAULT.of(notice));
         }
         return messages;
     }
