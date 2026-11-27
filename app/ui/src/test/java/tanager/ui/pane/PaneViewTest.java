@@ -11,6 +11,7 @@ import tanager.application.port.in.StartFailure;
 import tanager.application.port.out.ScriptedTerminalStream;
 import tanager.domain.history.ShellEnvironment;
 import tanager.domain.session.SessionError;
+import tanager.ui.i18n.Msg;
 
 class PaneViewTest {
     private static final Attempt FRESH = new Attempt.Fresh();
@@ -180,6 +181,25 @@ class PaneViewTest {
 
         // then
         assertThat(view.warning()).contains(PaneView.NO_INTEGRATION);
+    }
+
+    @Test
+    @DisplayName("저장된 경로가 없어 홈에서 연 창은 머리줄 경고에 그 경로를 알린다(#179)")
+    void missingDirectoryShowsWarning() {
+        // given
+        var gone = tanager.domain.history.WorkspacePath.of(
+                        new tanager.domain.history.ShellEnvironment.Wsl("Ubuntu"), "/home/me/gone")
+                .value()
+                .orElseThrow();
+        var session = PaneFixtures.started(
+                new ScriptedTerminalStream(1),
+                List.of(new tanager.application.port.in.StartNotice.MissingDirectory(gone)));
+
+        // when
+        PaneView view = PaneView.of(new PaneState.Running(session));
+
+        // then
+        assertThat(view.warning()).contains(Msg.START_MISSING_DIRECTORY.text("/home/me/gone"));
     }
 
     @Test

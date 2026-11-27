@@ -1,5 +1,6 @@
 package tanager.application.service;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -26,6 +27,7 @@ import tanager.application.port.out.TerminalStream;
 import tanager.application.state.AppState;
 import tanager.application.state.StateActor;
 import tanager.application.state.Transition;
+import tanager.domain.history.ShellEnvironment;
 import tanager.domain.history.WorkspacePath;
 import tanager.domain.session.IntegrationMode;
 import tanager.domain.session.LiveSession;
@@ -47,6 +49,8 @@ import tanager.domain.shared.Result;
  */
 public final class SessionStarter implements StartSessionUseCase {
     private static final String HOME_SHORTHAND = "~";
+    // WSL 경로 존재 확인을 기다리는 한도(#179)
+    private static final Duration PROBE_BUDGET = Duration.ofSeconds(1);
 
     private final ListProfilesUseCase profiles;
     private final ConfigRepository config;
@@ -225,23 +229,45 @@ public final class SessionStarter implements StartSessionUseCase {
     /** 떴지만 아직 추적을 붙이지 않은 셸. */
     private record Launched(TerminalSession running, TerminalStream stream) {}
 
-    // 경로가 있는지 미리 보지 않는다 — 기동이 WorkingDirectoryNotFound 를 주면 홈에서 한 번 더 띄운다(ADR-0009).
+    // Windows 경로는 미리 보지 않는다 — 기동이 WorkingDirectoryNotFound 를 주면 홈에서 한 번 더 띄운다(ADR-0009).
+    // WSL 은 없는 --cd 를 받아도 오류 없이 / 에서 뜨므로(#53) 기동 전에 확인한다(missingInWsl).
     // 홈으로 다시 띄울 때도 같은 설치 결과를 쓴다 — 설치는 프로세스에서 한 번이다(ADR-0014)
     // launchCommand 의 IllegalArgumentException(환경 불일치 · #107 안전하지 않은 인자)은 잡지 않는다. 경로는 WorkspacePath 가,
     // 환경은 세션 생성이 먼저 맞추므로 도달할 수 없는 버그 경로다 — LaunchFailed 로 바꾸면 버그가 평범한 기동 실패로 숨는다
     private Result<Launched, StartFailure> launch(
             TerminalSession starting, TerminalSize size, Integration installed, List<StartNotice> notices) {
         WorkingDir dir = startingDir(starting);
+        if (dir instanceof WorkingDir.At at && missingInWsl(at.path())) {
+            return launchAtHome(starting, at, size, installed, notices);
+        }
         Result<TerminalStream, LaunchError> launched =
                 launcher.launch(platform.launchCommand(starting.profile(), dir, installed), size);
         if (dir instanceof WorkingDir.At at && isMissingDirectory(launched)) {
-            notices.add(new StartNotice.StartDirMissing(at.path()));
-            TerminalSession atHome = expect(TerminalSession.start(starting.profile(), new WorkingDir.Home()));
-            return launch(atHome, size, installed, notices);
+            return launchAtHome(starting, at, size, installed, notices);
         }
         return launched.fold(
                 stream -> Result.ok(new Launched(expect(starting.launched(stream.pid())), stream)),
                 error -> Result.err(failed(starting, error, notices)));
+    }
+
+    private Result<Launched, StartFailure> launchAtHome(
+            TerminalSession starting,
+            WorkingDir.At missing,
+            TerminalSize size,
+            Integration installed,
+            List<StartNotice> notices) {
+        notices.add(new StartNotice.MissingDirectory(missing.path()));
+        TerminalSession atHome = expect(TerminalSession.start(starting.profile(), new WorkingDir.Home()));
+        return launch(atHome, size, installed, notices);
+    }
+
+    /**
+     * WSL 경로가 없다고 확인됐다. 확인이 {@link #PROBE_BUDGET} 을 넘기면(모름) 확인 없이 그 경로로 띄운다 — VM 이 깨어나는 동안 창을 오래
+     * 막지 않으려는 것이다(#179).
+     */
+    private boolean missingInWsl(WorkspacePath path) {
+        return path.env() instanceof ShellEnvironment.Wsl
+                && platform.directories().isDirectory(path, PROBE_BUDGET).equals(Optional.of(false));
     }
 
     private static boolean isMissingDirectory(Result<TerminalStream, LaunchError> launched) {

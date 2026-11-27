@@ -11,6 +11,7 @@ import tanager.application.port.out.HistoryLoadNotice;
 import tanager.application.port.out.HistoryStoreError;
 import tanager.application.port.out.Integration;
 import tanager.application.port.out.LaunchError;
+import tanager.application.port.out.WorkspaceLoadNotice;
 import tanager.domain.history.Alias;
 import tanager.domain.history.AliasProblem;
 import tanager.domain.history.ShellEnvironment;
@@ -22,6 +23,9 @@ import tanager.domain.history.ShellEnvironment;
 public final class NoticeText {
     /** 앱의 화면 언어. */
     public static final NoticeText DEFAULT = new NoticeText(Messages.DEFAULT);
+
+    // WorkspaceLoadNotice.PartDiscarded 의 part 값(#178). 그 밖은 작업 공간이다
+    private static final String WINDOW_PART = "window";
 
     private final Messages messages;
 
@@ -39,7 +43,7 @@ public final class NoticeText {
             case StartNotice.ConfigUnreadable(ConfigError error) -> t(Msg.START_CONFIG_UNREADABLE, of(error));
             case StartNotice.ConfigWarned(ConfigWarning warning) -> of(warning);
             case StartNotice.StartDirInvalid(String raw) -> t(Msg.START_DIR_INVALID, raw);
-            case StartNotice.StartDirMissing(var requested) -> t(Msg.START_DIR_MISSING, requested.path());
+            case StartNotice.MissingDirectory(var requested) -> t(Msg.START_MISSING_DIRECTORY, requested.path());
             case StartNotice.DefaultNotSaved(var profile, ConfigError error) ->
                 t(Msg.START_DEFAULT_NOT_SAVED, profile.value(), of(error));
             case StartNotice.IntegrationUnavailable(Integration.Problem problem) ->
@@ -132,8 +136,19 @@ public final class NoticeText {
     public String of(AppEvent.StoreProblem problem) {
         return switch (problem) {
             case AppEvent.StoreProblem.Loaded(HistoryLoadNotice notice) -> of(notice);
+            case AppEvent.StoreProblem.WorkspaceLoaded(WorkspaceLoadNotice notice) -> of(notice);
             case AppEvent.StoreProblem.LoadFailed(HistoryStoreError error) -> of(error);
             case AppEvent.StoreProblem.SaveFailed(HistoryStoreError error) -> of(error);
+        };
+    }
+
+    // 버린 까닭(reason)은 개발자용이라 화면에 쓰지 않는다 — 로그(describe)에 남는다
+    private String of(WorkspaceLoadNotice notice) {
+        return switch (notice) {
+            case WorkspaceLoadNotice.PartDiscarded(String part, String _) ->
+                t(WINDOW_PART.equals(part) ? Msg.WORKSPACE_WINDOW_DISCARDED : Msg.WORKSPACE_DISCARDED);
+            case WorkspaceLoadNotice.PanesDropped(int count) -> t(Msg.WORKSPACE_PANES_DROPPED, count);
+            case WorkspaceLoadNotice.Migrated(long from, long _) -> t(Msg.WORKSPACE_MIGRATED, from);
         };
     }
 

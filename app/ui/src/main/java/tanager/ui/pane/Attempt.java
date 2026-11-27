@@ -16,7 +16,7 @@ sealed interface Attempt {
         return switch (this) {
             case Fresh _ -> Optional.empty();
             case Restart(TerminalSession exited) -> Optional.of(exited.profile());
-            case Chosen(ShellProfile profile, boolean _) -> Optional.of(profile);
+            case Chosen(ShellProfile profile, boolean _, var _) -> Optional.of(profile);
         };
     }
 
@@ -48,10 +48,28 @@ sealed interface Attempt {
         }
     }
 
-    /** 선택 화면에서 고른 셸을 그 셸의 시작 경로에서 새로 띄운다. {@code remember} 면 성공 뒤 기본으로 저장한다. */
-    record Chosen(ShellProfile profile, boolean remember) implements Attempt {
+    /**
+     * 선택 화면에서 고른 셸을 새로 띄운다. {@code remember} 면 성공 뒤 기본으로 저장한다.
+     *
+     * @param dir 시작 경로. 비면 그 셸의 시작 경로. 복원한 창의 프로파일이 사라져 연 선택 화면에서 같은 환경의 셸을 고르면 저장된 경로다(#179)
+     */
+    record Chosen(ShellProfile profile, boolean remember, Optional<WorkspacePath> dir) implements Attempt {
         public Chosen {
             Objects.requireNonNull(profile, "profile");
+            Objects.requireNonNull(dir, "dir");
+            if (dir.isPresent() && !dir.get().env().equals(profile.env())) {
+                throw new IllegalArgumentException("시작 경로가 셸과 다른 환경이다: " + dir.get());
+            }
+        }
+
+        /** 고른 셸을 그 셸의 시작 경로에서. */
+        Chosen(ShellProfile profile, boolean remember) {
+            this(profile, remember, Optional.empty());
+        }
+
+        /** {@code saved} 가 이 셸과 같은 환경이면 그 경로에서, 아니면 그 셸의 시작 경로에서. */
+        Chosen at(Optional<WorkspacePath> saved) {
+            return new Chosen(profile, remember, saved.filter(path -> path.env().equals(profile.env())));
         }
     }
 }

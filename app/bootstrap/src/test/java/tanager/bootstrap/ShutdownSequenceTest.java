@@ -65,7 +65,7 @@ class ShutdownSequenceTest {
                 long started = System.nanoTime();
                 Assembly.shutdownInOrder(
                         stateExecutor,
-                        saver,
+                        List.of(saver::flush),
                         Duration.ofMillis(200),
                         timersStopped::incrementAndGet,
                         storeClosed::incrementAndGet);
@@ -93,7 +93,7 @@ class ShutdownSequenceTest {
             // when
             Assembly.shutdownInOrder(
                     stateExecutor,
-                    saver,
+                    List.of(saver::flush),
                     Duration.ofSeconds(2),
                     timersStopped::incrementAndGet,
                     storeClosed::incrementAndGet);
@@ -103,5 +103,33 @@ class ShutdownSequenceTest {
             assertThat(storeClosed).hasValue(1);
             assertThat(timersStopped).hasValue(1);
         }
+    }
+
+    @Test
+    @DisplayName("상태 실행기를 닫은 뒤 이력 → 작업 공간 순서로 flush 하고, 하나라도 실패하면 저장소를 닫지 않는다(#179)")
+    void flushesInOrderAndKeepsStoreOpenOnAnyFailure() {
+        // given
+        List<String> order = new java.util.concurrent.CopyOnWriteArrayList<>();
+        Assembly.Flush history = timeout -> {
+            order.add("history:" + stateExecutor.isShutdown());
+            return true;
+        };
+        Assembly.Flush workspace = timeout -> {
+            order.add("workspace");
+            return false;
+        };
+
+        // when
+        Assembly.shutdownInOrder(
+                stateExecutor,
+                List.of(history, workspace),
+                Duration.ofSeconds(2),
+                timersStopped::incrementAndGet,
+                storeClosed::incrementAndGet);
+
+        // then
+        assertThat(order).containsExactly("history:true", "workspace");
+        assertThat(storeClosed).hasValue(0);
+        assertThat(timersStopped).hasValue(1);
     }
 }

@@ -106,7 +106,7 @@ class NoticeTextTest {
         for (HistoryLoadNotice notice : loads) {
             assertNoHangul(EN.of(new AppEvent.StoreProblem.Loaded(notice)));
         }
-        assertNoHangul(EN.of(new StartNotice.StartDirMissing(tanager.domain.history.WorkspacePath.of(
+        assertNoHangul(EN.of(new StartNotice.MissingDirectory(tanager.domain.history.WorkspacePath.of(
                         new tanager.domain.history.ShellEnvironment.Windows(), "C:\\gone")
                 .value()
                 .orElseThrow())));
@@ -146,5 +146,35 @@ class NoticeTextTest {
                 .isEqualTo("창 p9 에 세션이 없다");
         assertThat(EN.of(new OpenError.UnknownPane(new tanager.domain.shared.PaneId("p9"))))
                 .isEqualTo("Pane p9 has no session");
+    }
+
+    @Test
+    @DisplayName("복원(#179): 사라진 경로 알림과 작업 공간 불러오기 알림이 두 언어로 나온다")
+    void restoreNotices() {
+        // given
+        var gone = tanager.domain.history.WorkspacePath.of(
+                        new tanager.domain.history.ShellEnvironment.Wsl("Ubuntu"), "/home/me/gone")
+                .value()
+                .orElseThrow();
+        var window = new AppEvent.StoreProblem.WorkspaceLoaded(
+                new tanager.application.port.out.WorkspaceLoadNotice.PartDiscarded("window", "좌표 일부만"));
+        var workspace = new AppEvent.StoreProblem.WorkspaceLoaded(
+                new tanager.application.port.out.WorkspaceLoadNotice.PartDiscarded("workspace", "탭 없음"));
+        var dropped = new AppEvent.StoreProblem.WorkspaceLoaded(
+                new tanager.application.port.out.WorkspaceLoadNotice.PanesDropped(2));
+        var migrated = new AppEvent.StoreProblem.WorkspaceLoaded(
+                new tanager.application.port.out.WorkspaceLoadNotice.Migrated(1, 2));
+
+        // when / then
+        assertThat(KO.of(new StartNotice.MissingDirectory(gone))).isEqualTo("/home/me/gone 이 없어 홈에서 열었다");
+        assertThat(EN.of(new StartNotice.MissingDirectory(gone)))
+                .isEqualTo("/home/me/gone does not exist — opened in the home directory");
+        assertThat(KO.of(window)).isEqualTo("저장한 창 위치 · 크기를 읽지 못해 기본값을 썼다");
+        assertThat(KO.of(workspace)).isEqualTo("저장한 탭 · 창 배치를 읽지 못해 창 하나로 시작했다");
+        assertThat(KO.of(dropped)).isEqualTo("저장한 창 2 개를 읽지 못해 빼고 복원했다");
+        assertThat(EN.of(migrated)).isEqualTo("Read the state file from an older format (schemaVersion 1)");
+        for (var problem : List.of(window, workspace, dropped, migrated)) {
+            assertNoHangul(EN.of(problem));
+        }
     }
 }

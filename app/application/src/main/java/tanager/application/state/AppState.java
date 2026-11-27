@@ -35,12 +35,17 @@ public record AppState(
 
     /** 앱 시작 때의 상태. 떠 있는 세션은 없고 이력 · 설정은 아직 읽는 중이며, 창은 p1 하나다. */
     public static AppState initial(WorkHistory history) {
+        return initial(history, Workspace.initial());
+    }
+
+    /** 앱 시작 때의 상태. 창은 복원 계획({@code RestoreWorkspaceUseCase.plan}) 대로다(#179). */
+    public static AppState initial(WorkHistory history, Workspace workspace) {
         return new AppState(
                 history,
                 LiveSessions.empty(),
                 new HistoryStore.Loading(List.of()),
                 List.of(),
-                Workspace.initial(),
+                workspace,
                 Optional.empty());
     }
 

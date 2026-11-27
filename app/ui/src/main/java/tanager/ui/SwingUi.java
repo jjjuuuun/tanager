@@ -41,12 +41,13 @@ public final class SwingUi {
     private SwingUi() {}
 
     /**
-     * EDT 에서 메인 창을 띄우고 기억한 셸 하나를 연다(없으면 셸 선택 화면). {@code events} 의 저장소 알림은 상태줄에 보인다.
+     * EDT 에서 메인 창을 띄우고 {@code initial} 의 창마다 셸을 연다(기억한 셸이 없으면 셸 선택 화면). {@code events} 의 저장소 알림은 상태줄에 보인다.
      *
      * @param panes 창 닫기 · 포커스 · 분할 · 크기 · 줌 · 교환(키보드 · 마우스, #148)
      * @param settings 지금 설정과 설정 파일 — "설정 열기"(Ctrl+,)가 연다(FR-CFG-03). 바뀐 설정은 {@code events} 의 SettingsChanged 로 온다
      * @param resources 상태줄 오른쪽의 리소스 표시(#187 · #188). 창을 띄울 때 구독하고 끝낼 때 해제한다
      * @param appearance 지금 쓸 테마 · 움직임(설정 + OS, #184). 움직임을 끄면 전환 효과 없이 바로 바뀐다(FR-UI-04). 테마 적용과 변경 구독은 #185
+     * @param initial 처음 그릴 작업 공간 — 시작 때 복원한 탭 · 분할 · 창별 명세 · 포커스(#179). 창마다 명세대로 셸을 띄운다
      * @param onShutdown 앱을 끝낼 때 셸을 닫은 뒤 EDT 밖에서 한 번 부른다(미저장 이력 저장 등, ADR-0011). 끝나면 프로세스를 끝낸다
      */
     public static void showMainWindow(
@@ -60,6 +61,7 @@ public final class SwingUi {
             AppEvents events,
             WatchResourcesUseCase resources,
             ApplyThemeUseCase appearance,
+            Workspace initial,
             Runnable onShutdown) {
         // 창을 만들기 전에 구독한다 — 이력 불러오기 알림이 창보다 먼저 올 수 있다. 창은 앱과 수명이 같아 해제하지 않는다
         NoticeInbox inbox = new NoticeInbox();
@@ -119,7 +121,8 @@ public final class SwingUi {
                     onShutdown,
                     terminal,
                     motion,
-                    background);
+                    background,
+                    initial);
             shown.set(window);
             Optional.ofNullable(latestSettings.get()).ifPresent(window::settingsChanged);
             window.show(warnings);

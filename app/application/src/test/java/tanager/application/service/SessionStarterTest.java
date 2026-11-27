@@ -206,7 +206,7 @@ class SessionStarterTest {
                 .containsExactly(
                         new LaunchRequest(POWERSHELL, new WorkingDir.At(winPath("C:\\없음"))),
                         new LaunchRequest(POWERSHELL, new WorkingDir.Home()));
-        assertThat(session.notices()).containsExactly(new StartNotice.StartDirMissing(winPath("C:\\없음")));
+        assertThat(session.notices()).containsExactly(new StartNotice.MissingDirectory(winPath("C:\\없음")));
         assertThat(session.session().state())
                 .isEqualTo(new SessionState.Running(session.stream().pid(), new WorkingDir.Home()));
     }
@@ -391,7 +391,7 @@ class SessionStarterTest {
                 (StartFailure.LaunchFailed) result.error().orElseThrow();
         assertThat(failed.error()).isEqualTo(error);
         assertThat(failed.failed().state()).isEqualTo(new SessionState.Failed(error.describe()));
-        assertThat(failed.notices()).containsExactly(new StartNotice.StartDirMissing(winPath("C:\\없음")));
+        assertThat(failed.notices()).containsExactly(new StartNotice.MissingDirectory(winPath("C:\\없음")));
         assertThat(platform.launchRequests())
                 .containsExactly(
                         new LaunchRequest(POWERSHELL, new WorkingDir.At(winPath("C:\\없음"))),
@@ -415,7 +415,7 @@ class SessionStarterTest {
         StartedSession second = started(starter.restart(PANE, exited, SIZE));
 
         // then
-        assertThat(second.notices()).containsExactly(new StartNotice.StartDirMissing(winPath("C:\\work")));
+        assertThat(second.notices()).containsExactly(new StartNotice.MissingDirectory(winPath("C:\\work")));
         assertThat(second.session().state())
                 .isEqualTo(new SessionState.Running(second.stream().pid(), new WorkingDir.Home()));
         assertThat(platform.launchRequests())
@@ -445,7 +445,7 @@ class SessionStarterTest {
         // then
         assertThat(session.notices())
                 .containsExactly(
-                        new StartNotice.ConfigWarned(warning), new StartNotice.StartDirMissing(wslPath("A", "/gone")));
+                        new StartNotice.ConfigWarned(warning), new StartNotice.MissingDirectory(wslPath("A", "/gone")));
     }
 
     @Test
@@ -790,7 +790,7 @@ class SessionStarterTest {
         // then
         assertThat(session.notices())
                 .containsExactly(
-                        new StartNotice.StartDirMissing(wslPath("A", "/gone")),
+                        new StartNotice.MissingDirectory(wslPath("A", "/gone")),
                         new StartNotice.DefaultNotSaved(new ProfileId("wsl:A"), error));
     }
 

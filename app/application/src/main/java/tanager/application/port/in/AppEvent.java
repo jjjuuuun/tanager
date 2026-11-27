@@ -7,6 +7,7 @@ import tanager.application.port.out.ConfigError;
 import tanager.application.port.out.ConfigWarning;
 import tanager.application.port.out.HistoryLoadNotice;
 import tanager.application.port.out.HistoryStoreError;
+import tanager.application.port.out.WorkspaceLoadNotice;
 import tanager.domain.history.ShellEnvironment;
 import tanager.domain.history.WorkHistory;
 import tanager.domain.history.WorkspacePath;
@@ -54,6 +55,18 @@ public sealed interface AppEvent {
         /** 불러오면서 생긴 일(복구 · 건너뜀 · 읽기 전용). */
         record Loaded(HistoryLoadNotice notice) implements StoreProblem {
             public Loaded {
+                Objects.requireNonNull(notice, "notice");
+            }
+
+            @Override
+            public String describe() {
+                return notice.describe();
+            }
+        }
+
+        /** 작업 공간을 읽으면서 생긴 일(부분 손상 · 마이그레이션, #179). 문서 단위의 일은 {@link Loaded} 로 온다. */
+        record WorkspaceLoaded(WorkspaceLoadNotice notice) implements StoreProblem {
+            public WorkspaceLoaded {
                 Objects.requireNonNull(notice, "notice");
             }
 
