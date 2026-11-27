@@ -43,11 +43,11 @@ final class MigrationV1ToV2 implements Migration {
         if (workspace.get("panes") instanceof ObjectNode panes) {
             for (Map.Entry<String, JsonNode> entry : panes.properties()) {
                 if (!(entry.getValue() instanceof ObjectNode pane)
-                        || Environments.string(pane.get(LAST_CWD)).isEmpty()) {
+                        || JsonValues.string(pane.get(LAST_CWD)).isEmpty()) {
                     continue;
                 }
                 Optional<ShellEnvironment> env =
-                        Environments.string(pane.get("profile")).flatMap(Environments::ofProfile);
+                        JsonValues.string(pane.get("profile")).flatMap(Environments::ofProfile);
                 if (env.isEmpty()) {
                     out.remove(WORKSPACE);
                     return new Step(

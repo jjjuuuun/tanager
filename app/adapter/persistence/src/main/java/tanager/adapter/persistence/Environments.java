@@ -20,12 +20,12 @@ final class Environments {
         if (!(node instanceof ObjectNode object)) {
             return Optional.empty();
         }
-        Optional<String> kind = string(object.get(KIND));
+        Optional<String> kind = JsonValues.string(object.get(KIND));
         if (kind.equals(Optional.of(KIND_WINDOWS))) {
             return Optional.of(new ShellEnvironment.Windows());
         }
         if (kind.equals(Optional.of(KIND_WSL))) {
-            return string(object.get(DISTRO)).filter(d -> !d.isBlank()).map(ShellEnvironment.Wsl::new);
+            return JsonValues.nonBlank(object.get(DISTRO)).map(ShellEnvironment.Wsl::new);
         }
         return Optional.empty();
     }
@@ -56,9 +56,5 @@ final class Environments {
             case ShellEnvironment.Windows _ -> KIND_WINDOWS;
             case ShellEnvironment.Wsl wsl -> KIND_WSL + ":" + wsl.distro();
         };
-    }
-
-    static Optional<String> string(JsonNode node) {
-        return node != null && node.isString() ? Optional.of(node.stringValue()) : Optional.empty();
     }
 }

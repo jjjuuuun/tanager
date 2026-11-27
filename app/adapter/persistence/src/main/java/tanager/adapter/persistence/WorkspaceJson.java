@@ -170,8 +170,7 @@ final class WorkspaceJson {
             if (!(node instanceof ObjectNode tab)) {
                 return Optional.empty();
             }
-            Optional<TabId> id =
-                    Environments.string(tab.get(ID)).filter(s -> !s.isBlank()).map(TabId::new);
+            Optional<TabId> id = JsonValues.nonBlank(tab.get(ID)).map(TabId::new);
             if (id.isEmpty() || ids.contains(id.get())) {
                 dropped += leaves(tab.get(LAYOUT));
                 return Optional.empty();
@@ -184,36 +183,40 @@ final class WorkspaceJson {
             List<PaneId> panes = root.get().panes();
             PaneId focused = paneIn(tab.get(FOCUSED), panes).orElse(panes.getFirst());
             // 틀린 이름은 이름만 버린다(자동 이름) — 이름 하나 때문에 탭을 잃지 않게
-            Optional<TabName> name = Environments.string(tab.get(NAME))
-                    .flatMap(s -> TabName.of(s).value());
+            Optional<TabName> name =
+                    JsonValues.string(tab.get(NAME)).flatMap(s -> TabName.of(s).value());
             return Optional.of(new Tab(id.get(), name, root.get(), focused, paneIn(tab.get(ZOOMED), panes)));
         }
 
         // 명세가 없거나 이미 쓰인 창 · 틀린 분할 노드(그 아래 창 모두)는 빼고 형제로 축약한다
         private Optional<LayoutNode> layout(JsonNode node) {
-            if (node instanceof ObjectNode object && object.has(PANE)) {
-                Optional<PaneId> pane = Environments.string(object.get(PANE))
-                        .filter(s -> !s.isBlank())
-                        .map(PaneId::new);
-                if (pane.isPresent() && specs.containsKey(pane.get()) && used.add(pane.get())) {
-                    return Optional.of(new LayoutNode.Leaf(pane.get()));
-                }
-                dropped++;
+            if (!(node instanceof ObjectNode object)) {
                 return Optional.empty();
             }
-            Optional<Orientation> orientation =
-                    node instanceof ObjectNode object ? orientation(object) : Optional.empty();
-            Optional<Ratio> ratio = node instanceof ObjectNode object ? ratio(object.get(RATIO)) : Optional.empty();
-            if (orientation.isEmpty() || ratio.isEmpty() || !node.has(FIRST) || !node.has(SECOND)) {
-                dropped += leaves(node);
+            if (object.has(PANE)) {
+                return leaf(object.get(PANE));
+            }
+            Optional<Orientation> orientation = orientation(object.get(SPLIT));
+            Optional<Ratio> ratio = ratio(object.get(RATIO));
+            if (orientation.isEmpty() || ratio.isEmpty() || !object.has(FIRST) || !object.has(SECOND)) {
+                dropped += leaves(object);
                 return Optional.empty();
             }
-            Optional<LayoutNode> first = layout(node.get(FIRST));
-            Optional<LayoutNode> second = layout(node.get(SECOND));
+            Optional<LayoutNode> first = layout(object.get(FIRST));
+            Optional<LayoutNode> second = layout(object.get(SECOND));
             if (first.isPresent() && second.isPresent()) {
                 return Optional.of(new LayoutNode.Split(orientation.get(), ratio.get(), first.get(), second.get()));
             }
             return first.or(() -> second);
+        }
+
+        private Optional<LayoutNode> leaf(JsonNode id) {
+            Optional<PaneId> pane = JsonValues.nonBlank(id).map(PaneId::new);
+            if (pane.isPresent() && specs.containsKey(pane.get()) && used.add(pane.get())) {
+                return Optional.of(new LayoutNode.Leaf(pane.get()));
+            }
+            dropped++;
+            return Optional.empty();
         }
     }
 
@@ -230,12 +233,12 @@ final class WorkspaceJson {
     }
 
     private static Optional<ProfileId> profile(JsonNode node) {
-        return Environments.string(node).filter(s -> !s.isBlank()).map(ProfileId::new);
+        return JsonValues.nonBlank(node).map(ProfileId::new);
     }
 
     private static Optional<WorkspacePath> cwd(JsonNode node) {
         Optional<ShellEnvironment> env = Environments.read(node.get(ENV));
-        Optional<String> path = Environments.string(node.get(PATH));
+        Optional<String> path = JsonValues.string(node.get(PATH));
         if (env.isEmpty() || path.isEmpty()) {
             return Optional.empty();
         }
@@ -251,11 +254,11 @@ final class WorkspaceJson {
     }
 
     private static Optional<PaneId> paneIn(JsonNode node, List<PaneId> panes) {
-        return Environments.string(node).map(PaneId::new).filter(panes::contains);
+        return JsonValues.string(node).map(PaneId::new).filter(panes::contains);
     }
 
-    private static Optional<Orientation> orientation(ObjectNode node) {
-        Optional<String> split = Environments.string(node.get(SPLIT));
+    private static Optional<Orientation> orientation(JsonNode node) {
+        Optional<String> split = JsonValues.string(node);
         for (Orientation orientation : Orientation.values()) {
             if (split.equals(Optional.of(orientation.name()))) {
                 return Optional.of(orientation);
@@ -288,22 +291,9 @@ final class WorkspaceJson {
         if (!(node instanceof ObjectNode window)) {
             return Result.err("객체가 아니다");
         }
-        Optional<Bounds> bounds = Optional.empty();
-        long present = BOUNDS.stream().filter(window::has).count();
-        if (present == BOUNDS.size()) {
-            List<JsonNode> values = BOUNDS.stream().map(window::get).toList();
-            if (!values.stream().allMatch(JsonNode::isInt)
-                    || values.get(2).intValue() < 1
-                    || values.get(3).intValue() < 1) {
-                return Result.err("x · y · width · height 가 틀렸다");
-            }
-            bounds = Optional.of(new Bounds(
-                    values.get(0).intValue(),
-                    values.get(1).intValue(),
-                    values.get(2).intValue(),
-                    values.get(3).intValue()));
-        } else if (present > 0) {
-            return Result.err("x · y · width · height 중 일부만 있다");
+        Result<Optional<Bounds>, String> bounds = bounds(window);
+        if (bounds instanceof Result.Err<Optional<Bounds>, String>(String reason)) {
+            return Result.err(reason);
         }
         JsonNode maximized = window.get(MAXIMIZED);
         if (maximized != null && !maximized.isBoolean()) {
@@ -317,8 +307,33 @@ final class WorkspaceJson {
         if (toolkit.isEmpty()) {
             return Result.err("toolkit 이 틀렸다");
         }
-        return Result.ok(
-                new WindowState(bounds, maximized != null && maximized.booleanValue(), sidebar.get(), toolkit.get()));
+        return Result.ok(new WindowState(
+                bounds.value().orElseThrow(),
+                maximized != null && maximized.booleanValue(),
+                sidebar.get(),
+                toolkit.get()));
+    }
+
+    // 좌표 넷이 모두 없으면 OS 가 정한 자리, 일부만 있거나 정수가 아니거나 크기 < 1 이면 오류
+    private static Result<Optional<Bounds>, String> bounds(ObjectNode window) {
+        long present = BOUNDS.stream().filter(window::has).count();
+        if (present == 0) {
+            return Result.ok(Optional.empty());
+        }
+        if (present < BOUNDS.size()) {
+            return Result.err("x · y · width · height 중 일부만 있다");
+        }
+        List<JsonNode> values = BOUNDS.stream().map(window::get).toList();
+        if (!values.stream().allMatch(JsonNode::isInt)
+                || values.get(2).intValue() < 1
+                || values.get(3).intValue() < 1) {
+            return Result.err("x · y · width · height 가 틀렸다");
+        }
+        return Result.ok(Optional.of(new Bounds(
+                values.get(0).intValue(),
+                values.get(1).intValue(),
+                values.get(2).intValue(),
+                values.get(3).intValue())));
     }
 
     private static Optional<PanelState> panel(JsonNode node, PanelState fallback) {

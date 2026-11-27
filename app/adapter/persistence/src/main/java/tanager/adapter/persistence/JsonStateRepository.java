@@ -584,7 +584,7 @@ public final class JsonStateRepository implements HistoryRepository, WorkspaceRe
             return Optional.empty();
         }
         Optional<ShellEnvironment> env = Environments.read(o.get("env"));
-        Optional<String> rawPath = Environments.string(o.get("path"));
+        Optional<String> rawPath = JsonValues.string(o.get("path"));
         Optional<Instant> first = instant(o.get("firstVisited"));
         Optional<Instant> last = instant(o.get("lastVisited"));
         JsonNode count = o.get("visitCount");
@@ -627,7 +627,7 @@ public final class JsonStateRepository implements HistoryRepository, WorkspaceRe
 
     private static Optional<Instant> instant(JsonNode node) {
         try {
-            return Environments.string(node).map(Instant::parse);
+            return JsonValues.string(node).map(Instant::parse);
         } catch (DateTimeParseException e) {
             return Optional.empty();
         }
@@ -638,7 +638,7 @@ public final class JsonStateRepository implements HistoryRepository, WorkspaceRe
         if (node == null || node.isNull()) {
             return Optional.of(Optional.empty());
         }
-        return Environments.string(node).flatMap(s -> Alias.of(s).value()).map(Optional::of);
+        return JsonValues.string(node).flatMap(s -> Alias.of(s).value()).map(Optional::of);
     }
 
     // 대소문자만 다른 Windows 경로처럼 합쳐지는 항목은 sources 도 합친다(먼저 나온 순서 유지).
