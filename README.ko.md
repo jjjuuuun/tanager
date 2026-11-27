@@ -3,13 +3,13 @@
 [English](README.md) | **한국어**
 
 [![CI](https://github.com/jjjuuuun/tanager/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/jjjuuuun/tanager/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/badge/release-v0.3.0-blue)](https://github.com/jjjuuuun/tanager/releases)
+[![Release](https://img.shields.io/badge/release-v0.4.0-blue)](https://github.com/jjjuuuun/tanager/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 Windows 용 데스크톱 터미널 관리 프로그램입니다. **WSL**, **Windows PowerShell 5.1**, **cmd** 터미널을 tmux 처럼 한 창에서 나눠 쓰고, 지금까지 작업한 모든 경로를 **폴더 트리**로 남겨 둡니다. 컴퓨터를 다시 켜도 어디서 무엇을 하고 있었는지 바로 알 수 있습니다.
 
 > [!NOTE]
-> **최신 릴리스: v0.3.0 — 이력과 폴더 트리.** 창 하나에 터미널 하나이고, 지금까지 작업한 모든 경로가 왼쪽 폴더 트리에 남습니다. 분할과 트리에서 폴더 열기는 **v0.4.0** 에 들어갑니다. [로드맵](#로드맵)을 보세요.
+> **최신 릴리스: v0.4.0 — 분할.** 창 하나를 키보드나 마우스로 필요한 만큼의 터미널로 나누고, 트리의 폴더를 새 창으로 엽니다. 탭 · 다시 시작했을 때 레이아웃 복원 · 설정은 **v0.5.0** 에 들어갈 예정입니다. [로드맵](#로드맵)을 보세요.
 
 ## 왜 만들었나
 
@@ -43,39 +43,37 @@ PowerShell 7(`pwsh`)과 사용자 정의 셸 프로파일은 일부러 지원 �
 
 ## 사용 방법
 
-### v0.3.0 에서 되는 것
+### v0.4.0 에서 되는 것
 
 1. `Tanager.exe` 를 실행하면 이 PC 에서 찾은 셸 목록이 뜹니다 — WSL 배포판, Windows PowerShell 5.1, cmd.
 2. 화살표 키와 <kbd>Enter</kbd>(또는 <kbd>1</kbd>–<kbd>9</kbd>)로 고릅니다. "다음부터 이 셸로 바로 열기"를 켜 두면 다음부터는 목록 없이 바로 열립니다.
 3. 셸은 실제 터미널(ConPTY)에서 돕니다. 번들된 D2Coding 글꼴로 한글 표시와 입력이 됩니다.
 4. `cd` 하면 창 머리줄 · 상태줄에 지금 경로가 보이고, 그 폴더가 **사이드바**의 환경("WSL · Ubuntu", "Windows") 아래에 나타납니다. 실행 중인 세션은 그 폴더 아래에 매달립니다.
-5. 사이드바에서 할 수 있는 것:
-   - <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd> 로 트리를 검색하고, <kbd>Esc</kbd> 로 검색을 지웁니다.
-   - <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd> 로 사이드바를 숨기거나 보입니다.
-   - 폴더를 오른쪽 클릭하면(또는 메뉴 키 · <kbd>Shift</kbd>+<kbd>F10</kbd>) 메뉴가 뜹니다. 경로 복사 · 고정 · 별칭 · 숨기기 · 기록 삭제를 할 수 있습니다.
-   - <kbd>Delete</kbd> 는 고른 항목의 기록을 지웁니다.
-6. 셸이 끝나면 종료 코드가 보입니다.
-   - <kbd>Enter</kbd>: 셸이 마지막으로 알린 경로에서 다시 시작합니다.
-   - <kbd>Tab</kbd>: 다른 셸을 고릅니다.
-   - <kbd>Esc</kbd>: 창을 닫습니다.
+5. 아래 키나 창 머리줄 버튼으로 창을 나눕니다. 창마다 자기 셸이 돕니다. 경계선을 끌어 크기를 바꾸고, 머리줄(≡)을 잡아 다른 창 위로 끌면 옮기거나 바꿉니다.
+6. 사이드바에서 할 수 있는 것:
+   - 폴더를 더블클릭하거나 <kbd>Enter</kbd> 를 누르거나 창 위로 끌어 놓으면 새 창으로 엽니다. 오른쪽 클릭하면 **여기서 열기 ▸ 오른쪽 · 아래**와 **다른 프로파일로 열기 ▸** 가 있습니다 — WSL 과 Windows 경로는 알아서 바꿉니다(`/mnt/c/work` ↔ `C:\work`).
+   - 세션을 누르면 그 창으로 갑니다. 세션 메뉴로 재시작하거나 닫을 수도 있습니다.
+   - <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd> 로 트리를 검색하고, <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd> 로 사이드바를 숨기거나 보입니다.
+   - 폴더 메뉴(오른쪽 클릭 · 메뉴 키 · <kbd>Shift</kbd>+<kbd>F10</kbd>)에서 경로 복사 · 고정 · 별칭 · 숨기기 · 기록 삭제도 할 수 있습니다.
+7. 셸이 끝나면 그 창에 종료 코드가 보입니다. <kbd>Enter</kbd> 는 마지막으로 알린 경로에서 다시 시작하고, <kbd>Tab</kbd> 은 다른 셸을 고르고, <kbd>Esc</kbd> 는 창을 닫습니다. 마지막 창을 닫으면 앱이 닫힙니다.
 
-이력은 `%APPDATA%\Tanager\state.json` 에 저장됩니다.
+이력은 `%APPDATA%\Tanager\state.json` 에 저장됩니다. 화면은 영어이고, Windows 표시 언어가 한국어면 한국어입니다. 다시 시작했을 때 레이아웃 복원은 아직 없습니다(v0.5.0).
 
-### 예정 키 바인딩 (v0.4.0 부터)
+### 키 바인딩
 
-기본 키 바인딩(Windows)입니다. 모든 동작은 마우스로도 할 수 있습니다 — 창 머리줄 버튼, 경계선 드래그, 창이나 사이드바 폴더를 끌어다 놓기. v1.0 전까지 바뀔 수 있습니다.
+기본 키 바인딩(Windows)입니다. 레이아웃 키는 셸에 포커스가 있어도 동작하고, bash 의 <kbd>Alt</kbd>+<kbd>←</kbd> 같은 셸 키보다 먼저입니다. v1.0 전까지 바뀔 수 있습니다.
 
 | 동작 | 키 | 마우스 |
 |---|---|---|
-| 오른쪽 / 아래로 분할 | <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>=</kbd> / <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>-</kbd> | 창 머리줄 ▥ / ▤ |
+| 오른쪽 / 아래로 분할 | <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>=</kbd> / <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>-</kbd> | 창 머리줄 ▥ / ▤, 또는 오른쪽 클릭 ▸ 분할 |
 | 포커스 이동 | <kbd>Alt</kbd>+<kbd>←↑→↓</kbd> | 창 클릭 |
 | 크기 조정(5 %) | <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>←↑→↓</kbd> | 경계선 드래그(더블클릭 = 50:50) |
 | 줌 | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> | 머리줄 □ 또는 머리줄 더블클릭 |
 | 창 닫기 | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>W</kbd> | 머리줄 × |
 | 창 이동 / 교환 | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>←→</kbd>(교환) | 머리줄 ≡ 를 다른 창의 가장자리(이동) · 가운데(교환)로 끌기 |
-| 새 탭 / 탭 전환 | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd> / <kbd>Ctrl</kbd>+<kbd>Tab</kbd> | 탭 막대 |
 | 이력의 폴더 열기 | 사이드바에서 <kbd>Enter</kbd> | 더블클릭, 또는 창 위로 끌어다 놓기 |
-| 도구함 토글 | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>K</kbd> | — |
+| 새 탭 / 탭 전환 *(예정, v0.5.0)* | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd> / <kbd>Ctrl</kbd>+<kbd>Tab</kbd> | 탭 막대 |
+| 도구함 토글 *(예정, v1.0.0)* | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>K</kbd> | — |
 
 Tanager 는 셸 통합 스크립트가 프롬프트마다 알려 주는 현재 경로(bash 는 OSC 7, PowerShell · cmd 는 OSC 9;9)로 각 셸의 위치를 압니다. 입력한 명령이나 출력은 기록하지 않고 **경로만** 남깁니다.
 
@@ -148,9 +146,9 @@ docs/                      계획서(HTML) · ADR
 |---|---|
 | v0.1.0 | 골격 — 모듈, 아키텍처 규칙, 플랫폼 선택, 패키징 ✅ |
 | v0.2.0 | 단일 터미널 — 셸 탐지, 터미널 창 하나, 종료 후 재시작, 소프트 테마 ✅ |
-| **v0.3.0** | 이력과 폴더 트리 — 경로 추적, 폴더 → 세션 트리, 고정 · 검색 ✅ |
-| v0.4.0 | 분할 — 키보드와 마우스 |
-| v0.5.0 | 복원 · 탭 · 설정 · 테마 · 리소스 표시 |
+| v0.3.0 | 이력과 폴더 트리 — 경로 추적, 폴더 → 세션 트리, 고정 · 검색 ✅ |
+| **v0.4.0** | 분할 — 나누기 · 크기 · 줌 · 교환 · 이동을 키보드와 마우스로, 트리에서 열기 ✅ |
+| v0.5.0 | 복원 · 탭 · 설정 · 테마 · 리소스 표시 (다음, 예정) |
 | v1.0.0 | 도구함 패널과 안정화 |
 | v1.1.0 | macOS |
 
