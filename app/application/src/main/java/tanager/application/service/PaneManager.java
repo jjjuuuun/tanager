@@ -4,34 +4,59 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletionStage;
+import java.util.function.Function;
 import tanager.application.port.in.AppEvent;
 import tanager.application.port.in.ClosePaneUseCase;
 import tanager.application.port.in.FocusPaneUseCase;
 import tanager.application.port.in.ListProfilesUseCase;
+import tanager.application.port.in.MovePaneUseCase;
 import tanager.application.port.in.OpenChoices;
 import tanager.application.port.in.OpenError;
 import tanager.application.port.in.OpenPaneUseCase;
+import tanager.application.port.in.ResizePaneUseCase;
+import tanager.application.port.in.SplitPaneUseCase;
+import tanager.application.port.in.SwapPaneUseCase;
+import tanager.application.port.in.ZoomPaneUseCase;
 import tanager.application.port.out.AppConfig;
 import tanager.application.port.out.ConfigRepository;
 import tanager.application.port.out.LoadedConfig;
 import tanager.application.port.out.OpenPlacement;
 import tanager.application.port.out.PathTranslation;
+import tanager.application.state.AppState;
 import tanager.application.state.StateActor;
 import tanager.application.state.Transition;
 import tanager.domain.history.ShellEnvironment;
 import tanager.domain.history.WorkspacePath;
+import tanager.domain.layout.Direction;
+import tanager.domain.layout.DropZone;
 import tanager.domain.layout.LayoutError;
 import tanager.domain.layout.Orientation;
+import tanager.domain.layout.Ratio;
+import tanager.domain.layout.Rect;
+import tanager.domain.layout.SplitPath;
+import tanager.domain.session.LiveSession;
 import tanager.domain.session.ProfileId;
 import tanager.domain.session.ProfileResolution;
 import tanager.domain.session.ShellProfile;
+import tanager.domain.session.TerminalSession;
 import tanager.domain.shared.PaneId;
 import tanager.domain.shared.Result;
 import tanager.domain.workspace.PaneSpec;
 import tanager.domain.workspace.Workspace;
 
-/** 창 열기 · 닫기 · 포커스(#88). 작업 공간은 {@link StateActor} 에서만 바뀐다. */
-public final class PaneManager implements OpenPaneUseCase, ClosePaneUseCase, FocusPaneUseCase {
+/**
+ * 창 열기 · 닫기 · 포커스(#88)와 분할 · 크기 · 방향 포커스 · 줌 · 교환 · 옮기기(#147). 작업 공간은 {@link StateActor} 에서만 바뀐다. 레이아웃
+ * 연산은 작업 공간이 실제로 바뀔 때만 {@code LayoutChanged} 를 한 번 내고, 실패 · 바뀐 게 없음이면 상태도 이벤트도 그대로다.
+ */
+public final class PaneManager
+        implements OpenPaneUseCase,
+                ClosePaneUseCase,
+                FocusPaneUseCase,
+                SplitPaneUseCase,
+                ResizePaneUseCase,
+                ZoomPaneUseCase,
+                SwapPaneUseCase,
+                MovePaneUseCase {
     private final ListProfilesUseCase profiles;
     private final ConfigRepository config;
     private final PathTranslation paths;
@@ -151,14 +176,91 @@ public final class PaneManager implements OpenPaneUseCase, ClosePaneUseCase, Foc
     @Override
     public CompletionStage<Result<Workspace, LayoutError>> focus(PaneId pane) {
         Objects.requireNonNull(pane, "pane");
+        return changeLayout(workspace -> workspace.focus(pane));
+    }
+
+    @Override
+    public CompletionStage<Result<Workspace, LayoutError>> focus(Direction direction, Rect bounds, int gap) {
+        Objects.requireNonNull(direction, "direction");
+        Objects.requireNonNull(bounds, "bounds");
+        return changeLayout(workspace -> workspace.focus(direction, bounds, gap));
+    }
+
+    @Override
+    public CompletionStage<Result<Workspace, LayoutError>> split(Orientation orientation) {
+        Objects.requireNonNull(orientation, "orientation");
         return state.submit(current -> {
-            Result<Workspace, LayoutError> focused = current.workspace().focus(pane);
-            return focused.fold(
-                    next -> next.equals(current.workspace())
-                            ? new Transition<>(current, List.of(), focused)
-                            : new Transition<>(
-                                    current.withWorkspace(next), List.of(new AppEvent.LayoutChanged(next)), focused),
-                    error -> new Transition<>(current, List.of(), focused));
+            PaneSpec like = besideFocused(current);
+            Workspace next = current.workspace()
+                    .split(orientation, like.profile(), like.dir())
+                    .workspace();
+            return changed(current, next);
         });
+    }
+
+    @Override
+    public CompletionStage<Result<Workspace, LayoutError>> resize(Direction direction) {
+        Objects.requireNonNull(direction, "direction");
+        return changeLayout(workspace -> workspace.resize(direction));
+    }
+
+    @Override
+    public CompletionStage<Result<Workspace, LayoutError>> resizeTo(SplitPath path, Ratio ratio) {
+        Objects.requireNonNull(path, "path");
+        Objects.requireNonNull(ratio, "ratio");
+        return changeLayout(workspace -> workspace.resizeTo(path, ratio));
+    }
+
+    @Override
+    public CompletionStage<Result<Workspace, LayoutError>> toggle() {
+        return changeLayout(workspace -> Result.ok(workspace.toggleZoom()));
+    }
+
+    @Override
+    public CompletionStage<Result<Workspace, LayoutError>> swap(Direction direction, Rect bounds, int gap) {
+        Objects.requireNonNull(direction, "direction");
+        Objects.requireNonNull(bounds, "bounds");
+        return changeLayout(workspace -> workspace.swap(direction, bounds, gap));
+    }
+
+    @Override
+    public CompletionStage<Result<Workspace, LayoutError>> move(PaneId pane, DropZone zone) {
+        Objects.requireNonNull(pane, "pane");
+        Objects.requireNonNull(zone, "zone");
+        return changeLayout(workspace -> workspace.move(pane, zone));
+    }
+
+    /**
+     * 포커스 창 옆에 열 창이 따를 (프로파일, 경로). 세션이 있으면 그 셸과 현재 경로 — 경로와 프로파일이 같은 세션에서 와야 환경이 어긋나지 않는다.
+     * 없으면 그 창의 명세 그대로.
+     */
+    private static PaneSpec besideFocused(AppState current) {
+        PaneId focused = current.workspace().tab().focused();
+        Optional<LiveSession> live =
+                Optional.ofNullable(current.sessions().byPane().get(focused));
+        if (live.isPresent()) {
+            TerminalSession session = live.get().session();
+            return new PaneSpec(focused, Optional.of(session.profile().id()), session.knownCwd());
+        }
+        // 명세가 있는 창 = 트리의 창(Workspace 불변식)
+        return current.workspace().spec(focused).orElseThrow();
+    }
+
+    private CompletionStage<Result<Workspace, LayoutError>> changeLayout(
+            Function<Workspace, Result<Workspace, LayoutError>> operation) {
+        return state.submit(current -> operation
+                .apply(current.workspace())
+                .fold(
+                        next -> changed(current, next),
+                        error -> new Transition<>(current, List.of(), Result.err(error))));
+    }
+
+    // 실제로 바뀌었을 때만 상태를 바꾸고 LayoutChanged 를 한 번 낸다
+    private static Transition<Result<Workspace, LayoutError>> changed(AppState current, Workspace next) {
+        Result<Workspace, LayoutError> reply = Result.ok(next);
+        if (next.equals(current.workspace())) {
+            return new Transition<>(current, List.of(), reply);
+        }
+        return new Transition<>(current.withWorkspace(next), List.of(new AppEvent.LayoutChanged(next)), reply);
     }
 }

@@ -42,6 +42,14 @@ public sealed interface LayoutError {
         }
     }
 
+    /** 그 창의 그 방향에 창이 없다(방향 포커스 · 교환, FR-LAY-03 · 06). */
+    record NoNeighbor(PaneId pane, Direction direction) implements LayoutError {
+        public NoNeighbor {
+            Objects.requireNonNull(pane, "pane");
+            Objects.requireNonNull(direction, "direction");
+        }
+    }
+
     /** 교환 · 이동의 두 창이 같다. */
     record SamePane(PaneId pane) implements LayoutError {
         public SamePane {
