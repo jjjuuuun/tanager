@@ -11,10 +11,12 @@ import java.util.concurrent.TimeUnit;
 import tanager.adapter.persistence.JsonConfigRepository;
 import tanager.adapter.persistence.JsonStateRepository;
 import tanager.adapter.persistence.WatchServiceConfigWatch;
+import tanager.application.port.in.ApplyThemeUseCase;
 import tanager.application.port.in.ListProfilesUseCase;
 import tanager.application.port.in.ManageHistoryUseCase;
 import tanager.application.port.in.QueryHistoryTreeUseCase;
 import tanager.application.port.in.RecordEnvironmentsUseCase;
+import tanager.application.port.in.ResolvedAppearance;
 import tanager.application.port.in.SettingsUseCase;
 import tanager.application.port.in.StartSessionUseCase;
 import tanager.application.port.in.WatchResourcesUseCase;
@@ -25,6 +27,7 @@ import tanager.application.port.out.PlatformModule;
 import tanager.application.port.out.PtyLauncher;
 import tanager.application.port.out.Subscription;
 import tanager.application.port.out.UiDispatcher;
+import tanager.application.service.AppearanceWatcher;
 import tanager.application.service.DefaultProfileMemory;
 import tanager.application.service.EnvironmentRecorder;
 import tanager.application.service.HistoryManager;
@@ -70,6 +73,7 @@ final class Assembly {
     private final WatchServiceConfigWatch configWatch;
     private final ResourceWatcher resources;
     private final ExecutorScheduler monitorScheduler;
+    private final AppearanceWatcher appearance;
     private volatile Subscription watchingSettings = () -> {};
 
     private Assembly(
@@ -84,7 +88,8 @@ final class Assembly {
             SettingsReloader settings,
             WatchServiceConfigWatch configWatch,
             ResourceWatcher resources,
-            ExecutorScheduler monitorScheduler) {
+            ExecutorScheduler monitorScheduler,
+            AppearanceWatcher appearance) {
         this.profiles = profiles;
         this.sessions = sessions;
         this.state = state;
@@ -97,13 +102,14 @@ final class Assembly {
         this.configWatch = configWatch;
         this.resources = resources;
         this.monitorScheduler = monitorScheduler;
+        this.appearance = appearance;
     }
 
     /**
      * 셸 탐지는 수 초 걸릴 수 있어 창을 띄우는 동안 가상 스레드에서 미리 돌린다 — 첫 {@code start} 는 그 결과를 기다린다(탐지는
      * 한 번뿐이다). 셸 통합 설치 · 이력 불러오기도 같은 방식이다(ADR-0013 · 0014). 불러오기 전 방문은 불러온 이력 위에 합쳐진다.
      *
-     * @param ui 리소스 표시(#187)를 UI 스레드로 넘긴다
+     * @param ui 리소스 표시(#187) · 테마 변경 알림(#184)을 UI 스레드로 넘긴다
      */
     static Assembly assemble(PlatformModule platform, PtyLauncher launcher, UiDispatcher ui) {
         ProfileCatalog catalog = new ProfileCatalog(platform);
@@ -137,6 +143,13 @@ final class Assembly {
                 task -> Thread.ofVirtual().name("tanager-monitor").start(task),
                 InstantSource.system(),
                 ui);
+        // 설정을 읽기 전에 구독해야 시작 때의 SettingsChanged 를 받는다. 주기 예약은 저장 타이머를 같이 쓴다(일이 짧다)
+        AppearanceWatcher appearance = new AppearanceWatcher(
+                state,
+                platform,
+                scheduler,
+                task -> Thread.ofVirtual().name("tanager-appearance").start(task),
+                ui);
         return new Assembly(
                 catalog,
                 starter,
@@ -149,7 +162,8 @@ final class Assembly {
                 settings,
                 new WatchServiceConfigWatch(configFile),
                 resources,
-                monitorScheduler);
+                monitorScheduler,
+                appearance);
     }
 
     // 탐지가 끝나면 그 순서를 트리의 환경 순서로 알린다(#83). 실패하면 트리는 이력의 환경을 이름순으로 놓는다
@@ -201,6 +215,16 @@ final class Assembly {
     /** 상태줄의 리소스 표시(#187). 표시는 상태줄 이슈(#188)가 한다. */
     WatchResourcesUseCase resources() {
         return resources;
+    }
+
+    /** 지금 쓸 테마 · 움직임과 그 변경(FR-UI-01, #184). 화면에 적용하는 것은 #185. */
+    ApplyThemeUseCase appearance() {
+        return appearance;
+    }
+
+    /** OS 외관을 부른 스레드에서 한 번 읽는다(Windows: reg.exe). 창을 띄우기 전에 EDT 가 아닌 곳에서 부른다. */
+    ResolvedAppearance readAppearance() {
+        return appearance.readNow();
     }
 
     /** 창 열기 · 닫기 · 포커스(#88 · #89). */

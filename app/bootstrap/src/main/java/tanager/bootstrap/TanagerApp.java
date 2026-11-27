@@ -9,7 +9,6 @@ import tanager.application.platform.PlatformSelection;
 import tanager.application.platform.PlatformSelectionError;
 import tanager.application.port.in.AppEvents;
 import tanager.application.port.out.PlatformModule;
-import tanager.application.port.out.SystemAppearance;
 import tanager.application.state.UiAppEvents;
 import tanager.domain.shared.Result;
 import tanager.ui.PaneCommands;
@@ -44,8 +43,8 @@ public final class TanagerApp {
                 SwingUiDispatcher ui = new SwingUiDispatcher();
                 Assembly assembly = Assembly.assemble(platform, new Pty4jLauncher(), ui);
                 AppEvents events = new UiAppEvents(assembly.state(), ui);
-                // 외부 명령(Windows: reg.exe)을 쓸 수 있어 EDT 가 아닌 여기서 한 번 읽는다
-                SystemAppearance appearance = platform.appearance();
+                // 외부 명령(Windows: reg.exe)을 쓸 수 있어 EDT 가 아닌 여기서 한 번 읽는다. 그 뒤의 변경은 ApplyThemeUseCase 가 알린다
+                assembly.readAppearance();
                 SwingUi.showMainWindow(
                         assembly.sessions(),
                         assembly.profiles(),
@@ -56,7 +55,7 @@ public final class TanagerApp {
                         assembly.settings(),
                         events,
                         assembly.resources(),
-                        appearance,
+                        assembly.appearance(),
                         assembly::shutdown);
                 // UI 가 구독한 뒤라 시작 때의 SettingsChanged 를 UI 가 받는다
                 assembly.startSettings();

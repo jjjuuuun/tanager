@@ -27,7 +27,7 @@ import tanager.domain.session.WorkingDir;
 /** Windows 계열(10 · 11). WSL · PowerShell 5.1 · cmd 는 이 모듈이 맡는다(M2~). */
 public final class WindowsPlatformModule implements PlatformModule {
     private static final Duration WSL_LIST_TIMEOUT = Duration.ofSeconds(3);
-    // 시작 화면 전에 한 번 읽는다 — reg.exe 는 보통 수십 ms 라 길게 기다리지 않는다
+    // 시작 때와 그 뒤 5초마다 읽는다(ADR-0018) — reg.exe 는 보통 수십 ms 라 길게 기다리지 않는다
     private static final Duration APPEARANCE_TIMEOUT = Duration.ofSeconds(1);
     private static final String APP_FOLDER = "Tanager";
     private static final Function<String, Optional<String>> SYSTEM_ENV =
@@ -159,7 +159,7 @@ public final class WindowsPlatformModule implements PlatformModule {
         return directories;
     }
 
-    /** '애니메이션 효과' 설정을 레지스트리에서 읽는다(#152). 부를 때마다 reg.exe 를 실행한다. */
+    /** 다크/라이트(#184)와 '애니메이션 효과'(#152) 설정을 레지스트리에서 읽는다. 부를 때마다 reg.exe 를 두 번 실행한다. */
     @Override
     public SystemAppearance appearance() {
         return WindowsAppearance.read(appearanceRunner, APPEARANCE_TIMEOUT);

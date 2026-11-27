@@ -51,8 +51,9 @@ public interface PlatformModule {
     DirectoryProbe directories();
 
     /**
-     * 지금의 OS 외관 설정(#152). 예외를 던지지 않는다 — 읽지 못한 값은 {@link SystemAppearance#DEFAULT} 의 값이다. 외부 명령을
-     * 실행할 수 있어 EDT 에서 부르지 않는다. 설정 변경 구독은 FR-UI-01(M5)에서 더한다.
+     * 지금의 OS 외관 설정(다크/라이트 · 애니메이션, #152 · #184). 예외를 던지지 않는다 — 읽지 못한 값은 {@link SystemAppearance#DEFAULT}
+     * 의 값이다. 외부 명령을 실행할 수 있어 EDT 에서 부르지 않는다. 변경 알림은 없다 — application 이 주기적으로 다시 부른다(ADR-0018).
+     * 그래서 한 번은 짧아야 한다(수십 ms).
      */
     SystemAppearance appearance();
 
