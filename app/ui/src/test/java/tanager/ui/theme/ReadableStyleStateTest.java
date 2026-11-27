@@ -23,7 +23,8 @@ class ReadableStyleStateTest {
     private static final TerminalPalette DARK = SoftTheme.DARK.load().terminal();
 
     private static StyleState stateFor(TerminalPalette palette) {
-        return JediTermColors.from(palette).styleState();
+        JediTermColors colors = JediTermColors.from(palette);
+        return JediTermColors.styleState(() -> colors);
     }
 
     private static Rgb rgb(Color c) {

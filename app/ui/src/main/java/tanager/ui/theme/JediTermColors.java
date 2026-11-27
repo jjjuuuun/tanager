@@ -76,16 +76,8 @@ public final class JediTermColors {
     }
 
     /**
-     * 위젯마다 새로 만드는 스타일 상태. 셸이 고른 ANSI 글자색 · 배경색이 읽히지 않으면 글자색을 보정한다(#113). 기본 스타일은 부르는
-     * 쪽이 {@code setDefaultStyle} 로 준다.
-     */
-    public StyleState styleState() {
-        return new ReadableStyleState(() -> source);
-    }
-
-    /**
-     * 테마를 따라가는 스타일 상태(#185). 보정 판단과 기본 스타일 모두 {@code colors} 의 지금 값을 쓴다 — 실행 중에 테마를 바꿔도 위젯을
-     * 다시 만들지 않는다.
+     * 위젯마다 새로 만드는 스타일 상태. 셸이 고른 ANSI 글자색 · 배경색이 읽히지 않으면 글자색을 보정한다(#113). 보정 판단과 기본 스타일
+     * 모두 {@code colors} 의 지금 값을 쓴다 — 실행 중에 테마를 바꿔도 위젯을 다시 만들지 않는다(#185).
      */
     public static StyleState styleState(Supplier<JediTermColors> colors) {
         StyleState state = new ReadableStyleState(() -> colors.get().source);
