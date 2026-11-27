@@ -34,6 +34,8 @@ import tanager.application.port.in.OpenPaneUseCase;
 import tanager.application.port.in.QueryHistoryTreeUseCase;
 import tanager.application.port.in.StartSessionUseCase;
 import tanager.domain.history.WorkspacePath;
+import tanager.domain.layout.Ratio;
+import tanager.domain.layout.SplitPath;
 import tanager.domain.shared.PaneId;
 import tanager.domain.workspace.Workspace;
 import tanager.ui.i18n.Msg;
@@ -42,6 +44,7 @@ import tanager.ui.keys.Keymap;
 import tanager.ui.keys.LayoutAction;
 import tanager.ui.layout.LayoutView;
 import tanager.ui.layout.PaneDiff;
+import tanager.ui.layout.PaneMinimum;
 import tanager.ui.pane.PaneController;
 import tanager.ui.sidebar.SidebarPanel;
 import tanager.ui.sidebar.SidebarSessions;
@@ -64,6 +67,9 @@ final class MainWindow {
     private static final int MIN_HEIGHT = 400;
     private static final int GAP = 6;
     private static final int STATUS_HEIGHT = 28;
+    // 경계선을 끌어도 창이 이보다 작아지지 않는다(FR-LAY-11, SDD §5.3)
+    private static final int MIN_COLUMNS = 20;
+    private static final int MIN_ROWS = 5;
     // pty 어댑터는 close 뒤 3초 유예하고 남은 자손을 강제 종료한다(그 뒤에야 루트의 onExit 가 완료될 수 있다). 그보다 길게
     // 기다려 강제 종료 경로까지 덮는다. 루트가 유예 안에 끝나면 자손 정리 스레드(어댑터의 가상 스레드)가 System.exit 와
     // 경합할 수 있다 — 포트에 "정리 끝" 신호가 없어서 남은 한계다(ADR-0011)
@@ -111,7 +117,7 @@ final class MainWindow {
         for (PaneId id : workspace.tab().root().panes()) {
             panes.put(id, newPane(id));
         }
-        this.layout = new LayoutView(workspace.tab().root(), GAP);
+        this.layout = new LayoutView(workspace.tab().root(), GAP, this::paneMinimum, this::resizeTo);
         this.sidebar = new SidebarPanel(historyTree, historyManager, ui);
         sidebar.onLeave(() -> focused().focus());
         sidebar.opener(new PaneOpener(Objects.requireNonNull(open, "open"), background, ui, this::notify));
@@ -225,6 +231,15 @@ final class MainWindow {
                 });
     }
 
+    // 경계선을 놓았거나 두 번 눌렀다(#150). 놓을 때 한 번만 바꾼다 — 화면 · 셸 크기는 LayoutChanged 로 따라온다
+    private void resizeTo(SplitPath path, Ratio ratio) {
+        commands.resize().resizeTo(path, ratio).whenComplete((result, failure) -> {
+            if (failure != null) {
+                LOG.log(System.Logger.Level.WARNING, "경계선 크기 조절이 예외로 끝났다", failure);
+            }
+        });
+    }
+
     // Ctrl+Shift+E: 사이드바 보이기 · 숨기기, Ctrl+Shift+F: 사이드바 검색(SDD §8.2). 전환 효과는 M4(FR-UI-04)
     private boolean sidebarShortcut(KeyEvent event) {
         boolean ours = event.isControlDown() && event.isShiftDown() && !event.isAltDown();
@@ -263,6 +278,13 @@ final class MainWindow {
 
     private PaneController newPane(PaneId id) {
         return new PaneController(id, ui, background, sessions, profiles, settings, new Host(id));
+    }
+
+    // 20열 × 5행. 칸 크기는 터미널 글꼴로, 테두리 · 머리줄 · 스크롤바 몫은 포커스 창에서 잰다(창마다 같은 꾸밈이다)
+    private PaneMinimum paneMinimum() {
+        Dimension cells = settings.cellArea(frame, MIN_COLUMNS, MIN_ROWS);
+        Dimension chrome = focused().chrome();
+        return new PaneMinimum(cells.width + chrome.width, cells.height + chrome.height);
     }
 
     private PaneController focused() {
