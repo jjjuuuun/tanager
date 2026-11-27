@@ -166,6 +166,15 @@ public final class PaneController {
         dispatch(new PaneEvent.CwdReported(path));
     }
 
+    /** 터미널(또는 지금 보이는 종료 띠 · 선택 화면)로 포커스를 돌린다. 사이드바 검색칸의 Esc(#85). EDT 에서 부른다. */
+    public void focus() {
+        switch (state) {
+            case PaneState.Exited _, PaneState.Failed _, PaneState.Errored _ -> notice.requestFocusInWindow();
+            case PaneState.Picking _ -> picker.requestFocusInWindow();
+            case PaneState.Launching _, PaneState.Running _, PaneState.Closed _ -> widget.requestFocusInWindow();
+        }
+    }
+
     /** 머리줄 글자(테스트용). */
     JLabel header() {
         return header;

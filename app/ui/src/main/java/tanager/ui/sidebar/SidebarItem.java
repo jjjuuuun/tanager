@@ -11,8 +11,10 @@ import java.util.Optional;
  * @param secondary 보조 글자(별칭)
  * @param tooltip 툴팁
  * @param kind 그리는 방식
+ * @param matched 검색어에 맞았는지(강조색으로 그린다)
  */
-record SidebarItem(NodeKey key, String label, Optional<String> secondary, Optional<String> tooltip, Kind kind) {
+record SidebarItem(
+        NodeKey key, String label, Optional<String> secondary, Optional<String> tooltip, Kind kind, boolean matched) {
 
     enum Kind {
         PINNED_SECTION,

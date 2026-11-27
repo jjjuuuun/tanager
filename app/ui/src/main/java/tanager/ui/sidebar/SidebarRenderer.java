@@ -28,16 +28,23 @@ final class SidebarRenderer extends DefaultTreeCellRenderer {
                         + escape(alias) + "</font></html>")
                 .orElse(item.label()));
         setToolTipText(item.tooltip().orElse(null));
-        setForeground(ThemeColors.get(
-                item.kind() == SidebarItem.Kind.ENVIRONMENT || item.kind() == SidebarItem.Kind.PINNED_SECTION
-                        ? ColorToken.MUTED
-                        : ColorToken.TEXT));
+        setForeground(ThemeColors.get(colorOf(item)));
         switch (item.kind()) {
             case SESSION_RUNNING -> setIcon(new Dot(ColorToken.OK));
             case SESSION_EXITED -> setIcon(new Dot(ColorToken.BAD));
             case PINNED_SECTION, PINNED, ENVIRONMENT, FOLDER -> {}
         }
         return this;
+    }
+
+    // 검색어에 맞은 노드는 강조색(#85)
+    private static ColorToken colorOf(SidebarItem item) {
+        if (item.matched()) {
+            return ColorToken.ACCENT;
+        }
+        return item.kind() == SidebarItem.Kind.ENVIRONMENT || item.kind() == SidebarItem.Kind.PINNED_SECTION
+                ? ColorToken.MUTED
+                : ColorToken.TEXT;
     }
 
     private static String hex(ColorToken token) {
