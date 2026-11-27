@@ -113,4 +113,25 @@ class WindowsPlatformModuleTest {
         org.assertj.core.api.Assertions.assertThat(windows.map(tanager.domain.history.WorkspacePath::path))
                 .contains("C:\\x");
     }
+
+    @Test
+    @DisplayName("appearance() 는 레지스트리의 '애니메이션 효과' 설정을 읽는다(#152)")
+    void appearanceReadsAnimationSetting() {
+        // given
+        WindowsShellCatalog catalog = new WindowsShellCatalog(
+                new FakeCommandRunner(new CommandOutcome.NotStarted("x")),
+                key -> Optional.empty(),
+                Duration.ofSeconds(1));
+        FakeCommandRunner reg = new FakeCommandRunner(new CommandOutcome.Exited(
+                0, "    MinAnimate    REG_SZ    0\r\n".getBytes(java.nio.charset.StandardCharsets.US_ASCII)));
+        WindowsPlatformModule custom = new WindowsPlatformModule(catalog, key -> Optional.empty(), "C:\\Users\\u", reg);
+
+        // when
+        boolean animations = custom.appearance().animations();
+
+        // then
+        assertThat(animations).isFalse();
+        assertThat(reg.commands()).hasSize(1);
+        assertThat(reg.commands().getFirst()).startsWith("reg.exe", "query");
+    }
 }

@@ -127,6 +127,18 @@ class SoftLafDefaultsTest {
 
     @ParameterizedTest
     @EnumSource(SoftTheme.class)
+    @DisplayName("전환 시간 토큰은 150~200ms 다(FR-UI-04)")
+    void motionDurationInRange(SoftTheme theme) {
+        // given
+        UIDefaults d = defaults(theme);
+
+        // then
+        assertThat(d.get("Tanager.motion.duration")).isInstanceOf(Integer.class);
+        assertThat(d.getInt("Tanager.motion.duration")).isBetween(150, 200);
+    }
+
+    @ParameterizedTest
+    @EnumSource(SoftTheme.class)
     @DisplayName("스크롤바는 소프트 스크롤바 UI 를 쓴다(#63)")
     void scrollBarUsesSoftUi(SoftTheme theme) {
         assertThat(defaults(theme).getString("ScrollBarUI")).isEqualTo(SoftScrollBarUI.class.getName());

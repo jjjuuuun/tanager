@@ -56,6 +56,9 @@ import tanager.ui.i18n.Msg;
 import tanager.ui.i18n.NoticeText;
 import tanager.ui.keys.KeyHelp;
 import tanager.ui.keys.LayoutAction;
+import tanager.ui.motion.Animator;
+import tanager.ui.motion.Lerp;
+import tanager.ui.motion.Motion;
 import tanager.ui.terminal.StreamTtyConnector;
 import tanager.ui.terminal.TanagerTermWidget;
 import tanager.ui.terminal.TerminalSettings;
@@ -120,6 +123,7 @@ public final class PaneController {
     private final Notice notice = new Notice();
     private final ShellPickerPanel picker = new ShellPickerPanel(this::dispatch);
     private final PropertyChangeListener focusListener = event -> updateFocus();
+    private final Animator focusBorder;
 
     private PaneState state = new PaneState.Launching(new Attempt.Fresh());
     private TanagerTermWidget widget;
@@ -128,6 +132,7 @@ public final class PaneController {
     private Optional<Body> laidOut = Optional.empty();
     private Optional<TanagerTermWidget> laidOutWidget = Optional.empty();
     private boolean disposed;
+    private boolean focused;
     // 진행 중인 기동이 내놓을 스트림. 기동 중에 앱이 끝나도 그 스트림을 닫고 종료를 기다리려고 들고 있다
     private CompletableFuture<Optional<TerminalStream>> launching = CompletableFuture.completedFuture(Optional.empty());
 
@@ -139,6 +144,7 @@ public final class PaneController {
             StartSessionUseCase sessions,
             ListProfilesUseCase profiles,
             TerminalSettings settings,
+            Motion motion,
             Host host) {
         this.id = Objects.requireNonNull(id, "id");
         this.ui = Objects.requireNonNull(ui, "ui");
@@ -147,6 +153,7 @@ public final class PaneController {
         this.profiles = Objects.requireNonNull(profiles, "profiles");
         this.settings = Objects.requireNonNull(settings, "settings");
         this.host = Objects.requireNonNull(host, "host");
+        this.focusBorder = new Animator(motion, 0, root::emphasis);
         this.widget = new TanagerTermWidget(settings);
         layoutPane();
         KeyboardFocusManager.getCurrentKeyboardFocusManager().addPropertyChangeListener("focusOwner", focusListener);
@@ -603,11 +610,11 @@ public final class PaneController {
         focusChanged(owner != null && SwingUtilities.isDescendingFrom(owner, root));
     }
 
-    /** 창 안에 키보드 포커스가 있는지 바뀌었다 — 테두리를 다시 그리고, 들어왔으면 Host 에 알린다. */
+    /** 창 안에 키보드 포커스가 있는지 바뀌었다 — 테두리 색을 전환하고(FR-UI-04), 들어왔으면 Host 에 알린다. */
     void focusChanged(boolean focused) {
-        if (focused != root.focused) {
-            root.focused = focused;
-            root.repaint();
+        if (focused != this.focused) {
+            this.focused = focused;
+            focusBorder.animateTo(focused ? 1 : 0);
             if (focused) {
                 host.focusGained();
             }
@@ -619,6 +626,7 @@ public final class PaneController {
             return;
         }
         disposed = true;
+        focusBorder.cancel();
         KeyboardFocusManager.getCurrentKeyboardFocusManager().removePropertyChangeListener("focusOwner", focusListener);
         widget.close();
     }
@@ -676,13 +684,13 @@ public final class PaneController {
 
     /**
      * 둥근 모서리 창. 자식은 반지름만큼 안쪽에 놓아 사각형 자식(터미널)이 모서리 밖으로 나가지 않게 하고, 테두리는 포커스가 안에
-     * 있으면 2px 강조색, 아니면 1px 경계색(앱이 비활성이어도)이다.
+     * 있으면 2px 강조색, 아니면 1px 경계색(앱이 비활성이어도)이다. 그 사이는 {@code emphasis}(0..1)로 섞는다.
      */
     private static final class RoundedPane extends JPanel {
         private final int arc = UIManager.getInt("Tanager.pane.arc");
         private final int focusWidth = Math.max(1, UIManager.getInt("Tanager.focusBorder.width"));
         private final JComponent header;
-        private boolean focused;
+        private double emphasis;
 
         RoundedPane(JComponent header) {
             super(new BorderLayout());
@@ -690,6 +698,12 @@ public final class PaneController {
             setOpaque(false);
             int inset = Math.max(focusWidth, (arc + 1) / 2);
             setBorder(new EmptyBorder(inset, inset, inset, inset));
+        }
+
+        /** 포커스 강조 정도(0 = 경계색 1px, 1 = 강조색 2px). 전환 중에는 그 사이 값이다. */
+        void emphasis(double value) {
+            emphasis = value;
+            repaint();
         }
 
         @Override
@@ -714,9 +728,9 @@ public final class PaneController {
             Graphics2D g2 = (Graphics2D) g.create();
             try {
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                float width = focused ? focusWidth : 1f;
+                float width = (float) Lerp.number(1, focusWidth, emphasis);
                 g2.setStroke(new BasicStroke(width));
-                g2.setColor(ThemeColors.get(focused ? ColorToken.ACCENT : ColorToken.BORDER));
+                g2.setColor(ThemeColors.mix(ColorToken.BORDER, ColorToken.ACCENT, emphasis));
                 float half = width / 2f;
                 g2.draw(new RoundRectangle2D.Float(half, half, getWidth() - width, getHeight() - width, arc, arc));
             } finally {

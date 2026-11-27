@@ -46,4 +46,10 @@ public interface PlatformModule {
 
     /** 환경 사이의 경로 변환(#90). "다른 프로파일로 열기"가 쓴다. */
     PathTranslation paths();
+
+    /**
+     * 지금의 OS 외관 설정(#152). 예외를 던지지 않는다 — 읽지 못한 값은 {@link SystemAppearance#DEFAULT} 의 값이다. 외부 명령을
+     * 실행할 수 있어 EDT 에서 부르지 않는다. 설정 변경 구독은 FR-UI-01(M5)에서 더한다.
+     */
+    SystemAppearance appearance();
 }
