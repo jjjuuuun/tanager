@@ -101,4 +101,55 @@ class SoftLafDefaultsTest {
             javax.swing.UIManager.setLookAndFeel(previous);
         }
     }
+
+    @ParameterizedTest
+    @EnumSource(SoftTheme.class)
+    @DisplayName("포커스를 잃은 선택 배경은 순수 검정이 아니고 글자 대비가 4.5 : 1 이상이며 사이드바와 구별된다(#63)")
+    void inactiveSelectionIsReadable(SoftTheme theme) {
+        // given
+        UIDefaults d = defaults(theme);
+        Rgb sidebar = theme.load().tokens().get(ColorToken.SIDEBAR);
+        Rgb select = theme.load().tokens().get(ColorToken.SELECT);
+
+        // then
+        for (String component : java.util.List.of("Tree", "List", "Table")) {
+            Rgb background = rgb(d.getColor(component + ".selectionInactiveBackground"));
+            Rgb foreground = rgb(d.getColor(component + ".selectionInactiveForeground"));
+            assertThat(background).as(component).isNotEqualTo(new Rgb(0, 0, 0));
+            assertThat(Contrast.ratio(foreground, background)).as(component).isGreaterThanOrEqualTo(4.5);
+            assertThat(background).as(component).isNotEqualTo(sidebar);
+            // FlatLaf 의 파생값(다크 #0B0D10)처럼 검정 쪽으로 빠지지 않고 활성 선택색 가까이에 있다
+            assertThat(Contrast.ratio(background, select))
+                    .as(component)
+                    .isLessThan(Contrast.ratio(background, new Rgb(0, 0, 0)));
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(SoftTheme.class)
+    @DisplayName("스크롤바는 소프트 스크롤바 UI 를 쓴다(#63)")
+    void scrollBarUsesSoftUi(SoftTheme theme) {
+        assertThat(defaults(theme).getString("ScrollBarUI")).isEqualTo(SoftScrollBarUI.class.getName());
+    }
+
+    @Test
+    @DisplayName("스크롤바 손잡이는 평소 얇고 마우스를 올리면 굵어진다(#63)")
+    void thumbIsThinUntilHovered() throws Exception {
+        // given
+        javax.swing.LookAndFeel previous = javax.swing.UIManager.getLookAndFeel();
+        javax.swing.UIManager.setLookAndFeel(new SoftDarkLaf());
+        try {
+            SoftScrollBarUI ui = (SoftScrollBarUI) new javax.swing.JScrollBar().getUI();
+
+            // when
+            java.awt.Insets idle = ui.thumbInsets(false);
+            java.awt.Insets hovered = ui.thumbInsets(true);
+
+            // then
+            assertThat(idle.left).isGreaterThan(hovered.left);
+            assertThat(idle.right).isGreaterThan(hovered.right);
+        } finally {
+            javax.swing.UIManager.setLookAndFeel(previous);
+        }
+    }
 }
