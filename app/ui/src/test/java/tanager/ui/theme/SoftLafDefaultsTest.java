@@ -152,4 +152,18 @@ class SoftLafDefaultsTest {
             javax.swing.UIManager.setLookAndFeel(previous);
         }
     }
+
+    @ParameterizedTest
+    @EnumSource(SoftTheme.class)
+    @DisplayName("UI 글꼴은 논리 글꼴 Dialog 다 — 한국어 Windows 의 맑은 고딕은 \\ 를 ₩ 로 그린다(#125)")
+    void uiFontIsLogicalDialog(SoftTheme theme) {
+        // given
+        UIDefaults d = defaults(theme);
+
+        // then: 라틴 글자는 라틴 글꼴, 한글은 대체 글꼴로 그리는 합성 글꼴이라 \ 가 그대로 보인다
+        for (String key : java.util.List.of("defaultFont", "Label.font", "Tree.font")) {
+            assertThat(d.getFont(key)).as(key).isNotNull();
+            assertThat(d.getFont(key).getFamily(java.util.Locale.ROOT)).as(key).isEqualTo(java.awt.Font.DIALOG);
+        }
+    }
 }
