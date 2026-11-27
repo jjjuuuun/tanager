@@ -14,11 +14,13 @@ import tanager.application.port.in.StartedSession;
 import tanager.application.port.out.LaunchError;
 import tanager.application.port.out.ScriptedTerminalStream;
 import tanager.domain.history.ShellEnvironment;
+import tanager.domain.history.WorkspacePath;
 import tanager.domain.session.IntegrationMode;
 import tanager.domain.session.LaunchTemplate;
 import tanager.domain.session.ProfileId;
 import tanager.domain.session.ProfileResolution;
 import tanager.domain.session.SessionError;
+import tanager.domain.session.SessionState;
 import tanager.domain.session.ShellKind;
 import tanager.domain.session.ShellProfile;
 import tanager.domain.session.TerminalSession;
@@ -58,6 +60,68 @@ class PaneStateTest {
                 .value()
                 .orElseThrow();
         return new StartFailure.LaunchFailed(failed, new LaunchError.StartFailed("boom"), List.of());
+    }
+
+    private static StartedSession ubuntuSession() {
+        return new StartedSession(
+                PaneFixtures.running(PaneFixtures.UBUNTU),
+                new ScriptedTerminalStream(1),
+                new CompletableFuture<>(),
+                List.of());
+    }
+
+    private static WorkspacePath wsl(String raw) {
+        return WorkspacePath.of(new ShellEnvironment.Wsl("Ubuntu"), raw).value().orElseThrow();
+    }
+
+    @Test
+    @DisplayName("실행 중에 셸이 경로를 알리면 머리줄이 그 경로를 보인다(#82)")
+    void runningFollowsReportedCwd() {
+        // given
+        PaneState running = new PaneState.Running(ubuntuSession());
+
+        // when
+        PaneState next = running.on(new PaneEvent.CwdReported(wsl("/srv/app"))).next();
+
+        // then
+        assertThat(PaneView.of(next).header()).isEqualTo("bash · /srv/app");
+        assertThat(PaneView.of(next).status()).isEqualTo("WSL · Ubuntu · bash · /srv/app");
+    }
+
+    @Test
+    @DisplayName("셸이 끝나면 종료 화면도 마지막으로 알린 경로를 보인다")
+    void exitedKeepsLastReportedCwd() {
+        // given: 종료 사건의 세션은 처음 Running 에서 만든 것이라 홈을 가리킨다
+        StartedSession started = ubuntuSession();
+        PaneState moved = new PaneState.Running(started)
+                .on(new PaneEvent.CwdReported(wsl("/srv/app")))
+                .next();
+        TerminalSession stale = started.session().exited(0).value().orElseThrow();
+
+        // when
+        PaneState exited = moved.on(new PaneEvent.ShellExited(stale)).next();
+
+        // then
+        assertThat(PaneView.of(exited).header()).isEqualTo("bash · /srv/app");
+        assertThat(((PaneState.Exited) exited).session().state())
+                .isEqualTo(new SessionState.Exited(0, new WorkingDir.At(wsl("/srv/app"))));
+    }
+
+    @Test
+    @DisplayName("다른 환경의 경로 보고는 무시한다")
+    void ignoresCwdFromOtherEnvironment() {
+        // given
+        PaneState running = new PaneState.Running(ubuntuSession());
+        WorkspacePath windows = WorkspacePath.of(new ShellEnvironment.Windows(), "C:\\x")
+                .value()
+                .orElseThrow();
+
+        // when
+        Transition t = running.on(new PaneEvent.CwdReported(windows));
+
+        // then
+        assertThat(t.next()).isEqualTo(running);
+        assertThat(t.effects()).isEmpty();
     }
 
     @Test

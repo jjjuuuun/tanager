@@ -29,6 +29,8 @@ import tanager.application.port.in.StartSessionUseCase;
 import tanager.application.port.in.StartedSession;
 import tanager.application.port.out.ScriptedTerminalStream;
 import tanager.application.port.out.TerminalSize;
+import tanager.domain.history.ShellEnvironment;
+import tanager.domain.history.WorkspacePath;
 import tanager.domain.session.ProfileResolution;
 import tanager.domain.session.ShellProfile;
 import tanager.domain.session.TerminalSession;
@@ -89,6 +91,26 @@ class PaneControllerTest {
         assertThat(sessions.restarts).containsExactly(exited);
         assertThat(onEdt(controller::widget)).isNotSameAs(old);
         assertThat(onEdt(controller::state)).isInstanceOf(PaneState.Running.class);
+    }
+
+    @Test
+    @DisplayName("셸이 경로를 알리면 머리줄에 그 경로가, 툴팁에 전체 경로가 보인다(#82)")
+    void headerShowsReportedCwd() {
+        // given
+        startAndConnect();
+        WorkspacePath work = WorkspacePath.of(new ShellEnvironment.Windows(), "C:\\work")
+                .value()
+                .orElseThrow();
+
+        // when
+        onEdt(() -> {
+            controller.cwdReported(work);
+            return null;
+        });
+
+        // then
+        assertThat(onEdt(() -> controller.header().getText())).isEqualTo("cmd · C:\\work");
+        assertThat(onEdt(() -> controller.header().getToolTipText())).isEqualTo("C:\\work");
     }
 
     @Test

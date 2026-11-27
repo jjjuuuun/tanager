@@ -20,6 +20,7 @@ import tanager.application.port.in.StartFailure;
 import tanager.application.port.in.StartedSession;
 import tanager.application.port.out.ScriptedTerminalStream;
 import tanager.domain.history.ShellEnvironment;
+import tanager.domain.history.WorkspacePath;
 import tanager.domain.session.ProfileId;
 import tanager.domain.session.ProfileResolution;
 import tanager.domain.session.SessionError;
@@ -27,7 +28,7 @@ import tanager.domain.session.SessionState;
 import tanager.domain.session.ShellProfile;
 import tanager.domain.session.TerminalSession;
 
-/** 창 상태 기계의 전체 표: 상태 7 × 사건 10. 빈칸 없이 다음 상태와 효과를 적는다. */
+/** 창 상태 기계의 전체 표: 상태 7 × 사건 11. 빈칸 없이 다음 상태와 효과를 적는다. */
 class PaneStateTableTest {
     // 표의 값들(한 번 만들어 모든 칸이 같은 객체를 쓴다 — CloseStream 은 스트림 동일성으로 비교한다)
     private static final Attempt FRESH = new Attempt.Fresh();
@@ -58,6 +59,9 @@ class PaneStateTableTest {
     private static final PaneEvent TAB = new PaneEvent.TabPressed();
     private static final PaneEvent PICKER = new PaneEvent.PickerInput(new PickerKey.Move(1));
     private static final PaneEvent LISTED = new PaneEvent.ShellsListed(SHELLS);
+    private static final WorkspacePath REPORTED =
+            WorkspacePath.of(new ShellEnvironment.Windows(), "C:\\work").value().orElseThrow();
+    private static final PaneEvent CWD = new PaneEvent.CwdReported(REPORTED);
 
     private static PaneState reopened(Optional<ProfileId> current, PaneState previous) {
         return new PaneState.Picking(ShellPicker.reopened(SHELLS, current), new PickerExit.ReturnTo(previous));
@@ -149,6 +153,16 @@ class PaneStateTableTest {
         rows.add(cell(PICKING, TAB, PICKING));
         rows.add(cell(PICKING, PICKER, moved));
         rows.add(cell(PICKING, LISTED, PICKING));
+        // CWD(셸이 경로를 알렸다, #82): 실행 중인 창만 세션 경로를 바꾼다
+        StartedSession reported = new StartedSession(
+                RUNNING_SESSION.session().cwdChanged(REPORTED).value().orElseThrow(),
+                RUNNING_SESSION.stream(),
+                RUNNING_SESSION.exited(),
+                RUNNING_SESSION.notices());
+        rows.add(cell(RUNNING, CWD, new PaneState.Running(reported)));
+        for (PaneState quiet : List.of(LAUNCHING, EXITED_STATE, FAILED, CLOSED, ERRORED, PICKING)) {
+            rows.add(cell(quiet, CWD, quiet));
+        }
         return rows.stream();
     }
 
@@ -165,9 +179,9 @@ class PaneStateTableTest {
     }
 
     @Test
-    @DisplayName("표는 상태 7 × 사건 10 = 70칸을 빠짐없이 덮는다")
+    @DisplayName("표는 상태 7 × 사건 11 = 77칸을 빠짐없이 덮는다")
     void tableIsComplete() {
-        assertThat(table().count()).isEqualTo(70);
+        assertThat(table().count()).isEqualTo(77);
     }
 
     @Test

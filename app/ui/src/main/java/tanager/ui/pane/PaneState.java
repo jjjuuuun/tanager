@@ -7,6 +7,7 @@ import java.util.Optional;
 import tanager.application.port.in.StartFailure;
 import tanager.application.port.in.StartNotice;
 import tanager.application.port.in.StartedSession;
+import tanager.domain.history.WorkspacePath;
 import tanager.domain.session.ProfileId;
 import tanager.domain.session.SessionState;
 import tanager.domain.session.ShellProfile;
@@ -124,15 +125,26 @@ sealed interface PaneState {
                     PaneEvent.EscPressed _,
                     PaneEvent.TabPressed _,
                     PaneEvent.PickerInput _,
-                    PaneEvent.ShellsListed _ -> Transition.stay(state);
+                    PaneEvent.ShellsListed _,
+                    PaneEvent.CwdReported _ -> Transition.stay(state);
         };
     }
 
     private static Transition running(Running state, PaneEvent event) {
         return switch (event) {
             // 셸이 끝나면 JediTerm 이 EOF 에서 커넥터(스트림)를 이미 닫는다. 소유권을 분명히 하려고 한 번 더 닫는다(멱등)
+            // 종료 사건의 세션은 처음 Running 에서 만들어져 시작 경로를 가리킨다 — 알린 경로를 가진 지금 세션으로 끝낸다
             case PaneEvent.ShellExited(TerminalSession session) ->
-                new Transition(new Exited(session), List.of(new PaneEffect.CloseStream(state.session().stream())));
+                new Transition(
+                        new Exited(lastKnown(state, session)),
+                        List.of(new PaneEffect.CloseStream(state.session().stream())));
+            case PaneEvent.CwdReported(WorkspacePath path) ->
+                state.session()
+                        .session()
+                        .cwdChanged(path)
+                        .fold(
+                                moved -> Transition.stay(new Running(withSession(state.session(), moved))),
+                                error -> Transition.stay(state));
             case PaneEvent.CloseRequested _ ->
                 new Transition(new Closed(), List.of(new PaneEffect.CloseStream(state.session().stream())));
             case PaneEvent.Started _,
@@ -161,7 +173,8 @@ sealed interface PaneState {
                     PaneEvent.StartFailed _,
                     PaneEvent.StartErrored _,
                     PaneEvent.ShellExited _,
-                    PaneEvent.PickerInput _ -> Transition.stay(state);
+                    PaneEvent.PickerInput _,
+                    PaneEvent.CwdReported _ -> Transition.stay(state);
         };
     }
 
@@ -181,7 +194,8 @@ sealed interface PaneState {
                     PaneEvent.StartFailed _,
                     PaneEvent.StartErrored _,
                     PaneEvent.ShellExited _,
-                    PaneEvent.PickerInput _ -> Transition.stay(state);
+                    PaneEvent.PickerInput _,
+                    PaneEvent.CwdReported _ -> Transition.stay(state);
         };
     }
 
@@ -198,7 +212,8 @@ sealed interface PaneState {
                     PaneEvent.StartFailed _,
                     PaneEvent.StartErrored _,
                     PaneEvent.ShellExited _,
-                    PaneEvent.PickerInput _ -> Transition.stay(state);
+                    PaneEvent.PickerInput _,
+                    PaneEvent.CwdReported _ -> Transition.stay(state);
         };
     }
 
@@ -221,8 +236,23 @@ sealed interface PaneState {
                     PaneEvent.StartErrored _,
                     PaneEvent.ShellExited _,
                     PaneEvent.TabPressed _,
-                    PaneEvent.ShellsListed _ -> Transition.stay(state);
+                    PaneEvent.ShellsListed _,
+                    PaneEvent.CwdReported _ -> Transition.stay(state);
         };
+    }
+
+    private static TerminalSession lastKnown(Running state, TerminalSession exited) {
+        return exitCode(exited)
+                .flatMap(code -> state.session().session().exited(code).value())
+                .orElse(exited);
+    }
+
+    private static Optional<Integer> exitCode(TerminalSession session) {
+        return session.state() instanceof SessionState.Exited(int code, var _) ? Optional.of(code) : Optional.empty();
+    }
+
+    private static StartedSession withSession(StartedSession started, TerminalSession moved) {
+        return new StartedSession(moved, started.stream(), started.exited(), started.notices());
     }
 
     private static Transition launch(Attempt attempt) {

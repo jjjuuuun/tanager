@@ -3,12 +3,17 @@ package tanager.ui;
 import com.formdev.flatlaf.FlatLaf;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicReference;
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
+import tanager.application.port.in.AppEvent;
 import tanager.application.port.in.AppEvents;
 import tanager.application.port.in.ListProfilesUseCase;
 import tanager.application.port.in.StartSessionUseCase;
+import tanager.domain.history.WorkspacePath;
+import tanager.domain.shared.PaneId;
 import tanager.ui.font.TerminalFontSet;
 import tanager.ui.font.TerminalFonts;
 import tanager.ui.terminal.TerminalSettings;
@@ -33,6 +38,13 @@ public final class SwingUi {
         // 창을 만들기 전에 구독한다 — 이력 불러오기 알림이 창보다 먼저 올 수 있다. 창은 앱과 수명이 같아 해제하지 않는다
         NoticeInbox inbox = new NoticeInbox();
         events.subscribeOnUi(event -> Notices.messageOf(event).ifPresent(inbox::accept));
+        // 셸이 알린 경로를 그 창의 머리줄 · 상태줄로(#82). 콜백과 창 만들기 모두 EDT 에서 돈다 — 창이 생기기 전 보고는 받을 창이 없다
+        AtomicReference<MainWindow> shown = new AtomicReference<>();
+        events.subscribeOnUi(event -> {
+            if (event instanceof AppEvent.SessionCwdChanged(PaneId pane, WorkspacePath cwd)) {
+                Optional.ofNullable(shown.get()).ifPresent(window -> window.cwdChanged(pane, cwd));
+            }
+        });
         SwingUtilities.invokeLater(() -> {
             List<String> warnings = new ArrayList<>();
             // 글꼴이 없어도 창은 띄운다 — 논리 글꼴 Monospaced 로 대신하고 상태줄에 알린다
@@ -48,6 +60,7 @@ public final class SwingUi {
             Executor background =
                     task -> Thread.ofVirtual().name("tanager-session-start").start(task);
             MainWindow window = new MainWindow(sessions, profiles, onShutdown, settings, background);
+            shown.set(window);
             window.show(warnings);
             inbox.attach(window::notify);
         });
