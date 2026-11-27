@@ -33,6 +33,9 @@ import tanager.domain.session.ShellKind;
 import tanager.domain.session.ShellProfile;
 import tanager.domain.shared.PaneId;
 import tanager.domain.shared.TabId;
+import tanager.domain.workspace.Bounds;
+import tanager.domain.workspace.PanelState;
+import tanager.domain.workspace.WindowState;
 import tanager.domain.workspace.Workspace;
 
 /** 시작 때 state.json 을 창보다 먼저 읽어 작업 공간을 복원하고, 바뀌면 1초 안에 저장한다(FR-RES-01 · 02, #179). */
@@ -223,5 +226,53 @@ class AssemblyRestoreTest {
         assertThat(events.stream().filter(AppEvent.StoreNotice.class::isInstance))
                 .containsExactly(new AppEvent.StoreNotice(
                         new AppEvent.StoreProblem.Loaded(new HistoryLoadNotice.NewerSchema(3))));
+    }
+
+    @Test
+    @DisplayName("조립이 끝나면(창을 만들기 전) 처음 상태의 창 상태가 저장된 자리 · 최대화 · 사이드바다")
+    void initialWindowIsRestoredBeforeWindow() throws Exception {
+        // given
+        String json = SAVED.formatted(2)
+                .replace(
+                        "\"history\":{\"entries\":[]},",
+                        "\"history\":{\"entries\":[]},\"window\":{\"x\":-1500,\"y\":90,\"width\":1100,"
+                                + "\"height\":700,\"maximized\":true,\"sidebar\":{\"visible\":false,\"width\":300},"
+                                + "\"toolkit\":{\"visible\":true,\"width\":264}},");
+
+        // when
+        Assembly assembly = assemble(json);
+
+        // then
+        assertThat(assembly.state().snapshot().window())
+                .isEqualTo(new WindowState(
+                        Optional.of(new Bounds(-1500, 90, 1100, 700)),
+                        true,
+                        new PanelState(false, 300),
+                        new PanelState(true, 264)));
+    }
+
+    @Test
+    @DisplayName("창을 옮기고 크기를 바꿔 기록한 뒤 다시 시작하면 같은 자리 · 같은 크기 · 같은 사이드바다")
+    void recordedWindowIsRestoredOnNextStart() throws Exception {
+        // given
+        Assembly first = assemble(SAVED.formatted(2));
+        first.startStore();
+        await().atMost(Duration.ofSeconds(5))
+                .until(() -> first.state().snapshot().store() instanceof HistoryStore.Writable);
+        WindowState moved = new WindowState(
+                Optional.of(new Bounds(120, 60, 1300, 820)),
+                false,
+                new PanelState(false, 236),
+                new PanelState(true, 264));
+
+        // when
+        first.windowState().record(moved);
+        await().atMost(Duration.ofSeconds(5))
+                .until(() -> first.state().snapshot().window().equals(moved));
+        first.shutdown();
+        Assembly second = assemble(null);
+
+        // then
+        assertThat(second.state().snapshot().window()).isEqualTo(moved);
     }
 }

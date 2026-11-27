@@ -59,6 +59,9 @@ public final class TanagerApp {
                         assembly.appearance(),
                         // state.json 은 조립 때 이미 읽었다 — 처음 그리는 배치가 복원한 작업 공간이다(#179)
                         assembly.state().snapshot().workspace(),
+                        // 창 상태도 조립 때 읽었다 — 화면 밖인지는 UI 가 지금 모니터들로 판정한다(#180)
+                        assembly.windowState(),
+                        assembly.state().snapshot().window(),
                         assembly::shutdown);
                 // UI 가 구독한 뒤라 불러오기 알림 · 시작 때의 SettingsChanged 를 UI 가 받는다
                 assembly.startStore();

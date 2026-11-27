@@ -19,12 +19,14 @@ import tanager.application.port.in.ListProfilesUseCase;
 import tanager.application.port.in.ManageHistoryUseCase;
 import tanager.application.port.in.OpenPaneUseCase;
 import tanager.application.port.in.QueryHistoryTreeUseCase;
+import tanager.application.port.in.RecordWindowStateUseCase;
 import tanager.application.port.in.SettingsUseCase;
 import tanager.application.port.in.StartSessionUseCase;
 import tanager.application.port.in.WatchResourcesUseCase;
 import tanager.application.port.out.AppConfig;
 import tanager.domain.history.WorkspacePath;
 import tanager.domain.shared.PaneId;
+import tanager.domain.workspace.WindowState;
 import tanager.domain.workspace.Workspace;
 import tanager.ui.font.TerminalFontSet;
 import tanager.ui.font.TerminalFonts;
@@ -54,6 +56,8 @@ public final class SwingUi {
      * @param appearance 지금 쓸 테마 · 움직임(설정 + OS, #184). 시작 테마로 깔고, 바뀌면 화면 · 모든 터미널에 바로 쓴다(#185). 창이 활성화될 때
      *     OS 값을 다시 읽게 한다. 움직임을 끄면 전환 효과 없이 바로 바뀐다(FR-UI-04)
      * @param initial 처음 그릴 작업 공간 — 시작 때 복원한 탭 · 분할 · 창별 명세 · 포커스(#179). 창마다 명세대로 셸을 띄운다
+     * @param windowState 메인 창의 자리 · 크기 · 최대화 · 사이드바를 기록한다(#180). 바뀌면 작업 공간과 같이 1초 안에 저장된다
+     * @param initialWindow 시작 때 복원한 창 상태. 저장된 자리가 지금 모니터들에 보이지 않으면 주 모니터의 기본 자리에 띄운다
      * @param onShutdown 앱을 끝낼 때 셸을 닫은 뒤 EDT 밖에서 한 번 부른다(미저장 이력 저장 등, ADR-0011). 끝나면 프로세스를 끝낸다
      */
     public static void showMainWindow(
@@ -69,6 +73,8 @@ public final class SwingUi {
             CheckMissingPathsUseCase missingPaths,
             ApplyThemeUseCase appearance,
             Workspace initial,
+            RecordWindowStateUseCase windowState,
+            WindowState initialWindow,
             Runnable onShutdown) {
         // 창을 만들기 전에 구독한다 — 이력 불러오기 알림이 창보다 먼저 올 수 있다. 창은 앱과 수명이 같아 해제하지 않는다
         NoticeInbox inbox = new NoticeInbox();
@@ -132,7 +138,9 @@ public final class SwingUi {
                     terminal,
                     motion,
                     background,
-                    initial);
+                    initial,
+                    windowState,
+                    initialWindow);
             shown.set(window);
             Optional.ofNullable(latestSettings.get()).ifPresent(window::settingsChanged);
             window.show(warnings);

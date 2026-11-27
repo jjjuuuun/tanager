@@ -48,6 +48,7 @@ import tanager.application.port.in.ListProfilesUseCase;
 import tanager.application.port.in.ManageHistoryUseCase;
 import tanager.application.port.in.OpenPaneUseCase;
 import tanager.application.port.in.QueryHistoryTreeUseCase;
+import tanager.application.port.in.RecordWindowStateUseCase;
 import tanager.application.port.in.SettingsUseCase;
 import tanager.application.port.in.StartSessionUseCase;
 import tanager.application.port.in.WatchResourcesUseCase;
@@ -63,6 +64,7 @@ import tanager.domain.session.ShellProfile;
 import tanager.domain.shared.PaneId;
 import tanager.domain.shared.Result;
 import tanager.domain.workspace.Tab;
+import tanager.domain.workspace.WindowState;
 import tanager.domain.workspace.Workspace;
 import tanager.ui.html.Html;
 import tanager.ui.i18n.Msg;
@@ -130,6 +132,7 @@ final class MainWindow {
     private final LayoutView layout;
     private final SidebarPanel sidebar;
     private final SidebarSlot sidebarSlot;
+    private final WindowTracker windowTracker;
     private final PaneOpener opener;
     private final KeyEventDispatcher shortcuts = this::shortcut;
     private final Runnable onShutdown;
@@ -159,7 +162,9 @@ final class MainWindow {
             TerminalSettings settings,
             Motion motion,
             Executor background,
-            Workspace initial) {
+            Workspace initial,
+            RecordWindowStateUseCase windowState,
+            WindowState window) {
         this.workspace = Objects.requireNonNull(initial, "initial");
         this.onShutdown = Objects.requireNonNull(onShutdown, "onShutdown");
         this.settingsFile = Objects.requireNonNull(settingsFile, "settingsFile");
@@ -190,7 +195,8 @@ final class MainWindow {
         sidebar.onLeave(() -> focused().focus());
         sidebar.opener(opener);
         sidebar.sessions(new Sessions());
-        this.sidebarSlot = new SidebarSlot(sidebar.component(), motion);
+        // 저장된 사이드바 상태는 띄우기 전에 넣는다 — 띄운 뒤 접으면 셸 크기가 한 번 더 바뀐다(#180)
+        this.sidebarSlot = new SidebarSlot(sidebar.component(), motion, window.sidebar());
         frame.getContentPane().add(sidebarSlot.component(), BorderLayout.WEST);
         // 터미널(JediTerm)이 키를 먼저 먹지 않게 포커스와 상관없이 가로챈다
         KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher(shortcuts);
@@ -210,9 +216,9 @@ final class MainWindow {
                 missingPaths.windowActivated();
             }
         });
-        frame.setSize(WIDTH, HEIGHT);
+        // 최소 크기를 먼저 정해야 저장된 자리가 그보다 작을 때 늘려 놓는다
         frame.setMinimumSize(new Dimension(MIN_WIDTH, MIN_HEIGHT));
-        frame.setLocationRelativeTo(null);
+        this.windowTracker = WindowTracker.place(frame, window, sidebarSlot, windowState, new Dimension(WIDTH, HEIGHT));
     }
 
     /** 창을 띄우고(아직 연결하지 않은 위젯이 놓인다) 첫 셸들을 띄운다. */
@@ -358,9 +364,13 @@ final class MainWindow {
     private void run(KeyAction action) {
         switch (action) {
             case LayoutAction layout -> run(layout);
-            case KeyAction.ToggleSidebar toggle -> sidebarSlot.toggle();
+            case KeyAction.ToggleSidebar toggle -> {
+                sidebarSlot.toggle();
+                windowTracker.sidebarChanged();
+            }
             case KeyAction.SearchTree search -> {
                 sidebarSlot.show();
+                windowTracker.sidebarChanged();
                 sidebar.focusSearch();
             }
             case KeyAction.OpenSettings open -> openSettings();
@@ -553,6 +563,8 @@ final class MainWindow {
             return;
         }
         closing = true;
+        // 닫기 직전의 자리 · 최대화를 남긴다 — 프레임을 dispose 하기 전에, 종료 훅이 상태를 저장하기 전에 기록한다
+        windowTracker.flush();
         resourceFeed.ifPresent(Subscription::cancel);
         KeyboardFocusManager.getCurrentKeyboardFocusManager().removeKeyEventDispatcher(shortcuts);
         List<CompletableFuture<?>> exits = new ArrayList<>();

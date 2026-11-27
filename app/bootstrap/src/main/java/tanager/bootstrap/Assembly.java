@@ -19,6 +19,7 @@ import tanager.application.port.in.ListProfilesUseCase;
 import tanager.application.port.in.ManageHistoryUseCase;
 import tanager.application.port.in.QueryHistoryTreeUseCase;
 import tanager.application.port.in.RecordEnvironmentsUseCase;
+import tanager.application.port.in.RecordWindowStateUseCase;
 import tanager.application.port.in.ResolvedAppearance;
 import tanager.application.port.in.SettingsUseCase;
 import tanager.application.port.in.StartSessionUseCase;
@@ -46,6 +47,7 @@ import tanager.application.service.ResourceWatcher;
 import tanager.application.service.SessionStarter;
 import tanager.application.service.SettingsReloader;
 import tanager.application.service.VisitRecorder;
+import tanager.application.service.WindowRecorder;
 import tanager.application.service.WorkspaceRestorer;
 import tanager.application.service.WorkspaceSaver;
 import tanager.application.state.AppState;
@@ -147,10 +149,14 @@ final class Assembly {
         CompletableFuture<StoredState> reading = readState(history);
         warmShells(catalog);
         StoredState stored = reading.join();
-        Workspace planned = new WorkspaceRestorer().plan(stored.snapshot());
+        WorkspaceRestorer restorer = new WorkspaceRestorer();
+        Workspace planned = restorer.plan(stored.snapshot());
         ExecutorService stateExecutor = StateActor.serialExecutor();
-        StateActor state =
-                new StateActor(AppState.initial(WorkHistory.empty(HistoryPolicy.DEFAULT), planned), stateExecutor);
+        // 창 상태는 작업 공간 저장기가 불러온 값과 비교하므로 처음 상태에 넣어 둔다(#180)
+        StateActor state = new StateActor(
+                AppState.initial(WorkHistory.empty(HistoryPolicy.DEFAULT), planned)
+                        .withWindow(restorer.window(stored.snapshot())),
+                stateExecutor);
         ExecutorScheduler scheduler = new ExecutorScheduler("tanager-save-timer");
         // 불러오기 명령보다 먼저 구독해야 불러온 이력 · 작업 공간을 "저장할 것 없음"으로 안다
         HistorySaver saver = new HistorySaver(
@@ -287,6 +293,11 @@ final class Assembly {
     /** 사라진 이력 경로 확인 — 창 활성화 때 다시 확인한다(#186). */
     CheckMissingPathsUseCase missingPaths() {
         return missingPaths;
+    }
+
+    /** 메인 창의 자리 · 크기 · 최대화 · 사이드바 기록(FR-RES-03, #180). 저장은 작업 공간 저장기가 한다. */
+    RecordWindowStateUseCase windowState() {
+        return new WindowRecorder(state);
     }
 
     /** 창 열기 · 닫기 · 포커스(#88 · #89). */
