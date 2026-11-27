@@ -3,6 +3,7 @@ package tanager.application.port.out;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.time.Duration;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -55,6 +56,25 @@ class FakePlatformModuleTest {
         // then
         assertThat(initial.animations()).isTrue();
         assertThat(changed.animations()).isFalse();
+    }
+
+    @Test
+    @DisplayName("directories 는 기본으로 모든 경로가 있다고 답하고 withDirectories 로 바꿀 수 있다")
+    void directoriesDefaultToExisting() {
+        // given
+        FakePlatformModule platform = new FakePlatformModule(List.of(WSL));
+        WorkspacePath gone =
+                WorkspacePath.of(new ShellEnvironment.Wsl("A"), "/gone").value().orElseThrow();
+        FakeDirectoryProbe probe = new FakeDirectoryProbe().missing(gone);
+
+        // when
+        var before = platform.directories().isDirectory(gone, Duration.ofSeconds(1));
+        var after = platform.withDirectories(probe).directories().isDirectory(gone, Duration.ofSeconds(1));
+
+        // then
+        assertThat(before).contains(true);
+        assertThat(after).contains(false);
+        assertThat(probe.calls()).hasSize(1);
     }
 
     @Test

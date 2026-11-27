@@ -5,6 +5,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import tanager.application.platform.OperatingSystem;
+import tanager.application.port.out.DirectoryProbe;
 import tanager.application.port.out.Integration;
 import tanager.application.port.out.LaunchCommand;
 import tanager.application.port.out.PathTranslation;
@@ -65,6 +66,12 @@ public final class MacPlatformModule implements PlatformModule {
     @Override
     public PathTranslation paths() {
         return (from, to) -> from.env().equals(to) ? Optional.of(from) : Optional.empty();
+    }
+
+    /** macOS 셸 환경(Posix)은 M7 에서 더한다. 그때까지는 모름(empty)이다. */
+    @Override
+    public DirectoryProbe directories() {
+        return (path, timeout) -> Optional.empty();
     }
 
     /** M7 에서 NSWorkspace 의 '동작 줄이기'를 읽는다. 그때까지 애니메이션을 켠다. */

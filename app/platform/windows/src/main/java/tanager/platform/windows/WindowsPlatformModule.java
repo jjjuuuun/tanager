@@ -5,8 +5,10 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.Executor;
 import java.util.function.Function;
 import tanager.application.platform.OperatingSystem;
+import tanager.application.port.out.DirectoryProbe;
 import tanager.application.port.out.Integration;
 import tanager.application.port.out.LaunchCommand;
 import tanager.application.port.out.PathTranslation;
@@ -19,7 +21,6 @@ import tanager.application.port.out.SystemTools;
 import tanager.domain.history.PathTranslator;
 import tanager.domain.history.ShellEnvironment;
 import tanager.domain.history.WorkspacePath;
-import tanager.domain.history.WslMount;
 import tanager.domain.session.ShellProfile;
 import tanager.domain.session.WorkingDir;
 
@@ -31,6 +32,9 @@ public final class WindowsPlatformModule implements PlatformModule {
     private static final String APP_FOLDER = "Tanager";
     private static final Function<String, Optional<String>> SYSTEM_ENV =
             name -> Optional.ofNullable(System.getenv(name));
+    // 파일 확인은 블로킹이고 시간을 넘기면 버린다 — 버린 확인이 쌓여도 플랫폼 스레드를 잡지 않게 가상 스레드에서
+    private static final Executor PROBE_THREADS =
+            task -> Thread.ofVirtual().name("tanager-directory-probe").start(task);
 
     private final WindowsShellCatalog shellCatalog;
     private final String userProfile;
@@ -38,6 +42,8 @@ public final class WindowsPlatformModule implements PlatformModule {
     private final Optional<String> prompt;
     private final Path appData;
     private final CommandRunner appearanceRunner;
+    private final WslMountRoots mounts = new WslMountRoots();
+    private final DirectoryProbe directories;
 
     /** ServiceLoader 용. 실제 프로세스 실행과 시스템 환경변수를 쓴다. */
     public WindowsPlatformModule() {
@@ -71,6 +77,18 @@ public final class WindowsPlatformModule implements PlatformModule {
             Function<String, Optional<String>> env,
             String fallbackHome,
             CommandRunner appearanceRunner) {
+        this(shellCatalog, env, fallbackHome, appearanceRunner, new NioWindowsFiles(), PROBE_THREADS);
+    }
+
+    /** {@code files} 와 {@code probeExecutor} 는 {@link #directories()} 가 경로를 확인할 때 쓴다. */
+    WindowsPlatformModule(
+            WindowsShellCatalog shellCatalog,
+            Function<String, Optional<String>> env,
+            String fallbackHome,
+            CommandRunner appearanceRunner,
+            WindowsFiles files,
+            Executor probeExecutor) {
+        this.directories = new WindowsDirectoryProbe(files, mounts, probeExecutor);
         this.appearanceRunner = Objects.requireNonNull(appearanceRunner, "appearanceRunner");
         this.shellCatalog = Objects.requireNonNull(shellCatalog, "shellCatalog");
         Objects.requireNonNull(env, "env");
@@ -126,10 +144,19 @@ public final class WindowsPlatformModule implements PlatformModule {
         return new WindowsShellIntegration(appData);
     }
 
-    /** WSL 기본 마운트 루트(/mnt/)로 바꾼다. 배포판별 wsl.conf 의 automount root 는 #53(M5)이 읽는다. */
+    /**
+     * 배포판별 마운트 루트로 바꾼다. 루트는 {@link #directories()} 가 그 배포판에 닿았을 때 wsl.conf 에서 읽어 두고(#53), 아직 모르는
+     * 배포판은 기본 /mnt/ 다. 돌려준 변환기는 부를 때마다 지금 아는 값을 본다.
+     */
     @Override
     public PathTranslation paths() {
-        return (from, to) -> PathTranslator.translate(from, to, WslMount.DEFAULT);
+        return (from, to) -> PathTranslator.translate(from, to, mounts.snapshot());
+    }
+
+    /** 배포판에 닿으면(VM 을 깨운다) 그 배포판의 마운트 루트도 읽어 둔다. 같은 인스턴스를 돌려준다. */
+    @Override
+    public DirectoryProbe directories() {
+        return directories;
     }
 
     /** '애니메이션 효과' 설정을 레지스트리에서 읽는다(#152). 부를 때마다 reg.exe 를 실행한다. */

@@ -78,6 +78,36 @@ class PathTranslatorTest {
     }
 
     @Test
+    @DisplayName("배포판마다 마운트 루트가 다르면 그 배포판의 루트로 바꾼다 — /win/c/x ↔ C:\\x")
+    void perDistroMountRoot() {
+        // given
+        WslMounts mounts = WslMounts.DEFAULT.with("U", new WslMount("/win/"));
+
+        // when / then
+        assertThat(PathTranslator.translate(path(U, "/win/c/x"), WIN, mounts).map(WorkspacePath::path))
+                .contains("C:\\x");
+        assertThat(PathTranslator.translate(path(WIN, "C:\\x"), U, mounts).map(WorkspacePath::path))
+                .contains("/win/c/x");
+        assertThat(PathTranslator.translate(path(U, "/mnt/c/x"), WIN, mounts)).isEmpty();
+        assertThat(PathTranslator.translate(path(WIN, "C:\\x"), V, mounts).map(WorkspacePath::path))
+                .contains("/mnt/c/x");
+    }
+
+    @Test
+    @DisplayName("마운트 루트가 다른 배포판 사이에서는 드라이브를 거쳐 상대 배포판의 루트로 바꾼다")
+    void otherDistroWithDifferentMountRoot() {
+        // given
+        WslMounts mounts = WslMounts.DEFAULT.with("U", new WslMount("/win/"));
+
+        // when / then
+        assertThat(PathTranslator.translate(path(U, "/win/c/x"), V, mounts).map(WorkspacePath::path))
+                .contains("/mnt/c/x");
+        assertThat(PathTranslator.translate(path(V, "/mnt/d"), U, mounts).map(WorkspacePath::path))
+                .contains("/win/d");
+        assertThat(PathTranslator.translate(path(U, "/home/me"), V, mounts)).isEmpty();
+    }
+
+    @Test
     @DisplayName("마운트 루트는 / 로 시작하고 / 로 끝나야 한다")
     void mountRootShape() {
         assertThatIllegalArgumentException().isThrownBy(() -> new WslMount("mnt/"));
