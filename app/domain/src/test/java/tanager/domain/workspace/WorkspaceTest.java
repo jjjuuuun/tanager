@@ -130,11 +130,11 @@ class WorkspaceTest {
     }
 
     @Test
-    @DisplayName("줌한 창을 닫으면 줌이 풀리고, 다른 창을 닫으면 줌은 그대로다")
-    void closeClearsZoomOfClosedPane() {
-        // given: p1 | (p2 / p3), 포커스 p3
-        Workspace w = opened(opened(Workspace.initial(), Orientation.ROW), Orientation.COLUMN);
-        Workspace zoomedOnP3 = new Workspace(new Tab(w.tab().root(), P3, Optional.of(P3)), w.specs(), w.nextPane());
+    @DisplayName("줌 상태에서 창을 닫으면 줌한 창이든 다른 창이든 줌이 풀린다")
+    void closeClearsZoom() {
+        // given: p1 | (p2 / p3), 포커스 p3, p3 줌
+        Workspace zoomedOnP3 = opened(opened(Workspace.initial(), Orientation.ROW), Orientation.COLUMN)
+                .toggleZoom();
 
         // when
         Workspace closedZoomed = zoomedOnP3.close(P3).value().orElseThrow();
@@ -142,7 +142,8 @@ class WorkspaceTest {
 
         // then
         assertThat(closedZoomed.tab().zoomed()).isEmpty();
-        assertThat(closedOther.tab().zoomed()).contains(P3);
+        assertThat(closedOther.tab().zoomed()).isEmpty();
+        assertThat(closedOther.tab().focused()).isEqualTo(P3);
     }
 
     @Test
