@@ -87,6 +87,11 @@ v0.1.0 릴리스 실패(#32)에서 나온 규칙. Windows 러너의 `shell: pwsh
   - WSL 에서 돌리면 Windows Gradle 데몬이 출력 파이프를 잡고 있어 명령이 끝나지 않을 수 있다. 결과는 산출물(zip 등)과 종료 코드로 본다.
 - 저장소 최초 설정(빈 시작 커밋 · dev 생성 · 기본 브랜치 main · ruleset · 라벨 · 마일스톤)은 사용자가 `.github/scripts/bootstrap-repo.sh <owner/repo>` 로 한 번 실행한다. M1 이후 `--with-checks` 로 다시 실행해 필수 CI 검사를 켠다.
 
+## 배포 문서는 영어 (사용자 결정 2026-11-27, #115)
+- GitHub Release 노트(`docs/releases/<버전>.md`), Release 제목, README.md, 설치 파일에 들어가는 문구처럼 **밖으로 나가는 문서는 영어**로 쓴다. `README.ko.md` 는 번역본으로 같이 갱신한다.
+- README 는 dev 가 아니라 **main(마지막 릴리스) 기준**으로 쓴다. 릴리스마다 `/release` 7-2 단계에서 갱신하고, 빌드 안내에 dev 로 전환하라는 줄을 넣지 않는다. Release 배지는 GitHub API 를 부르지 않는 정적 배지(`badge/release-<버전>-blue`)를 쓴다(동적 배지가 깨져 보인 적 있음).
+- 커밋 메시지 · 이슈 · PR 본문 · 리뷰 코멘트 · 릴리스 PR 본문 · SDD · ADR · 규칙 문서는 지금처럼 한국어.
+
 ## 마일스톤
 - 원본: `.github/milestones.json` (SDD §13.1 과 같은 내용). 마일스톤 범위·요구사항이 바뀌면 SDD 와 이 파일을 **같은 PR 에서** 바꾼다(`docs(docs)` 커밋).
 - dev 에 병합되면 `.github/workflows/milestones.yml` 이 GitHub 마일스톤을 만들거나 갱신한다(닫기·삭제는 하지 않음). 수동: `.github/scripts/sync-milestones.sh [--dry-run]`.
