@@ -209,7 +209,7 @@ public final class JsonConfigRepository implements ConfigRepository {
                 warnings);
     }
 
-    // 없으면 RIGHT. NEW_TAB 은 탭이 생기는 M5 까지 RIGHT 로 연다(#88). 앱은 이 키를 쓰지 않는다 — 파일 값은 merge 가 보존한다.
+    // 없으면 RIGHT. 앱은 이 키를 쓰지 않는다 — 파일 값은 merge 가 보존한다.
     private static OpenPlacement openPlacement(JsonNode node, ConfigSections sections, List<ConfigWarning> warnings) {
         if (node == null) {
             return OpenPlacement.RIGHT;
@@ -225,9 +225,9 @@ public final class JsonConfigRepository implements ConfigRepository {
             case "DOWN" -> {
                 return OpenPlacement.DOWN;
             }
-            case "NEW_TAB" ->
-                warnings.add(new ConfigWarning.IgnoredValue(
-                        KEY_OPEN_PLACEMENT, ConfigWarning.IgnoredReason.NOT_SUPPORTED_YET));
+            case "NEW_TAB" -> {
+                return OpenPlacement.NEW_TAB;
+            }
             default ->
                 warnings.add(
                         new ConfigWarning.IgnoredValue(KEY_OPEN_PLACEMENT, ConfigWarning.IgnoredReason.UNKNOWN_VALUE));

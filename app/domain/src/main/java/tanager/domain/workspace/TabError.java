@@ -44,4 +44,11 @@ public sealed interface TabError {
             Objects.requireNonNull(tab, "tab");
         }
     }
+
+    /** 탭 이름으로 쓸 수 없다({@link TabName#of}). */
+    record InvalidName(TabNameProblem problem) implements TabError {
+        public InvalidName {
+            Objects.requireNonNull(problem, "problem");
+        }
+    }
 }

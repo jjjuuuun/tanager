@@ -21,6 +21,8 @@ import tanager.domain.layout.SplitPath;
 import tanager.domain.session.ShellProfile;
 import tanager.domain.shared.PaneId;
 import tanager.domain.shared.Result;
+import tanager.domain.shared.TabId;
+import tanager.domain.workspace.TabError;
 import tanager.domain.workspace.Workspace;
 
 /** 창 유스케이스들의 가짜. 부른 순서대로 호출을 글자로 남기고, {@link #reply} 를 돌려준다. */
@@ -87,6 +89,18 @@ final class FakePanes
     @Override
     public CompletionStage<Result<Workspace, LayoutError>> move(PaneId pane, DropZone zone) {
         return record("move " + pane.value() + " " + zone);
+    }
+
+    @Override
+    public CompletionStage<Result<Workspace, TabError>> moveToTab(PaneId pane, TabId tab) {
+        calls.add("moveToTab " + pane.value() + " " + tab.value());
+        return CompletableFuture.completedFuture(Result.ok(Workspace.initial()));
+    }
+
+    @Override
+    public CompletionStage<Result<Workspace, TabError>> moveToNewTab(PaneId pane) {
+        calls.add("moveToNewTab " + pane.value());
+        return CompletableFuture.completedFuture(Result.ok(Workspace.initial()));
     }
 
     @Override

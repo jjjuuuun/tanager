@@ -497,11 +497,12 @@ class JsonConfigRepositoryTest {
     // ---- openPlacement(#88) ----
 
     @Test
-    @DisplayName("openPlacement 는 RIGHT · DOWN 을 읽고, 없으면 RIGHT 이며 경고가 없다")
+    @DisplayName("openPlacement 는 RIGHT · DOWN · NEW_TAB 을 읽고, 없으면 RIGHT 이며 경고가 없다(#177)")
     void openPlacementKnownValues() throws IOException {
         for (var entry : java.util.Map.of(
                         "{\"openPlacement\": \"RIGHT\"}", OpenPlacement.RIGHT,
                         "{\"openPlacement\": \"DOWN\"}", OpenPlacement.DOWN,
+                        "{\"openPlacement\": \"NEW_TAB\"}", OpenPlacement.NEW_TAB,
                         "{}", OpenPlacement.RIGHT)
                 .entrySet()) {
             // given
@@ -517,10 +518,9 @@ class JsonConfigRepositoryTest {
     }
 
     @Test
-    @DisplayName("NEW_TAB 은 탭이 생기기 전까지 RIGHT + 아직 지원하지 않음 경고, 모르는 값 · 문자열 아님도 RIGHT + 경고")
+    @DisplayName("모르는 값 · 문자열 아님은 RIGHT + 경고")
     void openPlacementFallbacks() throws IOException {
         for (var entry : java.util.Map.of(
-                        "{\"openPlacement\": \"NEW_TAB\"}", ConfigWarning.IgnoredReason.NOT_SUPPORTED_YET,
                         "{\"openPlacement\": \"UP\"}", ConfigWarning.IgnoredReason.UNKNOWN_VALUE,
                         "{\"openPlacement\": 3}", ConfigWarning.IgnoredReason.NOT_NON_EMPTY_STRING)
                 .entrySet()) {

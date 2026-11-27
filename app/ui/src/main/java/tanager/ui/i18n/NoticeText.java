@@ -102,7 +102,6 @@ public final class NoticeText {
             case EMPTY_PROFILE_ID -> t(Msg.CONFIG_IGNORED_EMPTY_PROFILE_ID);
             case NOT_NON_EMPTY_STRING -> t(Msg.CONFIG_IGNORED_NOT_NON_EMPTY_STRING);
             case UNKNOWN_VALUE -> t(Msg.CONFIG_IGNORED_UNKNOWN_VALUE);
-            case NOT_SUPPORTED_YET -> t(Msg.CONFIG_IGNORED_NOT_SUPPORTED_YET);
             case NOT_INTEGER -> t(Msg.CONFIG_IGNORED_NOT_INTEGER);
             case NOT_NUMBER -> t(Msg.CONFIG_IGNORED_NOT_NUMBER);
             case NOT_BOOLEAN -> t(Msg.CONFIG_IGNORED_NOT_BOOLEAN);

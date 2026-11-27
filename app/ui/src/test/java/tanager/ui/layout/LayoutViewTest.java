@@ -300,4 +300,31 @@ class LayoutViewTest {
         assertThat(right.getBounds().width).isLessThan(606);
         assertThat(view.dividerLayer().contains(303, 100)).isTrue();
     }
+
+    @Test
+    @DisplayName("트리에 없는 창(다른 탭의 창)은 떼지 않고 숨긴다 — 그 탭으로 돌아오면 다시 보인다(#177)")
+    void panesOutsideTreeAreHidden() {
+        // given
+        LayoutView view = view(Orientation.ROW);
+        Map<PaneId, JComponent> components = new LinkedHashMap<>();
+        components.put(P1, left);
+        components.put(P2, right);
+
+        // when — 활성 탭이 p2 하나짜리 탭으로 바뀌었다
+        view.show(new LayoutNode.Leaf(P2), components);
+
+        // then
+        assertThat(left.isVisible()).isFalse();
+        assertThat(left.getParent()).isSameAs(view.component());
+        assertThat(right.isVisible()).isTrue();
+
+        // when — p1 | p2 탭으로 돌아왔다
+        view.show(
+                new LayoutNode.Split(Orientation.ROW, Ratio.HALF, new LayoutNode.Leaf(P1), new LayoutNode.Leaf(P2)),
+                components);
+
+        // then
+        assertThat(left.isVisible()).isTrue();
+        assertThat(right.isVisible()).isTrue();
+    }
 }
