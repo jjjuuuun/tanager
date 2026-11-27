@@ -95,12 +95,7 @@ public final class MissingPathScanner implements CheckMissingPathsUseCase {
         synchronized (monitor) {
             checkedAt.keySet().retainAll(current.history().entries().keySet());
             for (WorkspacePath path : current.history().entries().keySet()) {
-                if (inFlight.contains(path)
-                        || !(path.env() instanceof ShellEnvironment.Windows || awake.contains(path.env()))) {
-                    continue;
-                }
-                Instant at = checkedAt.get(path);
-                if (at == null || staleAfter.map(d -> !at.plus(d).isAfter(now)).orElse(false)) {
+                if (watched(path, awake) && !inFlight.contains(path) && due(checkedAt.get(path), staleAfter, now)) {
                     inFlight.add(path);
                     due.add(path);
                 }
@@ -109,6 +104,20 @@ public final class MissingPathScanner implements CheckMissingPathsUseCase {
         for (WorkspacePath path : due) {
             io.execute(() -> check(path));
         }
+    }
+
+    // Windows 경로는 늘, WSL 경로는 그 배포판이 깨어 있을 때만
+    private static boolean watched(WorkspacePath path, Set<ShellEnvironment> awake) {
+        return switch (path.env()) {
+            case ShellEnvironment.Windows _ -> true;
+            case ShellEnvironment.Wsl wsl -> awake.contains(wsl);
+        };
+    }
+
+    // 확인한 적 없으면 늘, staleAfter 가 있으면 그만큼 지났을 때도
+    private static boolean due(Instant checked, Optional<Duration> staleAfter, Instant now) {
+        return checked == null
+                || staleAfter.map(d -> !checked.plus(d).isAfter(now)).orElse(false);
     }
 
     private static Set<ShellEnvironment> awakeDistros(List<SessionLeaf> sessions) {

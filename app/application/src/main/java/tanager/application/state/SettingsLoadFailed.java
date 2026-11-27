@@ -1,6 +1,5 @@
 package tanager.application.state;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import tanager.application.port.in.AppEvent;
@@ -20,13 +19,7 @@ public record SettingsLoadFailed(ConfigError error) implements Command<Boolean> 
     @Override
     public Transition<Boolean> apply(AppState current) {
         if (current.settings().isEmpty()) {
-            AppConfig defaults = AppConfig.defaults();
-            Transition<Boolean> policy =
-                    new PolicyChanged(PolicyChanged.policyOf(defaults.history())).apply(current.withSettings(defaults));
-            List<AppEvent> events = new ArrayList<>();
-            events.add(new AppEvent.SettingsChanged(defaults));
-            events.addAll(policy.events());
-            return new Transition<>(policy.next(), events, true);
+            return PolicyChanged.settingsApplied(current, AppConfig.defaults());
         }
         return new Transition<>(
                 current, List.of(new AppEvent.SettingsNotice(new AppEvent.SettingsProblem.KeptPrevious(error))), false);

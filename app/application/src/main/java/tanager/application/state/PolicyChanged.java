@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import tanager.application.port.in.AppEvent;
+import tanager.application.port.out.AppConfig;
 import tanager.application.port.out.HistoryConfig;
 import tanager.domain.history.HistoryPolicy;
 import tanager.domain.history.PathPattern;
@@ -38,6 +39,18 @@ public record PolicyChanged(HistoryPolicy policy) implements Command<Boolean> {
             }
         }
         return new HistoryPolicy(config.maxEntries(), exclude);
+    }
+
+    /**
+     * {@code config} 를 설정으로 두고 그 이력 규칙을 같은 전이에서 반영한다. 이벤트는 {@code SettingsChanged} 뒤에 정책 반영의 이벤트다.
+     * 응답은 늘 {@code true}(설정을 바꿨다).
+     */
+    static Transition<Boolean> settingsApplied(AppState current, AppConfig config) {
+        Transition<Boolean> policy = new PolicyChanged(policyOf(config.history())).apply(current.withSettings(config));
+        List<AppEvent> events = new ArrayList<>();
+        events.add(new AppEvent.SettingsChanged(config));
+        events.addAll(policy.events());
+        return new Transition<>(policy.next(), events, true);
     }
 
     @Override

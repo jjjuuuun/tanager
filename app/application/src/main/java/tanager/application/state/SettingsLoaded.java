@@ -30,16 +30,13 @@ public record SettingsLoaded(LoadedConfig loaded) implements Command<Boolean> {
         if (previous.equals(Optional.of(next))) {
             return new Transition<>(current, List.of(), false);
         }
-        Transition<Boolean> policy =
-                new PolicyChanged(PolicyChanged.policyOf(next.history())).apply(current.withSettings(next));
-        List<AppEvent> events = new ArrayList<>();
-        events.add(new AppEvent.SettingsChanged(next));
-        events.addAll(policy.events());
+        Transition<Boolean> applied = PolicyChanged.settingsApplied(current, next);
+        List<AppEvent> events = new ArrayList<>(applied.events());
         if (previous.isPresent()) {
             for (ConfigWarning warning : loaded.warnings()) {
                 events.add(new AppEvent.SettingsNotice(new AppEvent.SettingsProblem.Warned(warning)));
             }
         }
-        return new Transition<>(policy.next(), events, true);
+        return new Transition<>(applied.next(), events, true);
     }
 }
