@@ -45,6 +45,12 @@ public final class JsonConfigRepository implements ConfigRepository {
     private static final String KEY_PROFILES = "profiles";
     private static final String KEY_START_DIR = "startDir";
     private static final String KEY_OPEN_PLACEMENT = "openPlacement";
+    // 아래는 읽기만 한다(ConfigSections)
+    private static final String KEY_APPEARANCE = "appearance";
+    private static final String KEY_TERMINAL = "terminal";
+    private static final String KEY_HISTORY = "history";
+    private static final String KEY_MONITOR = "monitor";
+    private static final String KEY_KEYS = "keys";
     private static final byte[] UTF8_BOM = {(byte) 0xEF, (byte) 0xBB, (byte) 0xBF};
     private static final byte[] NEW_FILE =
             ("{\n  \"" + KEY_SCHEMA_VERSION + "\": " + SCHEMA_VERSION + "\n}\n").getBytes(StandardCharsets.UTF_8);
@@ -185,31 +191,30 @@ public final class JsonConfigRepository implements ConfigRepository {
         } else if (version.get() > SCHEMA_VERSION) {
             warnings.add(new ConfigWarning.NewerVersion(version.get()));
         }
-        Optional<ProfileId> defaultProfile = nonBlankString(
-                        root.get(KEY_DEFAULT_PROFILE), KEY_DEFAULT_PROFILE, warnings)
-                .map(ProfileId::new);
-        Map<ProfileId, ProfileSettings> profiles = profiles(root.get(KEY_PROFILES), warnings);
-        OpenPlacement placement = openPlacement(root.get(KEY_OPEN_PLACEMENT), warnings);
         ConfigSections sections = new ConfigSections(warnings);
+        Optional<ProfileId> defaultProfile = sections.nonBlankString(root.get(KEY_DEFAULT_PROFILE), KEY_DEFAULT_PROFILE)
+                .map(ProfileId::new);
+        Map<ProfileId, ProfileSettings> profiles = profiles(root.get(KEY_PROFILES), sections, warnings);
+        OpenPlacement placement = openPlacement(root.get(KEY_OPEN_PLACEMENT), sections, warnings);
         return new LoadedConfig(
                 new AppConfig(
                         defaultProfile,
                         profiles,
                         placement,
-                        sections.appearance(root.get("appearance")),
-                        sections.terminal(root.get("terminal")),
-                        sections.history(root.get("history")),
-                        sections.monitor(root.get("monitor")),
-                        sections.keys(root.get("keys"))),
+                        sections.appearance(root.get(KEY_APPEARANCE)),
+                        sections.terminal(root.get(KEY_TERMINAL)),
+                        sections.history(root.get(KEY_HISTORY)),
+                        sections.monitor(root.get(KEY_MONITOR)),
+                        sections.keys(root.get(KEY_KEYS))),
                 warnings);
     }
 
     // 없으면 RIGHT. NEW_TAB 은 탭이 생기는 M5 까지 RIGHT 로 연다(#88). 앱은 이 키를 쓰지 않는다 — 파일 값은 merge 가 보존한다.
-    private static OpenPlacement openPlacement(JsonNode node, List<ConfigWarning> warnings) {
+    private static OpenPlacement openPlacement(JsonNode node, ConfigSections sections, List<ConfigWarning> warnings) {
         if (node == null) {
             return OpenPlacement.RIGHT;
         }
-        Optional<String> value = nonBlankString(node, KEY_OPEN_PLACEMENT, warnings);
+        Optional<String> value = sections.nonBlankString(node, KEY_OPEN_PLACEMENT);
         if (value.isEmpty()) {
             return OpenPlacement.RIGHT;
         }
@@ -242,7 +247,8 @@ public final class JsonConfigRepository implements ConfigRepository {
         return Optional.empty();
     }
 
-    private static Map<ProfileId, ProfileSettings> profiles(JsonNode node, List<ConfigWarning> warnings) {
+    private static Map<ProfileId, ProfileSettings> profiles(
+            JsonNode node, ConfigSections sections, List<ConfigWarning> warnings) {
         Map<ProfileId, ProfileSettings> profiles = new HashMap<>();
         if (node == null) {
             return profiles;
@@ -259,22 +265,11 @@ public final class JsonConfigRepository implements ConfigRepository {
                 warnings.add(new ConfigWarning.IgnoredValue(key, ConfigWarning.IgnoredReason.NOT_OBJECT));
             } else {
                 Optional<String> startDir =
-                        nonBlankString(settings.get(KEY_START_DIR), key + "." + KEY_START_DIR, warnings);
+                        sections.nonBlankString(settings.get(KEY_START_DIR), key + "." + KEY_START_DIR);
                 profiles.put(new ProfileId(entry.getKey()), new ProfileSettings(startDir));
             }
         }
         return profiles;
-    }
-
-    private static Optional<String> nonBlankString(JsonNode node, String key, List<ConfigWarning> warnings) {
-        if (node == null) {
-            return Optional.empty();
-        }
-        if (node.isString() && !node.stringValue().isBlank()) {
-            return Optional.of(node.stringValue());
-        }
-        warnings.add(new ConfigWarning.IgnoredValue(key, ConfigWarning.IgnoredReason.NOT_NON_EMPTY_STRING));
-        return Optional.empty();
     }
 
     // ---- 쓰기 ----
