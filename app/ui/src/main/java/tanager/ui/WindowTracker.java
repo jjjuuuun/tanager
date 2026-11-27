@@ -66,18 +66,17 @@ final class WindowTracker {
             frame.setSize(fallback);
             frame.setLocationRelativeTo(null);
         }
-        WindowState normal = WindowCapture.framed(
-                new WindowState(saved.bounds(), false, sidebar.state(), saved.toolkit()),
-                frame.getBounds(),
-                Frame.NORMAL);
+        // 최대화하기 전의 자리가 보통 크기다 — 최대화를 풀면 돌아올 자리
+        Rectangle normal = frame.getBounds();
+        WindowState placed = new WindowState(
+                Optional.of(new Bounds(normal.x, normal.y, normal.width, normal.height)),
+                saved.maximized(),
+                sidebar.state(),
+                saved.toolkit());
         if (saved.maximized()) {
             frame.setExtendedState(frame.getExtendedState() | Frame.MAXIMIZED_BOTH);
         }
-        WindowTracker tracker = new WindowTracker(
-                frame,
-                sidebar,
-                recorder,
-                new WindowState(normal.bounds(), saved.maximized(), normal.sidebar(), normal.toolkit()));
+        WindowTracker tracker = new WindowTracker(frame, sidebar, recorder, placed);
         tracker.listen();
         // 화면 밖이라 옮긴 자리 · 줄인 사이드바 폭도 기록한다(같으면 기록기가 무시한다)
         tracker.coalescer.poke();
