@@ -15,6 +15,7 @@ import tanager.application.port.out.ConfigError;
 import tanager.application.port.out.ConfigRepository;
 import tanager.application.port.out.ConfigWarning;
 import tanager.application.port.out.LoadedConfig;
+import tanager.application.port.out.OpenPlacement;
 import tanager.application.port.out.ProfileSettings;
 import tanager.domain.session.ProfileId;
 import tanager.domain.shared.Result;
@@ -38,6 +39,7 @@ public final class JsonConfigRepository implements ConfigRepository {
     private static final String KEY_DEFAULT_PROFILE = "defaultProfile";
     private static final String KEY_PROFILES = "profiles";
     private static final String KEY_START_DIR = "startDir";
+    private static final String KEY_OPEN_PLACEMENT = "openPlacement";
     private static final byte[] UTF8_BOM = {(byte) 0xEF, (byte) 0xBB, (byte) 0xBF};
 
     private static final JsonMapper MAPPER = JsonMapper.builder()
@@ -154,7 +156,34 @@ public final class JsonConfigRepository implements ConfigRepository {
                         root.get(KEY_DEFAULT_PROFILE), KEY_DEFAULT_PROFILE, warnings)
                 .map(ProfileId::new);
         Map<ProfileId, ProfileSettings> profiles = profiles(root.get(KEY_PROFILES), warnings);
-        return new LoadedConfig(new AppConfig(defaultProfile, profiles), warnings);
+        OpenPlacement placement = openPlacement(root.get(KEY_OPEN_PLACEMENT), warnings);
+        return new LoadedConfig(new AppConfig(defaultProfile, profiles, placement), warnings);
+    }
+
+    // 없으면 RIGHT. NEW_TAB 은 탭이 생기는 M5 까지 RIGHT 로 연다(#88). 앱은 이 키를 쓰지 않는다 — 파일 값은 merge 가 보존한다.
+    private static OpenPlacement openPlacement(JsonNode node, List<ConfigWarning> warnings) {
+        if (node == null) {
+            return OpenPlacement.RIGHT;
+        }
+        Optional<String> value = nonBlankString(node, KEY_OPEN_PLACEMENT, warnings);
+        if (value.isEmpty()) {
+            return OpenPlacement.RIGHT;
+        }
+        switch (value.get()) {
+            case "RIGHT" -> {
+                return OpenPlacement.RIGHT;
+            }
+            case "DOWN" -> {
+                return OpenPlacement.DOWN;
+            }
+            case "NEW_TAB" ->
+                warnings.add(new ConfigWarning.IgnoredValue(
+                        KEY_OPEN_PLACEMENT, ConfigWarning.IgnoredReason.NOT_SUPPORTED_YET));
+            default ->
+                warnings.add(
+                        new ConfigWarning.IgnoredValue(KEY_OPEN_PLACEMENT, ConfigWarning.IgnoredReason.UNKNOWN_VALUE));
+        }
+        return OpenPlacement.RIGHT;
     }
 
     // 없으면 1 로 본다. 1 이상의 정수가 아니면 비어 있다.

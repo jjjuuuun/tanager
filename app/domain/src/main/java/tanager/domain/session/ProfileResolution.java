@@ -3,6 +3,7 @@ package tanager.domain.session;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import tanager.domain.history.ShellEnvironment;
 
 /**
  * 시작할 때 띄울 프로파일을 정한 결과(FR-SES-02). 원하는 프로파일이 없거나 목록에 없으면 다른 셸로 바꾸지 않고 사용자에게 묻는다.
@@ -25,6 +26,30 @@ public sealed interface ProfileResolution {
             }
         }
         return new Choose(available, wanted);
+    }
+
+    /**
+     * 경로 환경 {@code env} 에서 열 때 쓸 프로파일(#88, FR-HIS-05). 기억한 기본이 그 환경이고 목록에 있으면 그것, 아니면 그 환경의 탐지 순서 첫
+     * 프로파일. 그 환경의 셸이 없으면 empty.
+     */
+    static Optional<ShellProfile> forEnvironment(
+            ShellEnvironment env, Optional<ProfileId> remembered, List<ShellProfile> available) {
+        Objects.requireNonNull(env, "env");
+        Objects.requireNonNull(remembered, "remembered");
+        Objects.requireNonNull(available, "available");
+        Optional<ShellProfile> first = Optional.empty();
+        for (ShellProfile profile : available) {
+            if (!profile.env().equals(env)) {
+                continue;
+            }
+            if (remembered.filter(profile.id()::equals).isPresent()) {
+                return Optional.of(profile);
+            }
+            if (first.isEmpty()) {
+                first = Optional.of(profile);
+            }
+        }
+        return first;
     }
 
     /** 원하는 프로파일이 목록에 있다 — 바로 띄운다. */

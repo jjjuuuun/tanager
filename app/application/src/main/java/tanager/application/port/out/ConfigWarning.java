@@ -40,6 +40,8 @@ public sealed interface ConfigWarning {
         /** 비어 있지 않은 문자열이 아니다. */
         NOT_NON_EMPTY_STRING,
         /** 아는 값이 아니다. */
-        UNKNOWN_VALUE
+        UNKNOWN_VALUE,
+        /** 알지만 아직 지원하지 않는 값이다(예: 탭이 생기기 전의 openPlacement NEW_TAB). */
+        NOT_SUPPORTED_YET
     }
 }

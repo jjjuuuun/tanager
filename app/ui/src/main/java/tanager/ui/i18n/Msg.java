@@ -77,6 +77,7 @@ public enum Msg {
     CONFIG_IGNORED_EMPTY_PROFILE_ID("config.ignored.emptyProfileId"),
     CONFIG_IGNORED_NOT_NON_EMPTY_STRING("config.ignored.notNonEmptyString"),
     CONFIG_IGNORED_UNKNOWN_VALUE("config.ignored.unknownValue"),
+    CONFIG_IGNORED_NOT_SUPPORTED_YET("config.ignored.notSupportedYet"),
     CONFIG_NEWER_VERSION("config.newerVersion"),
     LAUNCH_EXECUTABLE_NOT_FOUND("launch.executableNotFound"),
     LAUNCH_DIRECTORY_NOT_FOUND("launch.directoryNotFound"),
