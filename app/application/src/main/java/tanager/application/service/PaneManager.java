@@ -277,7 +277,7 @@ public final class PaneManager
             Workspace next = current.workspace()
                     .split(orientation, like.profile(), like.dir())
                     .workspace();
-            return changed(current, next);
+            return WorkspaceChange.<LayoutError>changed(current, next);
         });
     }
 
@@ -292,7 +292,7 @@ public final class PaneManager
             Workspace next = current.workspace()
                     .split(orientation, Optional.of(shell.id()), dir)
                     .workspace();
-            return changed(current, next);
+            return WorkspaceChange.<LayoutError>changed(current, next);
         });
     }
 
@@ -391,19 +391,6 @@ public final class PaneManager
 
     private CompletionStage<Result<Workspace, LayoutError>> changeLayout(
             Function<Workspace, Result<Workspace, LayoutError>> operation) {
-        return state.submit(current -> operation
-                .apply(current.workspace())
-                .fold(
-                        next -> changed(current, next),
-                        error -> new Transition<>(current, List.of(), Result.err(error))));
-    }
-
-    // 실제로 바뀌었을 때만 상태를 바꾸고 LayoutChanged 를 한 번 낸다
-    static <E> Transition<Result<Workspace, E>> changed(AppState current, Workspace next) {
-        Result<Workspace, E> reply = Result.ok(next);
-        if (next.equals(current.workspace())) {
-            return new Transition<>(current, List.of(), reply);
-        }
-        return new Transition<>(current.withWorkspace(next), List.of(new AppEvent.LayoutChanged(next)), reply);
+        return state.submit(WorkspaceChange.of(operation));
     }
 }
