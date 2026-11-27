@@ -75,6 +75,7 @@ final class MainWindow implements PaneController.Host {
         Executor ui = SwingUtilities::invokeLater;
         this.pane = new PaneController(ONLY_PANE, ui, background, sessions, profiles, settings, this);
         this.sidebar = new SidebarPanel(historyTree, ui);
+        sidebar.onLeave(pane::focus);
         frame.getContentPane().add(sidebar.component(), BorderLayout.WEST);
         // 터미널(JediTerm)이 키를 먼저 먹지 않게 포커스와 상관없이 가로챈다
         KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher(shortcuts);
@@ -108,19 +109,25 @@ final class MainWindow implements PaneController.Host {
         sidebar.requestRefresh();
     }
 
-    // Ctrl+Shift+E: 사이드바 보이기 · 숨기기(SDD §8.2). 전환 효과는 M4(FR-UI-04)
+    // Ctrl+Shift+E: 사이드바 보이기 · 숨기기, Ctrl+Shift+F: 사이드바 검색(SDD §8.2). 전환 효과는 M4(FR-UI-04)
     private boolean shortcut(KeyEvent event) {
-        boolean toggle = event.getID() == KeyEvent.KEY_PRESSED
-                && event.getKeyCode() == KeyEvent.VK_E
+        boolean ours = event.getID() == KeyEvent.KEY_PRESSED
                 && event.isControlDown()
                 && event.isShiftDown()
                 && !event.isAltDown()
                 && SwingUtilities.getWindowAncestor(event.getComponent()) == frame;
-        if (toggle) {
+        if (ours && event.getKeyCode() == KeyEvent.VK_E) {
             sidebar.component().setVisible(!sidebar.component().isVisible());
             frame.getContentPane().revalidate();
+            return true;
         }
-        return toggle;
+        if (ours && event.getKeyCode() == KeyEvent.VK_F) {
+            sidebar.component().setVisible(true);
+            frame.getContentPane().revalidate();
+            sidebar.focusSearch();
+            return true;
+        }
+        return false;
     }
 
     /** 셸 통합이 알린 경로를 그 창에 넘긴다(#82). 모르는 창이면 버린다. EDT 에서 부른다. */
