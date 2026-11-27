@@ -2,9 +2,12 @@ package tanager.application.service;
 
 import java.time.Instant;
 import java.time.InstantSource;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import tanager.application.port.in.AppEvent;
 import tanager.application.port.in.RecordVisitUseCase;
 import tanager.application.state.AppState;
@@ -20,6 +23,9 @@ import tanager.domain.shared.PaneId;
 /**
  * 셸이 알린 경로를 명령 하나로 세션 · 이력에 함께 적용한다(FR-HIS-01, ADR-0012 · 0015). 같은 명령 안에서 바꿔야 "그 창이 마지막으로 알린
  * 경로" 판정과 방문 기록이 어긋나지 않는다.
+ *
+ * <p>제외 규칙에 맞는 경로는 기록하지 않아 {@code HistoryChanged} 가 없다(FR-HIS-09). 셸이 옮겨 간 경로는 지금 있으므로 사라진 경로 표시를
+ * 푼다(FR-HIS-08).
  */
 public final class VisitRecorder implements RecordVisitUseCase {
     private final StateActor state;
@@ -54,9 +60,19 @@ public final class VisitRecorder implements RecordVisitUseCase {
             return new Transition<>(current, List.of(), false);
         }
         WorkHistory history = current.history().recordVisit(cwd, at);
-        return new Transition<>(
-                current.withHistory(history).withSessions(moved.get()).withStore(queued(current.store(), cwd, at)),
-                List.of(new AppEvent.HistoryChanged(history), new AppEvent.SessionCwdChanged(pane, cwd)),
-                true);
+        AppState next = current.withSessions(moved.get());
+        List<AppEvent> events = new ArrayList<>();
+        if (history != current.history()) {
+            next = next.withHistory(history).withStore(queued(current.store(), cwd, at));
+            events.add(new AppEvent.HistoryChanged(history));
+        }
+        events.add(new AppEvent.SessionCwdChanged(pane, cwd));
+        if (current.missing().contains(cwd)) {
+            Set<WorkspacePath> present = new HashSet<>(current.missing());
+            present.remove(cwd);
+            next = next.withMissing(present);
+            events.add(new AppEvent.MissingPathsChanged(present));
+        }
+        return new Transition<>(next, events, true);
     }
 }

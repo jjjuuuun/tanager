@@ -10,7 +10,8 @@ import tanager.domain.history.WorkHistory;
 
 /**
  * 불러온 이력으로 바꾸는 명령(ADR-0013). 불러오는 동안 쌓인 방문을 불러온 이력 위에 순서대로 다시 적용해, 불러온 파일이 그 방문을 덮지
- * 않는다. 저장소를 연 방식에 따라 쓸 수 있는 상태나 읽기 전용이 된다.
+ * 않는다. 저장소를 연 방식에 따라 쓸 수 있는 상태나 읽기 전용이 된다. 불러온 이력에는 지금 이력의 정책을 적용한다 — 설정이 먼저 반영됐으면
+ * 그 한도 · 제외 규칙을 따른다(#186).
  */
 public record HistoryLoaded(LoadedHistory loaded) implements Command<Boolean> {
     public HistoryLoaded {
@@ -19,7 +20,7 @@ public record HistoryLoaded(LoadedHistory loaded) implements Command<Boolean> {
 
     @Override
     public Transition<Boolean> apply(AppState current) {
-        WorkHistory history = loaded.history();
+        WorkHistory history = loaded.history().withPolicy(current.history().policy());
         for (PendingVisit visit : pendingOf(current.store())) {
             history = history.recordVisit(visit.path(), visit.at());
         }

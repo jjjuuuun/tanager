@@ -18,6 +18,7 @@ import tanager.domain.history.HistoryError;
 import tanager.domain.history.HistoryPolicy;
 import tanager.domain.history.HistoryTree;
 import tanager.domain.history.ShellEnvironment;
+import tanager.domain.history.TreeNode;
 import tanager.domain.history.TreeQuery;
 import tanager.domain.history.VisitedDirectory;
 import tanager.domain.history.WorkHistory;
@@ -79,6 +80,22 @@ class HistoryTreeUseCasesTest {
     private static <T> Result<T, HistoryError> join(
             java.util.concurrent.CompletionStage<Result<T, HistoryError>> stage) {
         return stage.toCompletableFuture().join();
+    }
+
+    @Test
+    @DisplayName("트리 조회는 상태의 사라진 경로를 폴더 표시로 넘긴다")
+    void treeMarksMissingPaths() {
+        // given
+        WorkHistory history = history(win("C:\\gone"));
+        StateActor state = actor(AppState.initial(history).withMissing(java.util.Set.of(win("C:\\gone"))));
+
+        // when
+        HistoryTree tree = new HistoryTreeQuery(state).tree("", false);
+
+        // then
+        TreeNode.Folder gone =
+                (TreeNode.Folder) tree.environments().getFirst().children().getFirst();
+        assertThat(gone.missing()).isTrue();
     }
 
     @Test

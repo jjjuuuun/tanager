@@ -13,6 +13,9 @@ import tanager.application.port.out.LoadedConfig;
  * 설정을 읽었을 때의 명령(FR-CFG-03, ADR-0009 개정). 값이 바뀌었을 때만(처음 읽을 때는 늘) 설정을 바꾸고 {@link AppEvent.SettingsChanged}
  * 를 낸다. 응답은 바꿨는가.
  *
+ * <p>설정의 이력 규칙은 같은 전이에서 이력에 반영한다({@link PolicyChanged}) — 항목이 줄면 {@code SettingsChanged} 뒤에 {@code
+ * HistoryChanged} 가 나간다.
+ *
  * <p>경고는 다시 읽을 때만 알린다. 시작 때의 경고는 셸 시작 알림({@code StartNotice.ConfigWarned})이 이미 보인다.
  */
 public record SettingsLoaded(LoadedConfig loaded) implements Command<Boolean> {
@@ -27,13 +30,16 @@ public record SettingsLoaded(LoadedConfig loaded) implements Command<Boolean> {
         if (previous.equals(Optional.of(next))) {
             return new Transition<>(current, List.of(), false);
         }
+        Transition<Boolean> policy =
+                new PolicyChanged(PolicyChanged.policyOf(next.history())).apply(current.withSettings(next));
         List<AppEvent> events = new ArrayList<>();
         events.add(new AppEvent.SettingsChanged(next));
+        events.addAll(policy.events());
         if (previous.isPresent()) {
             for (ConfigWarning warning : loaded.warnings()) {
                 events.add(new AppEvent.SettingsNotice(new AppEvent.SettingsProblem.Warned(warning)));
             }
         }
-        return new Transition<>(current.withSettings(next), events, true);
+        return new Transition<>(policy.next(), events, true);
     }
 }

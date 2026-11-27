@@ -235,6 +235,22 @@ class JsonConfigSectionsTest {
     }
 
     @Test
+    @DisplayName("glob 으로 읽을 수 없는 history.exclude 항목(상대 경로)은 그것만 빼고 경고한다")
+    void invalidGlobIsDropped() throws IOException {
+        // when
+        LoadedConfig loaded = load("""
+                { "history": { "exclude": ["tmp/**", "/tmp/**", "*.log"] } }
+                """);
+
+        // then
+        assertThat(loaded.config().history().exclude()).containsExactly("/tmp/**");
+        assertThat(loaded.warnings())
+                .containsExactly(
+                        ignored("history.exclude[0]", IgnoredReason.INVALID_GLOB),
+                        ignored("history.exclude[2]", IgnoredReason.INVALID_GLOB));
+    }
+
+    @Test
     @DisplayName("배열 · 객체 안의 틀린 항목은 그 항목만 빼고 경고한다")
     void badElementsAreDropped() throws IOException {
         // when

@@ -17,13 +17,16 @@ public sealed interface TreeNode {
      *
      * <p>주의: 펼침 · 선택 상태는 {@code label} 이 아니라 {@code path}({@link WorkspacePath}) 로 기억한다. 라벨은 압축 여부와 표기가
      * 바뀌면(형제가 생기거나 다른 표기로 방문하면) 달라진다.
+     *
+     * <p>{@code missing} 은 방문 기록이 있는 폴더가 더 이상 없다고 확인됐는지다(FR-HIS-08). 모르면 {@code false}.
      */
     record Folder(
             WorkspacePath path,
             String label,
             Optional<VisitedDirectory> visit,
             boolean matched,
-            List<TreeNode> children)
+            List<TreeNode> children,
+            boolean missing)
             implements TreeNode {
         public Folder {
             Objects.requireNonNull(path, "path");
@@ -33,6 +36,16 @@ public sealed interface TreeNode {
                 throw new IllegalArgumentException("폴더 라벨이 비어 있다: " + path);
             }
             children = List.copyOf(children);
+        }
+
+        /** 사라졌다고 확인되지 않은 폴더. */
+        public Folder(
+                WorkspacePath path,
+                String label,
+                Optional<VisitedDirectory> visit,
+                boolean matched,
+                List<TreeNode> children) {
+            this(path, label, visit, matched, children, false);
         }
     }
 

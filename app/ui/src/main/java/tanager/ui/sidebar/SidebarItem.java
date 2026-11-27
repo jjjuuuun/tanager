@@ -14,6 +14,7 @@ import java.util.Optional;
  * @param matched 검색어에 맞았는지(강조색으로 그린다)
  * @param target 메뉴를 열면 무엇을 다루는지(고정됨 머리는 메뉴가 없다)
  * @param hidden 숨긴 항목인지(숨긴 폴더 보기에서 흐리게 그린다)
+ * @param missing 더 이상 없다고 확인된 경로인지(흐리게 그린다, #186). 열기 메뉴는 그대로다 — 열면 홈에서 띄우고 알린다
  */
 record SidebarItem(
         NodeKey key,
@@ -23,7 +24,8 @@ record SidebarItem(
         Kind kind,
         boolean matched,
         Optional<MenuTarget> target,
-        boolean hidden) {
+        boolean hidden,
+        boolean missing) {
 
     enum Kind {
         PINNED_SECTION,

@@ -2,6 +2,7 @@ package tanager.application.port.in;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import tanager.application.port.out.AppConfig;
 import tanager.application.port.out.ConfigError;
 import tanager.application.port.out.ConfigWarning;
@@ -22,6 +23,13 @@ public sealed interface AppEvent {
     record HistoryChanged(WorkHistory history) implements AppEvent {
         public HistoryChanged {
             Objects.requireNonNull(history, "history");
+        }
+    }
+
+    /** 더 이상 없다고 확인된 이력 경로가 바뀌었다(FR-HIS-08). 새 집합 전체를 싣는다 — 사이드바가 그 폴더를 흐리게 그린다. */
+    record MissingPathsChanged(Set<WorkspacePath> missing) implements AppEvent {
+        public MissingPathsChanged {
+            missing = Set.copyOf(missing);
         }
     }
 

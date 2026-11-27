@@ -69,6 +69,8 @@ public sealed interface ConfigWarning {
         /** 문자열(또는 null)이 아니다. */
         NOT_STRING,
         /** 이름(키)이 비어 있다. */
-        EMPTY_NAME
+        EMPTY_NAME,
+        /** 절대 경로 glob 이 아니다(이력 제외 규칙, #186). */
+        INVALID_GLOB
     }
 }

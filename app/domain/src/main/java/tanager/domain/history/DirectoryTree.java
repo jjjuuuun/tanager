@@ -66,11 +66,21 @@ public final class DirectoryTree {
 
     private DirectoryTree() {}
 
-    /** {@code history} 와 {@code sessions} 를 {@code query} 조건으로 투영한다. 입력은 바꾸지 않는다. */
+    /** {@code history} 와 {@code sessions} 를 {@code query} 조건으로 투영한다. 사라졌다고 확인된 경로는 없다. 입력은 바꾸지 않는다. */
     public static HistoryTree project(WorkHistory history, List<SessionLeaf> sessions, TreeQuery query) {
+        return project(history, sessions, query, Set.of());
+    }
+
+    /**
+     * {@link #project(WorkHistory, List, TreeQuery)} 와 같되, {@code missing} 에 든 방문 폴더 · 고정 항목에 사라진 경로 표시를 붙인다
+     * (FR-HIS-08). 방문 기록이 없는 폴더에는 붙이지 않는다.
+     */
+    public static HistoryTree project(
+            WorkHistory history, List<SessionLeaf> sessions, TreeQuery query, Set<WorkspacePath> missing) {
         Objects.requireNonNull(history, "history");
         Objects.requireNonNull(sessions, "sessions");
         Objects.requireNonNull(query, "query");
+        Set<WorkspacePath> gone = Set.copyOf(missing);
 
         Forest forest = new Forest();
         // 정렬해 넣어 방문 순서 · Map 순회 순서와 상관없이 같은 표기를 고른다.
@@ -110,17 +120,18 @@ public final class DirectoryTree {
         List<EnvironmentNode> environments = new ArrayList<>();
         for (ShellEnvironment env : environmentOrder(query.environmentOrder(), forest.environments.keySet())) {
             EnvBuilder e = forest.environments.getOrDefault(env, new EnvBuilder());
-            environments.add(new EnvironmentNode(env, children(e.sessions, e.roots.values())));
+            environments.add(new EnvironmentNode(env, children(e.sessions, e.roots.values(), gone)));
         }
-        return new HistoryTree(pinned(entries, filter), environments);
+        return new HistoryTree(pinned(entries, filter, gone), environments);
     }
 
     // 고정 항목은 숨길 수 없어 늘 보이는 방문이므로 showHidden 과 상관없고 filter 의 matched 로 가린다.
-    private static List<PinnedEntry> pinned(List<VisitedDirectory> entries, Optional<Filter> filter) {
+    private static List<PinnedEntry> pinned(
+            List<VisitedDirectory> entries, Optional<Filter> filter, Set<WorkspacePath> missing) {
         List<PinnedEntry> result = new ArrayList<>();
         for (VisitedDirectory v : entries) {
             if (v.pinned() && filter.map(f -> f.matched().contains(v.path())).orElse(true)) {
-                result.add(new PinnedEntry(v, pinnedLabel(v), filter.isPresent()));
+                result.add(new PinnedEntry(v, pinnedLabel(v), filter.isPresent(), missing.contains(v.path())));
             }
         }
         result.sort(PINNED_ORDER);
@@ -158,14 +169,15 @@ public final class DirectoryTree {
         };
     }
 
-    private static List<TreeNode> children(List<SessionLeaf> sessions, Collection<Node> folders) {
+    private static List<TreeNode> children(
+            List<SessionLeaf> sessions, Collection<Node> folders, Set<WorkspacePath> missing) {
         List<TreeNode> result = new ArrayList<>();
         for (SessionLeaf s : sessions) {
             result.add(new TreeNode.Session(s));
         }
         List<Built> built = new ArrayList<>();
         for (Node n : folders) {
-            built.add(compressed(n));
+            built.add(compressed(n, missing));
         }
         built.sort(FOLDER_ORDER);
         for (Built b : built) {
@@ -176,21 +188,24 @@ public final class DirectoryTree {
 
     // 방문도 세션도 없이 폴더 하나만 품은 노드는 자식과 합쳐 한 줄로 만든다.
     // 라벨은 끝 노드의 표시 경로에서 잘라 만든다 — 중간 노드의 표기를 이어 붙이면 path() 와 대소문자가 어긋날 수 있다.
-    private static Built compressed(Node start) {
+    private static Built compressed(Node start, Set<WorkspacePath> missing) {
         Node end = start;
         while (end.visit.isEmpty() && end.sessions.isEmpty() && end.children.size() == 1) {
             end = end.children.values().iterator().next();
         }
         WorkspacePath shown = end.displayPath();
-        List<TreeNode> children = children(end.sessions, end.children.values());
+        List<TreeNode> children = children(end.sessions, end.children.values(), missing);
+        boolean gone = end.visit.isPresent() && missing.contains(shown);
         if (start.path.parent().isEmpty()) {
-            return rootFolder(new TreeNode.Folder(shown, shown.path(), end.visit, end.matched, children));
+            return rootFolder(new TreeNode.Folder(shown, shown.path(), end.visit, end.matched, children, gone));
         }
         List<String> segments = shown.segments();
         List<String> labelSegments = segments.subList(start.path.segments().size() - 1, segments.size());
         String label = String.join(separator(shown.env()), labelSegments);
         return new Built(
-                new TreeNode.Folder(shown, label, end.visit, end.matched, children), RootKind.NONE, labelSegments);
+                new TreeNode.Folder(shown, label, end.visit, end.matched, children, gone),
+                RootKind.NONE,
+                labelSegments);
     }
 
     // 환경 바로 아래 루트는 종류(드라이브 → UNC → WSL '/') → 루트 이름(드라이브 글자 · UNC 호스트와 공유) → 라벨 세그먼트 순.
