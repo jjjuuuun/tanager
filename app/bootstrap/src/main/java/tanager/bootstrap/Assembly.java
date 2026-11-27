@@ -11,6 +11,7 @@ import java.util.concurrent.TimeUnit;
 import tanager.adapter.persistence.JsonConfigRepository;
 import tanager.adapter.persistence.JsonStateRepository;
 import tanager.application.port.in.ListProfilesUseCase;
+import tanager.application.port.in.QueryHistoryTreeUseCase;
 import tanager.application.port.in.RecordEnvironmentsUseCase;
 import tanager.application.port.in.StartSessionUseCase;
 import tanager.application.port.out.HistoryStoreError;
@@ -21,6 +22,7 @@ import tanager.application.port.out.PtyLauncher;
 import tanager.application.service.DefaultProfileMemory;
 import tanager.application.service.EnvironmentRecorder;
 import tanager.application.service.HistorySaver;
+import tanager.application.service.HistoryTreeQuery;
 import tanager.application.service.IntegrationStatus;
 import tanager.application.service.ProfileCatalog;
 import tanager.application.service.SessionStarter;
@@ -114,6 +116,11 @@ final class Assembly {
 
     StartSessionUseCase sessions() {
         return sessions;
+    }
+
+    /** 사이드바가 그릴 이력 트리(#84). */
+    QueryHistoryTreeUseCase historyTree() {
+        return new HistoryTreeQuery(state);
     }
 
     StateActor state() {

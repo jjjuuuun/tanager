@@ -3,6 +3,9 @@ package tanager.ui;
 import com.formdev.flatlaf.FlatClientProperties;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
+import java.awt.KeyEventDispatcher;
+import java.awt.KeyboardFocusManager;
+import java.awt.event.KeyEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.util.List;
@@ -18,10 +21,12 @@ import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
 import javax.swing.border.EmptyBorder;
 import tanager.application.port.in.ListProfilesUseCase;
+import tanager.application.port.in.QueryHistoryTreeUseCase;
 import tanager.application.port.in.StartSessionUseCase;
 import tanager.domain.history.WorkspacePath;
 import tanager.domain.shared.PaneId;
 import tanager.ui.pane.PaneController;
+import tanager.ui.sidebar.SidebarPanel;
 import tanager.ui.terminal.TerminalSettings;
 import tanager.ui.theme.ColorToken;
 import tanager.ui.theme.ThemeColors;
@@ -54,18 +59,25 @@ final class MainWindow implements PaneController.Host {
     private final JLabel statusRight = new JLabel();
     private Notices notices = new Notices(List.of());
     private final PaneController pane;
+    private final SidebarPanel sidebar;
+    private final KeyEventDispatcher shortcuts = this::shortcut;
     private final Runnable onShutdown;
     private boolean closing;
 
     MainWindow(
             StartSessionUseCase sessions,
             ListProfilesUseCase profiles,
+            QueryHistoryTreeUseCase historyTree,
             Runnable onShutdown,
             TerminalSettings settings,
             Executor background) {
         this.onShutdown = Objects.requireNonNull(onShutdown, "onShutdown");
         Executor ui = SwingUtilities::invokeLater;
         this.pane = new PaneController(ONLY_PANE, ui, background, sessions, profiles, settings, this);
+        this.sidebar = new SidebarPanel(historyTree, ui);
+        frame.getContentPane().add(sidebar.component(), BorderLayout.WEST);
+        // 터미널(JediTerm)이 키를 먼저 먹지 않게 포커스와 상관없이 가로챈다
+        KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher(shortcuts);
         frame.setJMenuBar(titleBarTabs());
         frame.getContentPane().add(paneArea(), BorderLayout.CENTER);
         frame.getContentPane().add(statusBar(), BorderLayout.SOUTH);
@@ -84,10 +96,31 @@ final class MainWindow implements PaneController.Host {
     /** 창을 띄우고(아직 연결하지 않은 위젯이 놓인다) 첫 셸을 띄운다. */
     void show(List<String> warnings) {
         frame.setVisible(true);
+        sidebar.requestRefresh();
         if (!warnings.isEmpty()) {
             notify(warnings);
         }
         pane.start();
+    }
+
+    /** 이력 · 세션 · 환경 순서가 바뀌었다 — 사이드바를 다음 틱에 한 번 다시 그린다(#84). EDT 에서 부른다. */
+    void historyChanged() {
+        sidebar.requestRefresh();
+    }
+
+    // Ctrl+Shift+E: 사이드바 보이기 · 숨기기(SDD §8.2). 전환 효과는 M4(FR-UI-04)
+    private boolean shortcut(KeyEvent event) {
+        boolean toggle = event.getID() == KeyEvent.KEY_PRESSED
+                && event.getKeyCode() == KeyEvent.VK_E
+                && event.isControlDown()
+                && event.isShiftDown()
+                && !event.isAltDown()
+                && SwingUtilities.getWindowAncestor(event.getComponent()) == frame;
+        if (toggle) {
+            sidebar.component().setVisible(!sidebar.component().isVisible());
+            frame.getContentPane().revalidate();
+        }
+        return toggle;
     }
 
     /** 셸 통합이 알린 경로를 그 창에 넘긴다(#82). 모르는 창이면 버린다. EDT 에서 부른다. */
@@ -126,6 +159,7 @@ final class MainWindow implements PaneController.Host {
             return;
         }
         closing = true;
+        KeyboardFocusManager.getCurrentKeyboardFocusManager().removeKeyEventDispatcher(shortcuts);
         CompletionStage<?> exited = pane.shutdown();
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(EXIT_WAIT_SECONDS);
         frame.dispose();

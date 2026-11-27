@@ -11,6 +11,7 @@ import javax.swing.SwingUtilities;
 import tanager.application.port.in.AppEvent;
 import tanager.application.port.in.AppEvents;
 import tanager.application.port.in.ListProfilesUseCase;
+import tanager.application.port.in.QueryHistoryTreeUseCase;
 import tanager.application.port.in.StartSessionUseCase;
 import tanager.domain.history.WorkspacePath;
 import tanager.domain.shared.PaneId;
@@ -34,7 +35,11 @@ public final class SwingUi {
      * @param onShutdown 앱을 끝낼 때 셸을 닫은 뒤 EDT 밖에서 한 번 부른다(미저장 이력 저장 등, ADR-0011). 끝나면 프로세스를 끝낸다
      */
     public static void showMainWindow(
-            StartSessionUseCase sessions, ListProfilesUseCase profiles, AppEvents events, Runnable onShutdown) {
+            StartSessionUseCase sessions,
+            ListProfilesUseCase profiles,
+            QueryHistoryTreeUseCase historyTree,
+            AppEvents events,
+            Runnable onShutdown) {
         // 창을 만들기 전에 구독한다 — 이력 불러오기 알림이 창보다 먼저 올 수 있다. 창은 앱과 수명이 같아 해제하지 않는다
         NoticeInbox inbox = new NoticeInbox();
         events.subscribeOnUi(event -> Notices.messageOf(event).ifPresent(inbox::accept));
@@ -43,6 +48,13 @@ public final class SwingUi {
         events.subscribeOnUi(event -> {
             if (event instanceof AppEvent.SessionCwdChanged(PaneId pane, WorkspacePath cwd)) {
                 Optional.ofNullable(shown.get()).ifPresent(window -> window.cwdChanged(pane, cwd));
+            }
+            // 사이드바는 이력 · 세션 · 환경 순서가 바뀌면 다시 투영한다(#84). 몰리면 한 번만 그린다
+            if (event instanceof AppEvent.HistoryChanged
+                    || event instanceof AppEvent.SessionsChanged
+                    || event instanceof AppEvent.SessionCwdChanged
+                    || event instanceof AppEvent.EnvironmentsChanged) {
+                Optional.ofNullable(shown.get()).ifPresent(MainWindow::historyChanged);
             }
         });
         SwingUtilities.invokeLater(() -> {
@@ -59,7 +71,7 @@ public final class SwingUi {
             TerminalSettings settings = new TerminalSettings(fonts, JediTermColors.current());
             Executor background =
                     task -> Thread.ofVirtual().name("tanager-session-start").start(task);
-            MainWindow window = new MainWindow(sessions, profiles, onShutdown, settings, background);
+            MainWindow window = new MainWindow(sessions, profiles, historyTree, onShutdown, settings, background);
             shown.set(window);
             window.show(warnings);
             inbox.attach(window::notify);

@@ -41,7 +41,8 @@ public final class TanagerApp {
                 LOG.log(System.Logger.Level.INFO, "플랫폼: {0} ({1})", platform.id(), os.describe());
                 Assembly assembly = Assembly.assemble(platform, new Pty4jLauncher());
                 AppEvents events = new UiAppEvents(assembly.state(), new SwingUiDispatcher());
-                SwingUi.showMainWindow(assembly.sessions(), assembly.profiles(), events, assembly::shutdown);
+                SwingUi.showMainWindow(
+                        assembly.sessions(), assembly.profiles(), assembly.historyTree(), events, assembly::shutdown);
             }
             case Result.Err<PlatformModule, PlatformSelectionError>(PlatformSelectionError error) -> {
                 LOG.log(System.Logger.Level.ERROR, error.describe());
