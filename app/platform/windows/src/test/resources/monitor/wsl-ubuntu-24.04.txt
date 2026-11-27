@@ -1,0 +1,55 @@
+MemTotal:       11216076 kB
+MemFree:          271320 kB
+MemAvailable:    2578028 kB
+Buffers:          204480 kB
+Cached:          1818012 kB
+SwapCached:       249272 kB
+Active:          2784968 kB
+Inactive:        6990848 kB
+Active(anon):    1416084 kB
+Inactive(anon):  6412376 kB
+Active(file):    1368884 kB
+Inactive(file):   578472 kB
+Unevictable:           0 kB
+Mlocked:               0 kB
+SwapTotal:      16777216 kB
+SwapFree:       15184824 kB
+Dirty:             69060 kB
+Writeback:             0 kB
+AnonPages:       7664588 kB
+Mapped:           623964 kB
+Shmem:             74036 kB
+KReclaimable:     572076 kB
+Slab:             738444 kB
+SReclaimable:     572076 kB
+SUnreclaim:       166368 kB
+KernelStack:       27984 kB
+PageTables:       129572 kB
+SecPageTables:         0 kB
+NFS_Unstable:          0 kB
+Bounce:                0 kB
+WritebackTmp:          0 kB
+CommitLimit:    22385252 kB
+Committed_AS:   21276976 kB
+VmallocTotal:   34359738367 kB
+VmallocUsed:       57444 kB
+VmallocChunk:          0 kB
+Percpu:             8640 kB
+HardwareCorrupted:     0 kB
+AnonHugePages:    423936 kB
+ShmemHugePages:        0 kB
+ShmemPmdMapped:        0 kB
+FileHugePages:         0 kB
+FilePmdMapped:         0 kB
+Unaccepted:            0 kB
+HugePages_Total:       0
+HugePages_Free:        0
+HugePages_Rsvd:        0
+HugePages_Surp:        0
+Hugepagesize:       2048 kB
+Hugetlb:               0 kB
+DirectMap4k:      117760 kB
+DirectMap2M:     9318400 kB
+DirectMap1G:    11534336 kB
+Filesystem     1024-blocks      Used Available Capacity Mounted on
+/dev/sdd        1055762868 134125748 867933648      14% /

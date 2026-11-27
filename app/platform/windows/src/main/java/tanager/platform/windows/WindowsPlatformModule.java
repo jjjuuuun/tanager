@@ -12,8 +12,10 @@ import tanager.application.port.out.LaunchCommand;
 import tanager.application.port.out.PathTranslation;
 import tanager.application.port.out.PlatformDirs;
 import tanager.application.port.out.PlatformModule;
+import tanager.application.port.out.ResourceProbe;
 import tanager.application.port.out.ShellIntegration;
 import tanager.application.port.out.SystemAppearance;
+import tanager.application.port.out.SystemTools;
 import tanager.domain.history.PathTranslator;
 import tanager.domain.history.ShellEnvironment;
 import tanager.domain.history.WorkspacePath;
@@ -134,5 +136,17 @@ public final class WindowsPlatformModule implements PlatformModule {
     @Override
     public SystemAppearance appearance() {
         return WindowsAppearance.read(appearanceRunner, APPEARANCE_TIMEOUT);
+    }
+
+    /** JDK · FileStore · wsl.exe 로 잰다(#187). 부를 때마다 새 수집기다 — 상태가 없다. */
+    @Override
+    public ResourceProbe resources() {
+        return WindowsResourceProbe.system(new ProcessCommandRunner(), paths());
+    }
+
+    /** 작업 관리자 · 디스크 정리(#187). */
+    @Override
+    public SystemTools systemTools() {
+        return WindowsSystemTools.system();
     }
 }

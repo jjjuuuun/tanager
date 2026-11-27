@@ -33,6 +33,8 @@ public final class FakePlatformModule implements PlatformModule {
     private CountDownLatch shellsGate;
     private Optional<RuntimeException> shellsFailure = Optional.empty();
     private SystemAppearance appearance = SystemAppearance.DEFAULT;
+    private final FakeResourceProbe resources = new FakeResourceProbe();
+    private final RecordingSystemTools systemTools = new RecordingSystemTools();
 
     public FakePlatformModule(List<ShellProfile> shells) {
         this.shells = List.copyOf(shells);
@@ -167,5 +169,16 @@ public final class FakePlatformModule implements PlatformModule {
     @Override
     public synchronized SystemAppearance appearance() {
         return appearance;
+    }
+
+    /** 기본 {@link FakeResourceProbe}(값을 바꾸려면 이것을 설정한다). */
+    @Override
+    public FakeResourceProbe resources() {
+        return resources;
+    }
+
+    @Override
+    public RecordingSystemTools systemTools() {
+        return systemTools;
     }
 }

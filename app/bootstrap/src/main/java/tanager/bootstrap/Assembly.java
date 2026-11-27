@@ -17,12 +17,14 @@ import tanager.application.port.in.QueryHistoryTreeUseCase;
 import tanager.application.port.in.RecordEnvironmentsUseCase;
 import tanager.application.port.in.SettingsUseCase;
 import tanager.application.port.in.StartSessionUseCase;
+import tanager.application.port.in.WatchResourcesUseCase;
 import tanager.application.port.out.HistoryStoreError;
 import tanager.application.port.out.Integration;
 import tanager.application.port.out.LoadedHistory;
 import tanager.application.port.out.PlatformModule;
 import tanager.application.port.out.PtyLauncher;
 import tanager.application.port.out.Subscription;
+import tanager.application.port.out.UiDispatcher;
 import tanager.application.service.DefaultProfileMemory;
 import tanager.application.service.EnvironmentRecorder;
 import tanager.application.service.HistoryManager;
@@ -31,6 +33,7 @@ import tanager.application.service.HistoryTreeQuery;
 import tanager.application.service.IntegrationStatus;
 import tanager.application.service.PaneManager;
 import tanager.application.service.ProfileCatalog;
+import tanager.application.service.ResourceWatcher;
 import tanager.application.service.SessionStarter;
 import tanager.application.service.SettingsReloader;
 import tanager.application.service.VisitRecorder;
@@ -65,6 +68,8 @@ final class Assembly {
     private final PaneManager panes;
     private final SettingsReloader settings;
     private final WatchServiceConfigWatch configWatch;
+    private final ResourceWatcher resources;
+    private final ExecutorScheduler monitorScheduler;
     private volatile Subscription watchingSettings = () -> {};
 
     private Assembly(
@@ -77,7 +82,9 @@ final class Assembly {
             JsonStateRepository history,
             PaneManager panes,
             SettingsReloader settings,
-            WatchServiceConfigWatch configWatch) {
+            WatchServiceConfigWatch configWatch,
+            ResourceWatcher resources,
+            ExecutorScheduler monitorScheduler) {
         this.profiles = profiles;
         this.sessions = sessions;
         this.state = state;
@@ -88,13 +95,17 @@ final class Assembly {
         this.panes = panes;
         this.settings = settings;
         this.configWatch = configWatch;
+        this.resources = resources;
+        this.monitorScheduler = monitorScheduler;
     }
 
     /**
      * 셸 탐지는 수 초 걸릴 수 있어 창을 띄우는 동안 가상 스레드에서 미리 돌린다 — 첫 {@code start} 는 그 결과를 기다린다(탐지는
      * 한 번뿐이다). 셸 통합 설치 · 이력 불러오기도 같은 방식이다(ADR-0013 · 0014). 불러오기 전 방문은 불러온 이력 위에 합쳐진다.
+     *
+     * @param ui 리소스 표시(#187)를 UI 스레드로 넘긴다
      */
-    static Assembly assemble(PlatformModule platform, PtyLauncher launcher) {
+    static Assembly assemble(PlatformModule platform, PtyLauncher launcher, UiDispatcher ui) {
         ProfileCatalog catalog = new ProfileCatalog(platform);
         IntegrationStatus integration = new IntegrationStatus(platform);
         warmShellIntegration(integration);
@@ -116,6 +127,16 @@ final class Assembly {
                 catalog, config, platform, integration, launcher, new DefaultProfileMemory(config), state, visits);
         PaneManager panes = new PaneManager(catalog, config, platform.paths(), state);
         SettingsReloader settings = new SettingsReloader(config, state);
+        // 설정을 읽기 전에 구독해야 시작 때의 SettingsChanged 를 받는다. 예약은 전용 타이머, 재기는 주기마다 가상 스레드(SDD §6.6)
+        ExecutorScheduler monitorScheduler = new ExecutorScheduler("tanager-monitor-timer");
+        ResourceWatcher resources = new ResourceWatcher(
+                state,
+                platform.resources(),
+                platform.systemTools(),
+                monitorScheduler,
+                task -> Thread.ofVirtual().name("tanager-monitor").start(task),
+                InstantSource.system(),
+                ui);
         return new Assembly(
                 catalog,
                 starter,
@@ -126,7 +147,9 @@ final class Assembly {
                 history,
                 panes,
                 settings,
-                new WatchServiceConfigWatch(configFile));
+                new WatchServiceConfigWatch(configFile),
+                resources,
+                monitorScheduler);
     }
 
     // 탐지가 끝나면 그 순서를 트리의 환경 순서로 알린다(#83). 실패하면 트리는 이력의 환경을 이름순으로 놓는다
@@ -175,6 +198,11 @@ final class Assembly {
         watchingSettings = settings.start(configWatch);
     }
 
+    /** 상태줄의 리소스 표시(#187). 표시는 상태줄 이슈(#188)가 한다. */
+    WatchResourcesUseCase resources() {
+        return resources;
+    }
+
     /** 창 열기 · 닫기 · 포커스(#88 · #89). */
     PaneManager panes() {
         return panes;
@@ -186,6 +214,8 @@ final class Assembly {
      */
     void shutdown() {
         watchingSettings.cancel();
+        // 리소스 수집 예약을 먼저 버린다 — 종료 중에 wsl.exe 를 띄우지 않게
+        monitorScheduler.close();
         shutdownInOrder(stateExecutor, saver, FLUSH_TIMEOUT, scheduler::close, history::close);
     }
 

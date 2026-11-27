@@ -21,6 +21,7 @@ import tanager.adapter.pty.Pty4jLauncher;
 import tanager.application.platform.PlatformSelection;
 import tanager.application.port.in.StartRequest;
 import tanager.application.port.in.StartedSession;
+import tanager.application.port.out.DirectUiDispatcher;
 import tanager.application.port.out.PlatformModule;
 import tanager.application.port.out.TerminalSize;
 import tanager.domain.session.SessionState;
@@ -52,7 +53,7 @@ class PowerShellSmokeTest {
     void promptAppearsQuicklyAndExitCodeArrives() throws Exception {
         // given
         PlatformModule platform = currentPlatform();
-        Assembly assembly = Assembly.assemble(platform, new Pty4jLauncher());
+        Assembly assembly = Assembly.assemble(platform, new Pty4jLauncher(), new DirectUiDispatcher());
         // 조립이 미리 시작한 탐지 결과를 그대로 쓴다(탐지는 한 번)
         ShellProfile powershell = assembly.profiles().list().stream()
                 .filter(p -> p.kind() == ShellKind.WINDOWS_POWERSHELL)

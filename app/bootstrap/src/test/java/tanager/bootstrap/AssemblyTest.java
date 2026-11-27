@@ -11,16 +11,19 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import tanager.application.port.in.AppEvent;
+import tanager.application.port.in.ResourceReport;
 import tanager.application.port.in.StartFailure;
 import tanager.application.port.in.StartNotice;
 import tanager.application.port.in.StartRequest;
 import tanager.application.port.in.StartedSession;
+import tanager.application.port.out.DirectUiDispatcher;
 import tanager.application.port.out.FakePlatformModule;
 import tanager.application.port.out.FakeShellIntegration;
 import tanager.application.port.out.ScriptedPtyLauncher;
@@ -61,7 +64,7 @@ class AssemblyTest {
     }
 
     private Assembly assemble(FakePlatformModule platform, ScriptedPtyLauncher launcher) {
-        Assembly assembly = Assembly.assemble(platform, launcher);
+        Assembly assembly = Assembly.assemble(platform, launcher, new DirectUiDispatcher());
         assemblies.add(assembly);
         return assembly;
     }
@@ -439,5 +442,22 @@ class AssemblyTest {
         // then
         assertThat(file).isEqualTo(appData.resolve("config.json"));
         assertThat(Files.readString(file, StandardCharsets.UTF_8)).containsPattern("\"schemaVersion\"\\s*:\\s*1");
+    }
+
+    @Test
+    @DisplayName("리소스 표시를 구독하면 플랫폼의 수집기로 재서 보내고, 종료하면 멈춘다(#187)")
+    void resourcesUsePlatformProbe() {
+        // given
+        FakePlatformModule platform = new FakePlatformModule(List.of(CMD)).withAppData(appData);
+        Assembly assembly = assemble(platform, new ScriptedPtyLauncher());
+        List<ResourceReport> reports = new CopyOnWriteArrayList<>();
+
+        // when
+        assembly.resources().subscribe(reports::add);
+
+        // then
+        await().atMost(Duration.ofSeconds(2)).until(() -> !reports.isEmpty());
+        assertThat(platform.resources().hostCalls()).isPositive();
+        assertThat(platform.resources().wslCalls()).isEmpty();
     }
 }

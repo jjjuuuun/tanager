@@ -1,0 +1,2 @@
+Filesystem                                             1024-blocks     Used Available Capacity Mounted on
+/dev/mapper/ubuntu--vg-ubuntu--lv--very--long--name--x  1055762868 950186581 52855823      95% /

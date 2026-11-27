@@ -52,4 +52,10 @@ public interface PlatformModule {
      * 실행할 수 있어 EDT 에서 부르지 않는다. 설정 변경 구독은 FR-UI-01(M5)에서 더한다.
      */
     SystemAppearance appearance();
+
+    /** 호스트 · 디스크 · WSL 리소스 수집기(FR-MON-01 · 02, #187). 돌려주는 것만으로는 아무것도 재지 않는다. */
+    ResourceProbe resources();
+
+    /** 상태줄 항목을 누르면 여는 OS 도구(FR-MON-04, #187). */
+    SystemTools systemTools();
 }

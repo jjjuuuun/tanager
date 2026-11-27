@@ -75,4 +75,24 @@ class MacPlatformModuleTest {
         // when / then
         assertThat(new MacPlatformModule().appearance().animations()).isTrue();
     }
+
+    @Test
+    @DisplayName("resources() 는 M7 전까지 JDK 로 호스트만 재고, 디스크는 없고 WSL 은 Unsupported 다")
+    void resourcesHostOnly() {
+        // given
+        var probe = module.resources();
+
+        // then
+        assertThat(probe.host().memory().total()).isPositive();
+        assertThat(probe.host().cpuLoad()).isBetween(0.0, 1.0);
+        assertThat(probe.disk(tanager.domain.history.WorkspacePath.of(
+                                new tanager.domain.history.ShellEnvironment.Wsl("Ubuntu"), "/home")
+                        .value()
+                        .orElseThrow()))
+                .isEmpty();
+        assertThat(probe.wsl("Ubuntu", java.time.Duration.ofSeconds(1)).error())
+                .contains(new tanager.application.port.out.ProbeError.Unsupported());
+        // 도구 열기는 아무것도 하지 않고 던지지 않는다
+        module.systemTools().open(tanager.application.port.out.MonitorItem.CPU);
+    }
 }
