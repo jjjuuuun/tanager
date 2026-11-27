@@ -39,6 +39,7 @@ import tanager.domain.session.TerminalSession;
 import tanager.domain.session.WorkingDir;
 import tanager.domain.shared.PaneId;
 import tanager.domain.shared.Result;
+import tanager.domain.shared.TabId;
 import tanager.domain.workspace.PaneSpec;
 import tanager.domain.workspace.Workspace;
 
@@ -451,24 +452,88 @@ class PaneManagerTest {
     }
 
     @Test
-    @DisplayName("폴더를 창 오른쪽 띠 · 가운데에 놓으면 그 창의 오른쪽에 연다 — 가운데(새 탭)는 탭이 생기는 M5 전까지 오른쪽(#151)")
-    void openAtRightAndCenter() {
+    @DisplayName("폴더를 창 오른쪽 띠에 놓으면 설정 자리와 상관없이 그 창의 오른쪽에 연다(#151)")
+    void openAtRight() {
         // given
         configure(Optional.empty(), OpenPlacement.DOWN);
 
         // when
         ok(panes.openAt(A, new DropZone.Side(P1, Edge.RIGHT)));
-        Workspace right = workspace();
-        ok(panes.openAt(A, new DropZone.Center(P1)));
 
-        // then: 설정 자리(아래)와 상관없이 오른쪽
-        assertThat(right.tab().root()).isEqualTo(new LayoutNode.Split(Orientation.ROW, Ratio.HALF, leaf(P1), leaf(P2)));
+        // then
         assertThat(workspace().tab().root())
-                .isEqualTo(new LayoutNode.Split(
-                        Orientation.ROW,
-                        Ratio.HALF,
-                        new LayoutNode.Split(Orientation.ROW, Ratio.HALF, leaf(P1), leaf(new PaneId("p3"))),
-                        leaf(P2)));
+                .isEqualTo(new LayoutNode.Split(Orientation.ROW, Ratio.HALF, leaf(P1), leaf(P2)));
+    }
+
+    @Test
+    @DisplayName("폴더를 창 가운데에 놓으면 새 탭에 그 경로의 창을 열고 그 탭이 활성, LayoutChanged 는 한 번(#177)")
+    void openAtCenterOpensNewTab() {
+        // given
+        configure(Optional.of("cmd"), OpenPlacement.RIGHT);
+
+        // when
+        PaneSpec spec = ok(panes.openAt(A, new DropZone.Center(P1)));
+
+        // then
+        assertThat(spec).isEqualTo(new PaneSpec(P2, Optional.of(CMD.id()), Optional.of(A)));
+        assertThat(workspace().tabs()).hasSize(2);
+        assertThat(workspace().tab().id()).isEqualTo(new TabId("t2"));
+        assertThat(workspace().tab().root()).isEqualTo(leaf(P2));
+        assertThat(workspace().tabs().getFirst().root()).isEqualTo(leaf(P1));
+        assertThat(events).containsExactly(new AppEvent.LayoutChanged(workspace()));
+    }
+
+    @Test
+    @DisplayName("가운데에 놓은 창이 그사이 닫혔으면 UnknownPane 이고 새 탭을 만들지 않는다(#177)")
+    void openAtCenterOfClosedPane() {
+        // given
+        configure(Optional.empty(), OpenPlacement.RIGHT);
+        PaneId gone = new PaneId("p9");
+
+        // when
+        OpenError error = err(panes.openAt(A, new DropZone.Center(gone)));
+
+        // then
+        assertThat(error).isEqualTo(new OpenError.UnknownPane(gone));
+        assertThat(workspace()).isEqualTo(Workspace.initial());
+        assertThat(events).isEmpty();
+    }
+
+    @Test
+    @DisplayName("설정이 NEW_TAB 이면 트리에서 연 폴더는 새 탭에 그 경로의 창으로 열린다(#177)")
+    void openInNewTab() {
+        // given
+        configure(Optional.of("cmd"), OpenPlacement.NEW_TAB);
+
+        // when
+        PaneSpec spec = ok(panes.open(A, Optional.empty(), Optional.empty()));
+
+        // then
+        assertThat(spec).isEqualTo(new PaneSpec(P2, Optional.of(CMD.id()), Optional.of(A)));
+        assertThat(workspace().tabs()).hasSize(2);
+        assertThat(workspace().tab().root()).isEqualTo(leaf(P2));
+        assertThat(workspace().tabs().getFirst().root()).isEqualTo(leaf(P1));
+        assertThat(events).containsExactly(new AppEvent.LayoutChanged(workspace()));
+    }
+
+    @Test
+    @DisplayName("환경 노드의 새 창 · 같은 경로에 새 창도 자리가 NEW_TAB 이면 새 탭에 연다(#177)")
+    void openHomeAndSameInNewTab() {
+        // given
+        configure(Optional.empty(), OpenPlacement.NEW_TAB);
+        launched(P1, CMD, new WorkingDir.At(A));
+
+        // when
+        PaneSpec home = ok(panes.openHome(WIN, Optional.empty()));
+        PaneSpec same = ok(panes.openSame(P1, Optional.of(OpenPlacement.NEW_TAB)));
+
+        // then
+        PaneId p3 = new PaneId("p3");
+        assertThat(home).isEqualTo(new PaneSpec(P2, Optional.of(POWERSHELL.id()), Optional.empty()));
+        assertThat(same).isEqualTo(new PaneSpec(p3, Optional.of(CMD.id()), Optional.of(A)));
+        assertThat(workspace().tabs()).hasSize(3);
+        assertThat(workspace().tab().root()).isEqualTo(leaf(p3));
+        assertThat(workspace().tabs().getFirst().root()).isEqualTo(leaf(P1));
     }
 
     @Test

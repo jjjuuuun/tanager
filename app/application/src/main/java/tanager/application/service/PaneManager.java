@@ -9,6 +9,7 @@ import tanager.application.port.in.AppEvent;
 import tanager.application.port.in.ClosePaneUseCase;
 import tanager.application.port.in.FocusPaneUseCase;
 import tanager.application.port.in.ListProfilesUseCase;
+import tanager.application.port.in.ManageTabUseCase;
 import tanager.application.port.in.MovePaneUseCase;
 import tanager.application.port.in.OpenChoices;
 import tanager.application.port.in.OpenError;
@@ -42,11 +43,13 @@ import tanager.domain.session.ShellProfile;
 import tanager.domain.session.TerminalSession;
 import tanager.domain.shared.PaneId;
 import tanager.domain.shared.Result;
+import tanager.domain.shared.TabId;
 import tanager.domain.workspace.PaneSpec;
+import tanager.domain.workspace.TabError;
 import tanager.domain.workspace.Workspace;
 
 /**
- * 창 열기 · 닫기 · 포커스(#88)와 분할 · 크기 · 방향 포커스 · 줌 · 교환 · 옮기기(#147). 작업 공간은 {@link StateActor} 에서만 바뀐다. 레이아웃
+ * 창 열기 · 닫기 · 포커스(#88)와 분할 · 크기 · 방향 포커스 · 줌 · 교환 · 옮기기(#147), 탭(#177). 작업 공간은 {@link StateActor} 에서만 바뀐다. 레이아웃
  * 연산은 작업 공간이 실제로 바뀔 때만 {@code LayoutChanged} 를 한 번 내고, 실패 · 바뀐 게 없음이면 상태도 이벤트도 그대로다.
  */
 public final class PaneManager
@@ -57,7 +60,8 @@ public final class PaneManager
                 ResizePaneUseCase,
                 ZoomPaneUseCase,
                 SwapPaneUseCase,
-                MovePaneUseCase {
+                MovePaneUseCase,
+                ManageTabUseCase {
     private final ListProfilesUseCase profiles;
     private final ConfigRepository config;
     private final PathTranslation paths;
@@ -100,7 +104,7 @@ public final class PaneManager
     public CompletionStage<Result<PaneSpec, OpenError>> openSame(PaneId pane, Optional<OpenPlacement> placement) {
         Objects.requireNonNull(pane, "pane");
         Objects.requireNonNull(placement, "placement");
-        Orientation orientation = orientationOf(placement.orElse(settings().openPlacement()));
+        OpenPlacement where = placement.orElse(settings().openPlacement());
         return state.submit(current -> {
             Optional<TerminalSession> session =
                     Optional.ofNullable(current.sessions().byPane().get(pane)).map(LiveSession::session);
@@ -112,11 +116,11 @@ public final class PaneManager
             // 그 세션 창 옆에 연다 — 포커스 창 옆이 아니다
             return opened(
                     current,
-                    beside.get()
-                            .openBeside(
-                                    orientation,
-                                    session.get().profile().id(),
-                                    session.get().knownCwd()));
+                    openIn(
+                            beside.get(),
+                            where,
+                            session.get().profile().id(),
+                            session.get().knownCwd()));
         });
     }
 
@@ -125,13 +129,12 @@ public final class PaneManager
         Objects.requireNonNull(path, "path");
         Objects.requireNonNull(zone, "zone");
         Result<Choice, OpenError> chosen = choose(path, Optional.empty(), settings(), profiles.list());
-        Edge edge = edgeOf(zone);
         PaneId target = zone.target();
         return state.submit(current -> chosen.fold(
                 choice -> current.workspace()
                         .focus(target)
                         .value()
-                        .map(beside -> opened(current, placeAt(beside, target, edge, choice)))
+                        .map(beside -> opened(current, placeAt(current.workspace(), beside, zone, choice)))
                         .orElseGet(() -> new Transition<>(
                                 current,
                                 List.of(),
@@ -139,19 +142,22 @@ public final class PaneManager
                 error -> new Transition<>(current, List.of(), Result.<PaneSpec, OpenError>err(error))));
     }
 
-    // 가운데는 새 탭 자리 — 탭이 생기는 M5 전까지는 오른쪽에 연다
-    private static Edge edgeOf(DropZone zone) {
+    /**
+     * 가운데면 새 탭에 연다 — 놓은 창의 포커스는 바꾸지 않는다({@code current}). 변이면 대상 창에 포커스를 옮긴 {@code beside} 에서 그 변 쪽에
+     * 새 창을 연다.
+     */
+    private static Workspace.Opened placeAt(Workspace current, Workspace beside, DropZone zone, Choice choice) {
         return switch (zone) {
-            case DropZone.Side side -> side.edge();
-            case DropZone.Center _ -> Edge.RIGHT;
+            case DropZone.Center _ -> current.newTab(Optional.of(choice.shell().id()), choice.dir());
+            case DropZone.Side side -> placeBeside(beside, side.target(), side.edge(), choice);
         };
     }
 
     /**
-     * 포커스를 옮긴 {@code beside} 에서 {@code target} 의 {@code edge} 쪽에 새 창을 연다. 분할은 오른쪽 · 아래에만 새 창을 내므로 위 · 왼쪽은
-     * 연 뒤 그 변으로 옮긴다 — 한 상태 전이 안이라 화면에는 최종 배치만 간다(LayoutChanged 한 번).
+     * {@code beside} 에서 {@code target} 의 {@code edge} 쪽에 새 창을 연다. 분할은 오른쪽 · 아래에만 새 창을 내므로 위 · 왼쪽은 연 뒤 그 변으로
+     * 옮긴다 — 한 상태 전이 안이라 화면에는 최종 배치만 간다(LayoutChanged 한 번).
      */
-    private static Workspace.Opened placeAt(Workspace beside, PaneId target, Edge edge, Choice choice) {
+    private static Workspace.Opened placeBeside(Workspace beside, PaneId target, Edge edge, Choice choice) {
         Workspace.Opened opened =
                 beside.openBeside(edge.orientation(), choice.shell().id(), choice.dir());
         if (!edge.leading()) {
@@ -185,19 +191,20 @@ public final class PaneManager
 
     private CompletionStage<Result<PaneSpec, OpenError>> openWith(
             Result<Choice, OpenError> chosen, OpenPlacement placement) {
-        Orientation orientation = orientationOf(placement);
         return state.submit(current -> chosen.fold(
                 choice -> opened(
                         current,
-                        current.workspace()
-                                .openBeside(orientation, choice.shell().id(), choice.dir())),
+                        openIn(current.workspace(), placement, choice.shell().id(), choice.dir())),
                 error -> new Transition<>(current, List.of(), Result.<PaneSpec, OpenError>err(error))));
     }
 
-    private static Orientation orientationOf(OpenPlacement placement) {
+    // 오른쪽 · 아래는 포커스 창 옆, 새 탭은 맨 뒤의 탭
+    private static Workspace.Opened openIn(
+            Workspace workspace, OpenPlacement placement, ProfileId profile, Optional<WorkspacePath> dir) {
         return switch (placement) {
-            case RIGHT -> Orientation.ROW;
-            case DOWN -> Orientation.COLUMN;
+            case RIGHT -> workspace.openBeside(Orientation.ROW, profile, dir);
+            case DOWN -> workspace.openBeside(Orientation.COLUMN, profile, dir);
+            case NEW_TAB -> workspace.newTab(Optional.of(profile), dir);
         };
     }
 
@@ -270,7 +277,7 @@ public final class PaneManager
             Workspace next = current.workspace()
                     .split(orientation, like.profile(), like.dir())
                     .workspace();
-            return changed(current, next);
+            return WorkspaceChange.<LayoutError>changed(current, next);
         });
     }
 
@@ -285,7 +292,7 @@ public final class PaneManager
             Workspace next = current.workspace()
                     .split(orientation, Optional.of(shell.id()), dir)
                     .workspace();
-            return changed(current, next);
+            return WorkspaceChange.<LayoutError>changed(current, next);
         });
     }
 
@@ -321,6 +328,51 @@ public final class PaneManager
         return changeLayout(workspace -> workspace.move(pane, zone));
     }
 
+    @Override
+    public CompletionStage<Result<Workspace, TabError>> moveToTab(PaneId pane, TabId tab) {
+        return state.submit(TabCommands.moveToTab(pane, tab));
+    }
+
+    @Override
+    public CompletionStage<Result<Workspace, TabError>> moveToNewTab(PaneId pane) {
+        return state.submit(TabCommands.moveToNewTab(pane));
+    }
+
+    @Override
+    public CompletionStage<Result<Workspace, TabError>> create() {
+        return state.submit(TabCommands.create());
+    }
+
+    @Override
+    public CompletionStage<Result<Workspace, TabError>> close(TabId tab) {
+        return state.submit(TabCommands.close(tab));
+    }
+
+    @Override
+    public CompletionStage<Result<Workspace, TabError>> rename(TabId tab, Optional<String> name) {
+        return state.submit(TabCommands.rename(tab, name));
+    }
+
+    @Override
+    public CompletionStage<Result<Workspace, TabError>> move(TabId tab, int toIndex) {
+        return state.submit(TabCommands.move(tab, toIndex));
+    }
+
+    @Override
+    public CompletionStage<Result<Workspace, TabError>> select(TabId tab) {
+        return state.submit(TabCommands.select(tab));
+    }
+
+    @Override
+    public CompletionStage<Result<Workspace, TabError>> selectRelative(int delta) {
+        return state.submit(TabCommands.selectRelative(delta));
+    }
+
+    @Override
+    public CompletionStage<Result<Workspace, TabError>> selectIndex(int index) {
+        return state.submit(TabCommands.selectIndex(index));
+    }
+
     /**
      * 포커스 창 옆에 열 창이 따를 (프로파일, 경로). 세션이 있으면 그 셸과 현재 경로 — 경로와 프로파일이 같은 세션에서 와야 환경이 어긋나지 않는다.
      * 없으면 그 창의 명세 그대로.
@@ -339,19 +391,6 @@ public final class PaneManager
 
     private CompletionStage<Result<Workspace, LayoutError>> changeLayout(
             Function<Workspace, Result<Workspace, LayoutError>> operation) {
-        return state.submit(current -> operation
-                .apply(current.workspace())
-                .fold(
-                        next -> changed(current, next),
-                        error -> new Transition<>(current, List.of(), Result.err(error))));
-    }
-
-    // 실제로 바뀌었을 때만 상태를 바꾸고 LayoutChanged 를 한 번 낸다
-    private static Transition<Result<Workspace, LayoutError>> changed(AppState current, Workspace next) {
-        Result<Workspace, LayoutError> reply = Result.ok(next);
-        if (next.equals(current.workspace())) {
-            return new Transition<>(current, List.of(), reply);
-        }
-        return new Transition<>(current.withWorkspace(next), List.of(new AppEvent.LayoutChanged(next)), reply);
+        return state.submit(WorkspaceChange.of(operation));
     }
 }

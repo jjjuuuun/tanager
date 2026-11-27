@@ -112,7 +112,6 @@ public enum Msg {
     CONFIG_IGNORED_EMPTY_PROFILE_ID("config.ignored.emptyProfileId"),
     CONFIG_IGNORED_NOT_NON_EMPTY_STRING("config.ignored.notNonEmptyString"),
     CONFIG_IGNORED_UNKNOWN_VALUE("config.ignored.unknownValue"),
-    CONFIG_IGNORED_NOT_SUPPORTED_YET("config.ignored.notSupportedYet"),
     CONFIG_IGNORED_NOT_INTEGER("config.ignored.notInteger"),
     CONFIG_IGNORED_NOT_NUMBER("config.ignored.notNumber"),
     CONFIG_IGNORED_NOT_BOOLEAN("config.ignored.notBoolean"),

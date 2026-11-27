@@ -16,10 +16,12 @@ import java.awt.dnd.DropTargetDropEvent;
 import java.awt.dnd.DropTargetEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.TooManyListenersException;
 import java.util.function.BiConsumer;
 import java.util.function.Supplier;
@@ -154,7 +156,8 @@ public final class LayoutView {
     }
 
     /**
-     * {@code tree} 대로 {@code components} 를 놓는다. 빠진 컴포넌트는 떼고 새 컴포넌트는 붙인다. 크기를 곧바로 정한다 — 새 창의 셸은 이 크기로
+     * {@code tree} 대로 {@code components} 를 놓는다. 빠진 컴포넌트는 떼고 새 컴포넌트는 붙인다. 트리에 없는 컴포넌트(다른 탭의 창)는 붙여 둔 채
+     * 숨긴다. 크기를 곧바로 정한다 — 새 창의 셸은 이 크기로
      * 띄운다. 끄는 중이던 경계선은 버린다 — 옛 트리의 경계선으로 크기를 바꾸지 않게.
      */
     public void show(LayoutNode next, Map<PaneId, JComponent> components) {
@@ -182,8 +185,13 @@ public final class LayoutView {
         this.panes = new LinkedHashMap<>(components);
         // 모르는 창의 줌은 무시한다 — 모든 창을 보인다
         this.zoomed = zoom.filter(components::containsKey);
+        // 트리에 없는 창(다른 탭의 창, #177)은 떼지 않고 숨긴다 — 셸 · 크기가 그대로다
+        Set<PaneId> shown = new HashSet<>(next.panes());
         for (Map.Entry<PaneId, JComponent> entry : components.entrySet()) {
-            entry.getValue().setVisible(zoomed.isEmpty() || zoomed.get().equals(entry.getKey()));
+            PaneId pane = entry.getKey();
+            entry.getValue()
+                    .setVisible(shown.contains(pane)
+                            && (zoomed.isEmpty() || zoomed.get().equals(pane)));
         }
         drag = Optional.empty();
         // 머리줄을 누르면 그 창에 포커스가 가서 같은 창들로 다시 그려진다 — 끄는 창이 남아 있으면 끌기를 잇는다. 놓을 곳은 옛 배치의
