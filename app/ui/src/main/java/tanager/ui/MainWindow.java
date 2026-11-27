@@ -38,6 +38,7 @@ import tanager.application.port.in.OpenPaneUseCase;
 import tanager.application.port.in.QueryHistoryTreeUseCase;
 import tanager.application.port.in.StartSessionUseCase;
 import tanager.domain.history.WorkspacePath;
+import tanager.domain.layout.DropZone;
 import tanager.domain.layout.LayoutError;
 import tanager.domain.layout.Ratio;
 import tanager.domain.layout.SplitPath;
@@ -96,6 +97,7 @@ final class MainWindow {
     private final LayoutView layout;
     private final SidebarPanel sidebar;
     private final SidebarSlot sidebarSlot;
+    private final PaneOpener opener;
     private final KeyEventDispatcher shortcuts = this::shortcut;
     private final Runnable onShutdown;
     private final StartSessionUseCase sessions;
@@ -127,13 +129,20 @@ final class MainWindow {
         this.settings = Objects.requireNonNull(settings, "settings");
         this.motion = Objects.requireNonNull(motion, "motion");
         this.background = Objects.requireNonNull(background, "background");
+        this.opener = new PaneOpener(Objects.requireNonNull(open, "open"), background, ui, this::notify);
+        // 창의 머리줄 손잡이를 배치에 다므로 배치를 먼저 만든다(#151)
+        this.layout = new LayoutView(
+                workspace.tab().root(),
+                GAP,
+                this::paneMinimum,
+                this::resizeTo,
+                new LayoutView.Drops(this::movePane, opener::openAt));
         for (PaneId id : workspace.tab().root().panes()) {
             panes.put(id, newPane(id));
         }
-        this.layout = new LayoutView(workspace.tab().root(), GAP, this::paneMinimum, this::resizeTo);
         this.sidebar = new SidebarPanel(historyTree, historyManager, ui);
         sidebar.onLeave(() -> focused().focus());
-        sidebar.opener(new PaneOpener(Objects.requireNonNull(open, "open"), background, ui, this::notify));
+        sidebar.opener(opener);
         sidebar.sessions(new Sessions());
         this.sidebarSlot = new SidebarSlot(sidebar.component(), motion);
         frame.getContentPane().add(sidebarSlot.component(), BorderLayout.WEST);
@@ -227,6 +236,10 @@ final class MainWindow {
     }
 
     private boolean pressed(KeyEvent event) {
+        // 머리줄을 끄는 중의 Esc 는 끌기만 취소한다 — 셸에 가지 않는다(#151)
+        if (event.getKeyCode() == KeyEvent.VK_ESCAPE && event.getModifiersEx() == 0 && layout.cancelDrag()) {
+            return true;
+        }
         Optional<LayoutAction> action = Keymap.actionFor(event.getKeyCode(), event.getModifiersEx());
         if (action.isPresent()) {
             run(action.get());
@@ -311,6 +324,13 @@ final class MainWindow {
         });
     }
 
+    // 머리줄을 끌어 다른 창의 놓을 곳에 놓았다(#151). 가운데 = 교환, 변 = 그쪽으로. 화면은 LayoutChanged 로 따라온다
+    private void movePane(PaneId pane, DropZone zone) {
+        if (!closing && panes.containsKey(pane)) {
+            logFailure(commands.move().move(pane, zone));
+        }
+    }
+
     // Ctrl+Shift+E: 사이드바 보이기 · 숨기기(밀어 넣고 빼는 전환, FR-UI-04), Ctrl+Shift+F: 사이드바 검색(SDD §8.2)
     private boolean sidebarShortcut(KeyEvent event) {
         boolean ours = event.isControlDown() && event.isShiftDown() && !event.isAltDown();
@@ -346,7 +366,12 @@ final class MainWindow {
     }
 
     private PaneController newPane(PaneId id) {
-        return new PaneController(id, ui, background, sessions, profiles, settings, motion, new Host(id));
+        PaneController pane =
+                new PaneController(id, ui, background, sessions, profiles, settings, motion, new Host(id));
+        for (JComponent handle : pane.dragHandles()) {
+            layout.addDragHandle(handle);
+        }
+        return pane;
     }
 
     // 20열 × 5행. 칸 크기는 터미널 글꼴로, 테두리 · 머리줄 · 스크롤바 몫은 포커스 창에서 잰다(창마다 같은 꾸밈이다)

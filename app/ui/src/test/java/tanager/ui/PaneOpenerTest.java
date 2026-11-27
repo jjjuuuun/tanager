@@ -16,6 +16,7 @@ import tanager.application.port.in.OpenPaneUseCase;
 import tanager.application.port.out.OpenPlacement;
 import tanager.domain.history.ShellEnvironment;
 import tanager.domain.history.WorkspacePath;
+import tanager.domain.layout.DropZone;
 import tanager.domain.session.IntegrationMode;
 import tanager.domain.session.LaunchTemplate;
 import tanager.domain.session.ProfileId;
@@ -111,6 +112,22 @@ class PaneOpenerTest {
     }
 
     @Test
+    @DisplayName("창 영역에 놓은 폴더는 놓은 창 · 변으로 열고, 그사이 창이 닫혔으면 알린다(#151)")
+    void openAtDroppedZone() {
+        // given
+        useCase.next = Result.err(new OpenError.UnknownPane(new PaneId("p2")));
+        DropZone zone = new DropZone.Side(new PaneId("p2"), tanager.domain.layout.Edge.BOTTOM);
+
+        // when
+        opener.openAt(path(new ShellEnvironment.Windows(), "C:\\a"), zone);
+
+        // then
+        assertThat(useCase.calls).containsExactly("openAt C:\\a " + zone);
+        assertThat(notices).containsExactly(List.of("창 p2 에 세션이 없다"));
+        assertThat(threads).containsExactly("background", "ui");
+    }
+
+    @Test
     @DisplayName("유스케이스가 예외를 던지면 알리지 않고 끝난다")
     void openExceptionIsSwallowed() {
         // given
@@ -182,6 +199,13 @@ class PaneOpenerTest {
             failIfAsked();
             calls.add(
                     "openSame " + pane.value() + " " + placement.map(Enum::name).orElse("-"));
+            return CompletableFuture.completedFuture(next);
+        }
+
+        @Override
+        public CompletionStage<Result<PaneSpec, OpenError>> openAt(WorkspacePath path, DropZone zone) {
+            failIfAsked();
+            calls.add("openAt " + path.path() + " " + zone);
             return CompletableFuture.completedFuture(next);
         }
 

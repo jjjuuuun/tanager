@@ -24,6 +24,8 @@ import tanager.domain.history.ShellEnvironment;
 import tanager.domain.history.WorkHistory;
 import tanager.domain.history.WorkspacePath;
 import tanager.domain.history.WslMount;
+import tanager.domain.layout.DropZone;
+import tanager.domain.layout.Edge;
 import tanager.domain.layout.LayoutError;
 import tanager.domain.layout.LayoutNode;
 import tanager.domain.layout.Orientation;
@@ -388,6 +390,104 @@ class PaneManagerTest {
 
         // then
         assertThat(error).isEqualTo(new OpenError.UnknownPane(P1));
+        assertThat(workspace()).isEqualTo(Workspace.initial());
+        assertThat(events).isEmpty();
+    }
+
+    private static LayoutNode.Leaf leaf(PaneId pane) {
+        return new LayoutNode.Leaf(pane);
+    }
+
+    @Test
+    @DisplayName("폴더를 창 왼쪽 · 위 띠에 놓으면 그 창의 그쪽에 그 경로의 새 창을 열고 포커스, LayoutChanged 는 한 번(#151)")
+    void openAtLeadingEdges() {
+        // given
+        configure(Optional.of("cmd"), OpenPlacement.RIGHT);
+
+        // when
+        PaneSpec spec = ok(panes.openAt(A, new DropZone.Side(P1, Edge.LEFT)));
+
+        // then
+        assertThat(spec).isEqualTo(new PaneSpec(P2, Optional.of(CMD.id()), Optional.of(A)));
+        assertThat(workspace().tab().root())
+                .isEqualTo(new LayoutNode.Split(Orientation.ROW, Ratio.HALF, leaf(P2), leaf(P1)));
+        assertThat(workspace().tab().focused()).isEqualTo(P2);
+        assertThat(events).containsExactly(new AppEvent.LayoutChanged(workspace()));
+
+        // when: 위
+        ok(panes.openAt(A, new DropZone.Side(P1, Edge.TOP)));
+
+        // then
+        assertThat(workspace().tab().root())
+                .isEqualTo(new LayoutNode.Split(
+                        Orientation.ROW,
+                        Ratio.HALF,
+                        leaf(P2),
+                        new LayoutNode.Split(Orientation.COLUMN, Ratio.HALF, leaf(new PaneId("p3")), leaf(P1))));
+    }
+
+    @Test
+    @DisplayName("폴더를 창 아래 띠에 놓으면 포커스 창이 아니라 그 창의 아래에 연다(#151)")
+    void openAtBottomOfTargetNotFocused() {
+        // given: p1 | p2, 포커스 p2
+        configure(Optional.empty(), OpenPlacement.RIGHT);
+        ok(panes.open(A, Optional.empty(), Optional.empty()));
+        events.clear();
+
+        // when
+        PaneSpec spec = ok(panes.openAt(A, new DropZone.Side(P1, Edge.BOTTOM)));
+
+        // then
+        PaneId p3 = new PaneId("p3");
+        assertThat(spec.pane()).isEqualTo(p3);
+        assertThat(workspace().tab().root())
+                .isEqualTo(new LayoutNode.Split(
+                        Orientation.ROW,
+                        Ratio.HALF,
+                        new LayoutNode.Split(Orientation.COLUMN, Ratio.HALF, leaf(P1), leaf(p3)),
+                        leaf(P2)));
+        assertThat(workspace().tab().focused()).isEqualTo(p3);
+        assertThat(events).containsExactly(new AppEvent.LayoutChanged(workspace()));
+    }
+
+    @Test
+    @DisplayName("폴더를 창 오른쪽 띠 · 가운데에 놓으면 그 창의 오른쪽에 연다 — 가운데(새 탭)는 탭이 생기는 M5 전까지 오른쪽(#151)")
+    void openAtRightAndCenter() {
+        // given
+        configure(Optional.empty(), OpenPlacement.DOWN);
+
+        // when
+        ok(panes.openAt(A, new DropZone.Side(P1, Edge.RIGHT)));
+        Workspace right = workspace();
+        ok(panes.openAt(A, new DropZone.Center(P1)));
+
+        // then: 설정 자리(아래)와 상관없이 오른쪽
+        assertThat(right.tab().root()).isEqualTo(new LayoutNode.Split(Orientation.ROW, Ratio.HALF, leaf(P1), leaf(P2)));
+        assertThat(workspace().tab().root())
+                .isEqualTo(new LayoutNode.Split(
+                        Orientation.ROW,
+                        Ratio.HALF,
+                        new LayoutNode.Split(Orientation.ROW, Ratio.HALF, leaf(P1), leaf(new PaneId("p3"))),
+                        leaf(P2)));
+    }
+
+    @Test
+    @DisplayName("놓은 창이 그사이 닫혔으면 UnknownPane, 셸이 없으면 NoProfileForEnvironment — 레이아웃 · 이벤트는 그대로다(#151)")
+    void openAtFailures() {
+        // given
+        configure(Optional.empty(), OpenPlacement.RIGHT);
+        PaneId gone = new PaneId("p9");
+        WorkspacePath z = WorkspacePath.of(new ShellEnvironment.Wsl("Z"), "/home/me")
+                .value()
+                .orElseThrow();
+
+        // when
+        OpenError unknown = err(panes.openAt(A, new DropZone.Side(gone, Edge.LEFT)));
+        OpenError noShell = err(panes.openAt(z, new DropZone.Center(P1)));
+
+        // then
+        assertThat(unknown).isEqualTo(new OpenError.UnknownPane(gone));
+        assertThat(noShell).isEqualTo(new OpenError.NoProfileForEnvironment(new ShellEnvironment.Wsl("Z")));
         assertThat(workspace()).isEqualTo(Workspace.initial());
         assertThat(events).isEmpty();
     }

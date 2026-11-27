@@ -29,6 +29,7 @@ import tanager.domain.history.ShellEnvironment;
 import tanager.domain.history.WorkspacePath;
 import tanager.domain.layout.Direction;
 import tanager.domain.layout.DropZone;
+import tanager.domain.layout.Edge;
 import tanager.domain.layout.LayoutError;
 import tanager.domain.layout.Orientation;
 import tanager.domain.layout.Ratio;
@@ -117,6 +118,51 @@ public final class PaneManager
                                     session.get().profile().id(),
                                     session.get().knownCwd()));
         });
+    }
+
+    @Override
+    public CompletionStage<Result<PaneSpec, OpenError>> openAt(WorkspacePath path, DropZone zone) {
+        Objects.requireNonNull(path, "path");
+        Objects.requireNonNull(zone, "zone");
+        Result<Choice, OpenError> chosen = choose(path, Optional.empty(), settings(), profiles.list());
+        Edge edge = edgeOf(zone);
+        PaneId target = zone.target();
+        return state.submit(current -> chosen.fold(
+                choice -> current.workspace()
+                        .focus(target)
+                        .value()
+                        .map(beside -> opened(current, placeAt(beside, target, edge, choice)))
+                        .orElseGet(() -> new Transition<>(
+                                current,
+                                List.of(),
+                                Result.<PaneSpec, OpenError>err(new OpenError.UnknownPane(target)))),
+                error -> new Transition<>(current, List.of(), Result.<PaneSpec, OpenError>err(error))));
+    }
+
+    // 가운데는 새 탭 자리 — 탭이 생기는 M5 전까지는 오른쪽에 연다
+    private static Edge edgeOf(DropZone zone) {
+        return switch (zone) {
+            case DropZone.Side side -> side.edge();
+            case DropZone.Center _ -> Edge.RIGHT;
+        };
+    }
+
+    /**
+     * 포커스를 옮긴 {@code beside} 에서 {@code target} 의 {@code edge} 쪽에 새 창을 연다. 분할은 오른쪽 · 아래에만 새 창을 내므로 위 · 왼쪽은
+     * 연 뒤 그 변으로 옮긴다 — 한 상태 전이 안이라 화면에는 최종 배치만 간다(LayoutChanged 한 번).
+     */
+    private static Workspace.Opened placeAt(Workspace beside, PaneId target, Edge edge, Choice choice) {
+        Workspace.Opened opened =
+                beside.openBeside(edge.orientation(), choice.shell().id(), choice.dir());
+        if (!edge.leading()) {
+            return opened;
+        }
+        // 새 창과 대상 창은 트리에 있고 서로 다르다 — 실패하면 버그다
+        Workspace moved = opened.workspace()
+                .move(opened.pane(), new DropZone.Side(target, edge))
+                .value()
+                .orElseThrow(() -> new IllegalStateException("새 창 " + opened.pane() + " 을 " + edge + " 로 옮길 수 없다"));
+        return new Workspace.Opened(moved, opened.pane());
     }
 
     @Override

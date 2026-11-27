@@ -2,6 +2,7 @@ package tanager.ui.sidebar;
 
 import java.awt.BorderLayout;
 import java.awt.Dimension;
+import java.awt.GraphicsEnvironment;
 import java.awt.event.ActionEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -125,6 +126,7 @@ public final class SidebarPanel {
         layoutSearch();
         bindMenu();
         bindOpen();
+        bindDrag();
         JPanel body = new JPanel(new BorderLayout());
         body.setOpaque(false);
         body.add(empty, BorderLayout.NORTH);
@@ -345,6 +347,15 @@ public final class SidebarPanel {
                 });
             }
         });
+    }
+
+    // 폴더를 창 영역으로 끌어 그 자리에 연다(#151). 더블클릭 · Enter · 메뉴는 그대로다. JTree 는 화면이 없으면 끌기를 켤 수 없다
+    // (HeadlessException) — 테스트는 내보내는 값만 본다
+    private void bindDrag() {
+        tree.setTransferHandler(new FolderDragSource(Optional.ofNullable(tree.getTransferHandler())));
+        if (!GraphicsEnvironment.isHeadless()) {
+            tree.setDragEnabled(true);
+        }
     }
 
     private void openFolder(SidebarItem item) {

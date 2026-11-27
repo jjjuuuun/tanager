@@ -545,6 +545,31 @@ class SidebarPanelTest {
     }
 
     @Test
+    @DisplayName("폴더 노드를 끌면 그 경로를 내보낸다 — 세션 · 환경 노드는 끌리지 않는다(#151)")
+    void dragExportsFolderOnly() {
+        // given
+        live.set(List.of(RUNNING));
+        SidebarPanel panel = expandedPanel(history("/home/me/a", "/home/me/b"));
+
+        // when
+        List<Optional<WorkspacePath>> exported = onEdt(() -> {
+            JTree tree = panel.tree();
+            FolderDragSource source = (FolderDragSource) tree.getTransferHandler();
+            List<Optional<WorkspacePath>> out = new ArrayList<>();
+            for (String label : List.of("a", SidebarText.session(RUNNING), SidebarText.environment(UBUNTU))) {
+                tree.setSelectionPath(pathOf(tree, label));
+                out.add(source.exported(tree).flatMap(FolderTransfer::read));
+            }
+            return out;
+        });
+        int actions = onEdt(() -> panel.tree().getTransferHandler().getSourceActions(panel.tree()));
+
+        // then
+        assertThat(exported).containsExactly(Optional.of(wsl("/home/me/a")), Optional.empty(), Optional.empty());
+        assertThat(actions).isEqualTo(javax.swing.TransferHandler.COPY);
+    }
+
+    @Test
     @DisplayName("환경 노드 · 메뉴의 열기 동작은 고른 셸 · 자리로 연다(#91)")
     void menuOpenActions() {
         // given

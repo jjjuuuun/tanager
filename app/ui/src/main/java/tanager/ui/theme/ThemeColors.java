@@ -34,4 +34,16 @@ public final class ThemeColors {
     private static int channel(int from, int to, double fraction) {
         return (int) Math.round(from + (to - from) * fraction);
     }
+
+    /**
+     * 토큰 색에 불투명도 {@code alpha}(0 ~ 255)를 입힌 색. 창 위에 겹쳐 그리는 미리보기(끌어다 놓을 곳, #151)가 밑의 글자를 가리지 않게
+     * 쓴다.
+     */
+    public static Color translucent(ColorToken token, int alpha) {
+        if (alpha < 0 || alpha > 255) {
+            throw new IllegalArgumentException("불투명도는 0 ~ 255 다: " + alpha);
+        }
+        Color color = get(token);
+        return new Color(color.getRed(), color.getGreen(), color.getBlue(), alpha);
+    }
 }
