@@ -3,6 +3,7 @@ package tanager.ui.terminal;
 import com.jediterm.terminal.TerminalColor;
 import com.jediterm.terminal.TextStyle;
 import com.jediterm.terminal.emulator.ColorPalette;
+import com.jediterm.terminal.model.StyleState;
 import com.jediterm.terminal.model.TerminalTypeAheadSettings;
 import com.jediterm.terminal.ui.TerminalActionPresentation;
 import com.jediterm.terminal.ui.settings.DefaultSettingsProvider;
@@ -138,6 +139,16 @@ public final class TerminalSettings extends DefaultSettingsProvider {
     @Override
     public TerminalColor getDefaultBackground() {
         return colors.background();
+    }
+
+    /**
+     * 위젯의 스타일 상태. 읽히지 않는 ANSI 글자색 · 배경색 조합을 보정한다(#113). 기본 스타일은 기본 전경 · 배경이다. 위젯마다 새로
+     * 만든다.
+     */
+    public StyleState styleState() {
+        StyleState state = colors.styleState();
+        state.setDefaultStyle(new TextStyle(colors.foreground(), colors.background()));
+        return state;
     }
 
     // JediTermWidget 이 StyleState 의 기본 스타일을 아직 이 (사용 중단된) 메서드로 만든다 — 3.76 기준

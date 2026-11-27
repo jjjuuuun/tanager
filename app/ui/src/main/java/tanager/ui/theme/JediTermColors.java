@@ -4,6 +4,7 @@ import com.jediterm.core.Color;
 import com.jediterm.terminal.TerminalColor;
 import com.jediterm.terminal.TextStyle;
 import com.jediterm.terminal.emulator.ColorPalette;
+import com.jediterm.terminal.model.StyleState;
 import java.util.ArrayList;
 import java.util.List;
 import javax.swing.UIManager;
@@ -16,6 +17,7 @@ public final class JediTermColors {
     private static final int BRIGHT_YELLOW = 11;
     private static final int BRIGHT_BLUE = 12;
 
+    private final TerminalPalette source;
     private final ColorPalette palette;
     private final TerminalColor foreground;
     private final TerminalColor background;
@@ -25,6 +27,7 @@ public final class JediTermColors {
     private final TextStyle hyperlink;
 
     private JediTermColors(TerminalPalette source) {
+        this.source = source;
         this.palette = new AnsiPalette(source.ansi());
         this.foreground = terminalColor(source.foreground());
         this.background = terminalColor(source.background());
@@ -64,6 +67,14 @@ public final class JediTermColors {
     /** JediTerm 3.76 은 커서 색 설정이 없어(반전으로 그린다) 아직 쓰지 않는다. */
     public TerminalColor cursor() {
         return cursor;
+    }
+
+    /**
+     * 위젯마다 새로 만드는 스타일 상태. 셸이 고른 ANSI 글자색 · 배경색이 읽히지 않으면 글자색을 보정한다(#113). 기본 스타일은 부르는
+     * 쪽이 {@code setDefaultStyle} 로 준다.
+     */
+    public StyleState styleState() {
+        return new ReadableStyleState(source);
     }
 
     /** 선택 영역: 기본 전경 위에 선택 배경. */
