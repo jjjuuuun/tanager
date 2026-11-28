@@ -1,7 +1,6 @@
 package tanager.adapter.persistence;
 
 import java.time.Instant;
-import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -47,7 +46,7 @@ final class ImportWatermarks {
             }
             Optional<VisitSource> source = JsonValues.string(o.get(SOURCE)).flatMap(VisitSource::parse);
             Optional<ShellEnvironment> env = Environments.read(o.get(ENV));
-            Optional<Instant> until = instant(o.get(UNTIL));
+            Optional<Instant> until = JsonValues.instant(o.get(UNTIL));
             if (source.isPresent() && env.isPresent() && until.isPresent()) {
                 out.merge(new ImportOrigin(source.get(), env.get()), until.get(), ImportWatermarks::later);
             }
@@ -66,14 +65,6 @@ final class ImportWatermarks {
             node.put(UNTIL, e.getValue().toString());
         }
         return out;
-    }
-
-    private static Optional<Instant> instant(JsonNode node) {
-        try {
-            return JsonValues.string(node).map(Instant::parse);
-        } catch (DateTimeParseException e) {
-            return Optional.empty();
-        }
     }
 
     private static Instant later(Instant a, Instant b) {

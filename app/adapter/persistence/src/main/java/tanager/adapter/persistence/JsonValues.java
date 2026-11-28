@@ -1,5 +1,7 @@
 package tanager.adapter.persistence;
 
+import java.time.Instant;
+import java.time.format.DateTimeParseException;
 import java.util.Optional;
 import tools.jackson.databind.JsonNode;
 
@@ -15,5 +17,14 @@ final class JsonValues {
     /** 비어 있지 않은 문자열 값(ID · 프로파일). */
     static Optional<String> nonBlank(JsonNode node) {
         return string(node).filter(s -> !s.isBlank());
+    }
+
+    /** ISO-8601 시각 문자열({@code Instant.toString} 모양). */
+    static Optional<Instant> instant(JsonNode node) {
+        try {
+            return string(node).map(Instant::parse);
+        } catch (DateTimeParseException e) {
+            return Optional.empty();
+        }
     }
 }

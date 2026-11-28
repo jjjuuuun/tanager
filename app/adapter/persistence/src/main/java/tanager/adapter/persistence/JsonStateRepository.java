@@ -13,7 +13,6 @@ import java.time.Instant;
 import java.time.InstantSource;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -585,8 +584,8 @@ public final class JsonStateRepository implements HistoryRepository, WorkspaceRe
         }
         Optional<ShellEnvironment> env = Environments.read(o.get("env"));
         Optional<String> rawPath = JsonValues.string(o.get("path"));
-        Optional<Instant> first = instant(o.get("firstVisited"));
-        Optional<Instant> last = instant(o.get("lastVisited"));
+        Optional<Instant> first = JsonValues.instant(o.get("firstVisited"));
+        Optional<Instant> last = JsonValues.instant(o.get("lastVisited"));
         JsonNode count = o.get("visitCount");
         JsonNode pinned = o.get("pinned");
         JsonNode hidden = o.get("hidden");
@@ -635,14 +634,6 @@ public final class JsonStateRepository implements HistoryRepository, WorkspaceRe
             }
         }
         return out;
-    }
-
-    private static Optional<Instant> instant(JsonNode node) {
-        try {
-            return JsonValues.string(node).map(Instant::parse);
-        } catch (DateTimeParseException e) {
-            return Optional.empty();
-        }
     }
 
     // 바깥 empty = 틀린 값(별칭만 버림), 안쪽 empty = 별칭 없음(null · 키 없음).
