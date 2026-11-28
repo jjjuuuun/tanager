@@ -1,0 +1,1 @@
+Synthetic command without frontmatter.
