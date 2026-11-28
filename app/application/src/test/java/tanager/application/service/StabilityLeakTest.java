@@ -17,6 +17,7 @@ import tanager.application.port.out.AppConfig;
 import tanager.application.port.out.FakePlatformModule;
 import tanager.application.port.out.FakeScheduler;
 import tanager.application.port.out.InMemoryConfigRepository;
+import tanager.application.port.out.LaunchError;
 import tanager.application.port.out.LoadedConfig;
 import tanager.application.port.out.OpenPlacement;
 import tanager.application.port.out.ScriptedConversationSource;
@@ -229,5 +230,31 @@ class StabilityLeakTest {
         assertThat(scheduler.pendingCount()).isZero();
         assertThat(commands.pendingCount()).isZero();
         assertThat(state.listenerCount()).isEqualTo(listeners);
+    }
+
+    @Test
+    @DisplayName("이어 하기 창의 셸이 뜨지 못한 채 창을 닫는 일을 20번 해도 달아 둔 시작 명령이 남지 않는다")
+    void closedResumePaneDropsStartupCommand() {
+        // given
+        launcher.willFail(new LaunchError.StartFailed("boom"));
+
+        // when
+        for (int round = 0; round < RESTARTS; round++) {
+            PaneSpec spec = ok(resumer.resume(CONVERSATION, Optional.empty()));
+            assertThat(starter.start(new StartRequest(
+                                    spec.pane(),
+                                    spec.profile(),
+                                    false,
+                                    spec.dir().map(WorkingDir.At::new),
+                                    SIZE))
+                            .isOk())
+                    .isFalse();
+            ok(panes.close(spec.pane()));
+        }
+
+        // then
+        assertThat(panesOf(workspace())).containsExactly(P1);
+        assertThat(commands.pendingCount()).isZero();
+        assertThat(scheduler.pendingCount()).isZero();
     }
 }
