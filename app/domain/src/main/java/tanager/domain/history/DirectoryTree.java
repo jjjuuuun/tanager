@@ -27,6 +27,9 @@ import java.util.Set;
  * {@code home} 이 {@code /home} 아래 전부를 고르지 않게. Windows 경로와 비교할 때만 검색어의 {@code /} 를 {@code \} 로 읽는다
  * ({@code work/inf} 로 {@code C:\work\infra} 를 찾게). WSL 경로를 {@code \} 로 찾지는 않는다. 고정됨 섹션도 같은 규칙으로 거른다. 방문
  * 기록이 없는 부모의 표기는 거르기 전에 보이는 방문으로 정해 검색 중에도 검색하지 않을 때와 같다.
+ *
+ * <p>이전 대화(FR-TK-09)는 cwd 와 같은 경로의 보이는 방문 폴더의 자식 끝(세션 → 하위 폴더 → 대화 → 더 보기)에 붙는다. 방문 노드는 압축되지
+ * 않으므로 대화는 압축을 바꾸지 않는다.
  */
 public final class DirectoryTree {
 
@@ -34,6 +37,12 @@ public final class DirectoryTree {
 
     private static final Comparator<SessionLeaf> SESSION_ORDER = Comparator.comparingInt(SessionLeaf::number)
             .thenComparing(s -> s.pane().value());
+
+    // 최근 먼저, 같은 시각이면 ID → 출처 순으로 가려 입력 순서와 상관없게 한다.
+    private static final Comparator<PastConversation> CONVERSATION_ORDER = Comparator.comparing(
+                    PastConversation::lastActive, Comparator.reverseOrder())
+            .thenComparing(c -> c.id().value())
+            .thenComparing(c -> c.source().id());
 
     // NFC 로 맞춘 뒤 대소문자 무시 — NFD 로 들어온 한글(macOS 등)이 낱자 코드값 때문에 앞으로 몰리지 않게.
     private static final Comparator<String> FOLDED_ORDER =
@@ -66,9 +75,9 @@ public final class DirectoryTree {
 
     private DirectoryTree() {}
 
-    /** {@code history} 와 {@code sessions} 를 {@code query} 조건으로 투영한다. 사라졌다고 확인된 경로는 없다. 입력은 바꾸지 않는다. */
+    /** {@code history} 와 {@code sessions} 를 {@code query} 조건으로 투영한다. 대화 · 사라졌다고 확인된 경로는 없다. 입력은 바꾸지 않는다. */
     public static HistoryTree project(WorkHistory history, List<SessionLeaf> sessions, TreeQuery query) {
-        return project(history, sessions, query, Set.of());
+        return project(history, sessions, List.of(), query, Set.of());
     }
 
     /**
@@ -77,10 +86,38 @@ public final class DirectoryTree {
      */
     public static HistoryTree project(
             WorkHistory history, List<SessionLeaf> sessions, TreeQuery query, Set<WorkspacePath> missing) {
+        return project(history, sessions, List.of(), query, missing);
+    }
+
+    /** {@link #project(WorkHistory, List, TreeQuery)} 와 같되, {@code conversations} 를 cwd 와 같은 경로의 방문 폴더 아래에 붙인다(FR-TK-09). */
+    public static HistoryTree project(
+            WorkHistory history, List<SessionLeaf> sessions, List<PastConversation> conversations, TreeQuery query) {
+        return project(history, sessions, conversations, query, Set.of());
+    }
+
+    /**
+     * 이력 · 세션 · 대화를 투영하고 {@code missing} 에 든 방문 폴더 · 고정 항목에 사라진 경로 표시를 붙인다.
+     *
+     * <p>대화는 cwd 와 같은 경로({@link WorkspacePath} 비교)의 보이는 방문 폴더에만 붙고, 그런 폴더가 없으면 버린다 — 대화만으로 폴더를
+     * 만들지 않는다. 폴더의 자식 끝에 최근 순(같으면 ID 순)으로 {@code conversationsPerFolder} 개까지 오고, 나머지는 {@link
+     * TreeNode.MoreConversations} 하나가 된다. 그 폴더가 {@code expandedConversations} 에 있으면 모두 온다. 고정됨 섹션에는 붙이지 않는다.
+     * 검색 중에는 검색어에 맞은 폴더의 대화는 평소대로, 그 밖의 폴더에는 요약이 검색어에 맞은 대화만 붙고 그 폴더와 조상이 남는다(폴더 자체는
+     * {@code matched} 가 아니다).
+     */
+    public static HistoryTree project(
+            WorkHistory history,
+            List<SessionLeaf> sessions,
+            List<PastConversation> conversations,
+            TreeQuery query,
+            Set<WorkspacePath> missing) {
         Objects.requireNonNull(history, "history");
         Objects.requireNonNull(sessions, "sessions");
+        Objects.requireNonNull(conversations, "conversations");
         Objects.requireNonNull(query, "query");
         Set<WorkspacePath> gone = Set.copyOf(missing);
+        // 보일 수가 0 이면 대화를 보이지 않는다 — 검색에서도 대화로 폴더를 남기지 않는다.
+        List<PastConversation> shownConversations =
+                query.conversationsPerFolder() == 0 ? List.of() : List.copyOf(conversations);
 
         Forest forest = new Forest();
         // 정렬해 넣어 방문 순서 · Map 순회 순서와 상관없이 같은 표기를 고른다.
@@ -95,7 +132,7 @@ public final class DirectoryTree {
                 forest.spell(v.path());
             }
         }
-        Optional<Filter> filter = Needle.of(query.text()).map(n -> Filter.of(visible, n));
+        Optional<Filter> filter = Needle.of(query.text()).map(n -> Filter.of(visible, shownConversations, n));
         for (VisitedDirectory v : visible) {
             if (filter.map(f -> f.kept().contains(v.path())).orElse(true)) {
                 Node node = forest.node(v.path());
@@ -116,11 +153,21 @@ public final class DirectoryTree {
                 forest.environment(s.env()).sessions.add(s);
             }
         }
+        for (PastConversation c : shownConversations) {
+            // 노드가 있고 방문이 붙어 있으면 보이는(검색 중이면 남은) 방문 폴더다.
+            Optional<Node> node = forest.existing(c.cwd()).filter(n -> n.visit.isPresent());
+            if (node.isPresent()
+                    && filter.map(f -> node.get().matched || f.conversations().contains(c))
+                            .orElse(true)) {
+                node.get().conversations.add(c);
+            }
+        }
 
+        Shape shape = new Shape(gone, query.conversationsPerFolder(), query.expandedConversations());
         List<EnvironmentNode> environments = new ArrayList<>();
         for (ShellEnvironment env : environmentOrder(query.environmentOrder(), forest.environments.keySet())) {
             EnvBuilder e = forest.environments.getOrDefault(env, new EnvBuilder());
-            environments.add(new EnvironmentNode(env, children(e.sessions, e.roots.values(), gone)));
+            environments.add(new EnvironmentNode(env, children(e.sessions, e.roots.values(), shape)));
         }
         return new HistoryTree(pinned(entries, filter, gone), environments);
     }
@@ -169,15 +216,14 @@ public final class DirectoryTree {
         };
     }
 
-    private static List<TreeNode> children(
-            List<SessionLeaf> sessions, Collection<Node> folders, Set<WorkspacePath> missing) {
+    private static List<TreeNode> children(List<SessionLeaf> sessions, Collection<Node> folders, Shape shape) {
         List<TreeNode> result = new ArrayList<>();
         for (SessionLeaf s : sessions) {
             result.add(new TreeNode.Session(s));
         }
         List<Built> built = new ArrayList<>();
         for (Node n : folders) {
-            built.add(compressed(n, missing));
+            built.add(compressed(n, shape));
         }
         built.sort(FOLDER_ORDER);
         for (Built b : built) {
@@ -186,16 +232,33 @@ public final class DirectoryTree {
         return result;
     }
 
+    // 최근 순으로 보일 수만큼, 넘으면 "더 보기" 하나. 펼친 폴더는 모두.
+    private static List<TreeNode> conversations(WorkspacePath folder, List<PastConversation> attached, Shape shape) {
+        List<PastConversation> ordered = new ArrayList<>(attached);
+        ordered.sort(CONVERSATION_ORDER);
+        int shown = shape.expanded().contains(folder) ? ordered.size() : Math.min(ordered.size(), shape.perFolder());
+        List<TreeNode> result = new ArrayList<>();
+        for (PastConversation c : ordered.subList(0, shown)) {
+            result.add(new TreeNode.Conversation(c));
+        }
+        if (shown < ordered.size()) {
+            result.add(new TreeNode.MoreConversations(folder, ordered.size() - shown));
+        }
+        return result;
+    }
+
     // 방문도 세션도 없이 폴더 하나만 품은 노드는 자식과 합쳐 한 줄로 만든다.
     // 라벨은 끝 노드의 표시 경로에서 잘라 만든다 — 중간 노드의 표기를 이어 붙이면 path() 와 대소문자가 어긋날 수 있다.
-    private static Built compressed(Node start, Set<WorkspacePath> missing) {
+    // 대화는 방문 노드에만 붙으므로 압축은 대화와 상관없다.
+    private static Built compressed(Node start, Shape shape) {
         Node end = start;
         while (end.visit.isEmpty() && end.sessions.isEmpty() && end.children.size() == 1) {
             end = end.children.values().iterator().next();
         }
         WorkspacePath shown = end.displayPath();
-        List<TreeNode> children = children(end.sessions, end.children.values(), missing);
-        boolean gone = end.visit.isPresent() && missing.contains(shown);
+        List<TreeNode> children = children(end.sessions, end.children.values(), shape);
+        children.addAll(conversations(shown, end.conversations, shape));
+        boolean gone = end.visit.isPresent() && shape.missing().contains(shown);
         if (start.path.parent().isEmpty()) {
             return rootFolder(new TreeNode.Folder(shown, shown.path(), end.visit, end.matched, children, gone));
         }
@@ -267,6 +330,9 @@ public final class DirectoryTree {
     /** 만든 폴더와 정렬 키. */
     private record Built(TreeNode.Folder folder, RootKind kind, List<String> key) {}
 
+    /** 폴더 노드를 만들 때 쓰는 조건 — 사라진 경로, 폴더별 보일 대화 수, 대화를 모두 보일 폴더. */
+    private record Shape(Set<WorkspacePath> missing, int perFolder, Set<WorkspacePath> expanded) {}
+
     /**
      * 정규화한 검색어(NFC · {@code Locale.ROOT} 소문자). {@code spansSegments} 는 구분자가 들어 있어 전체 경로에서 찾는지다. Windows 경로와
      * 비교할 때만 {@code /} 를 {@code \} 로 읽는다 — 사용자가 습관대로 {@code /} 를 쳐도 찾게. 반대로 WSL 경로를 {@code \} 로 찾지는 않고,
@@ -288,6 +354,11 @@ public final class DirectoryTree {
                     || v.alias().map(a -> normalized(a.value()).contains(text)).orElse(false);
         }
 
+        // 요약은 경로가 아니라 글이라 구분자를 바꾸지 않고 검색어 그대로 찾는다.
+        boolean matches(PastConversation c) {
+            return c.title().map(t -> normalized(t).contains(text)).orElse(false);
+        }
+
         private String pathText(ShellEnvironment env) {
             return switch (env) {
                 case ShellEnvironment.Windows _ -> text.replace('/', '\\');
@@ -300,29 +371,45 @@ public final class DirectoryTree {
         }
     }
 
-    /** 검색 결과. {@code matched} 는 검색어에 맞은 보이는 방문, {@code kept} 는 그것과 조상 전부다. 일치 판정은 방문마다 한 번만 한다. */
-    private record Filter(Set<WorkspacePath> kept, Set<WorkspacePath> matched) {
+    /**
+     * 검색 결과. {@code matched} 는 검색어에 맞은 보이는 방문, {@code conversations} 는 요약이 맞고 cwd 가 보이는 방문인 대화, {@code kept}
+     * 는 그 둘의 경로와 조상 전부다. 일치 판정은 방문 · 대화마다 한 번만 한다.
+     */
+    private record Filter(Set<WorkspacePath> kept, Set<WorkspacePath> matched, Set<PastConversation> conversations) {
 
         Filter {
             kept = Set.copyOf(kept);
             matched = Set.copyOf(matched);
+            conversations = Set.copyOf(conversations);
+        }
+
+        static Filter of(List<VisitedDirectory> visible, List<PastConversation> candidates, Needle needle) {
+            Set<WorkspacePath> kept = new HashSet<>();
+            Set<WorkspacePath> matched = new HashSet<>();
+            Set<WorkspacePath> visiblePaths = new HashSet<>();
+            for (VisitedDirectory v : visible) {
+                visiblePaths.add(v.path());
+                if (needle.matches(v)) {
+                    matched.add(v.path());
+                    keep(v.path(), kept);
+                }
+            }
+            Set<PastConversation> conversations = new HashSet<>();
+            for (PastConversation c : candidates) {
+                if (visiblePaths.contains(c.cwd()) && needle.matches(c)) {
+                    conversations.add(c);
+                    keep(c.cwd(), kept);
+                }
+            }
+            return new Filter(kept, matched, conversations);
         }
 
         // 이미 넣은 조상에서 멈춰 공통 조상을 다시 걷지 않는다.
-        static Filter of(List<VisitedDirectory> visible, Needle needle) {
-            Set<WorkspacePath> kept = new HashSet<>();
-            Set<WorkspacePath> matched = new HashSet<>();
-            for (VisitedDirectory v : visible) {
-                if (!needle.matches(v)) {
-                    continue;
-                }
-                matched.add(v.path());
-                Optional<WorkspacePath> p = Optional.of(v.path());
-                while (p.isPresent() && kept.add(p.get())) {
-                    p = p.get().parent();
-                }
+        private static void keep(WorkspacePath path, Set<WorkspacePath> kept) {
+            Optional<WorkspacePath> p = Optional.of(path);
+            while (p.isPresent() && kept.add(p.get())) {
+                p = p.get().parent();
             }
-            return new Filter(kept, matched);
         }
     }
 
@@ -378,6 +465,8 @@ public final class DirectoryTree {
         private Optional<VisitedDirectory> visit = Optional.empty();
         private boolean matched;
         private final List<SessionLeaf> sessions = new ArrayList<>();
+        // 방문 노드에만 붙는다. 순서는 만들 때 정한다.
+        private final List<PastConversation> conversations = new ArrayList<>();
         private final Map<WorkspacePath, Node> children = new HashMap<>();
 
         Node(WorkspacePath path) {

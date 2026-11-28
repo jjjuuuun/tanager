@@ -67,6 +67,8 @@ class DirectoryTreeTest {
                 .map(n -> switch (n) {
                     case TreeNode.Folder f -> f.label();
                     case TreeNode.Session s -> "#" + s.session().number();
+                    case TreeNode.Conversation c -> c.conversation().id().value();
+                    case TreeNode.MoreConversations m -> "+" + m.hidden();
                 })
                 .toList();
     }

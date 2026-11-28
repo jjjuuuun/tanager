@@ -27,14 +27,17 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import tanager.application.port.in.ManageHistoryUseCase;
 import tanager.application.port.in.QueryHistoryTreeUseCase;
+import tanager.domain.history.ConversationId;
 import tanager.domain.history.DirectoryTree;
 import tanager.domain.history.HistoryError;
 import tanager.domain.history.HistoryPolicy;
 import tanager.domain.history.HistoryTree;
+import tanager.domain.history.PastConversation;
 import tanager.domain.history.SessionLeaf;
 import tanager.domain.history.SessionStatus;
 import tanager.domain.history.ShellEnvironment;
 import tanager.domain.history.TreeQuery;
+import tanager.domain.history.VisitSource;
 import tanager.domain.history.VisitedDirectory;
 import tanager.domain.history.WorkHistory;
 import tanager.domain.history.WorkspacePath;
@@ -624,6 +627,40 @@ class SidebarPanelTest {
 
         // then
         assertThat(opener.opened).containsExactly("/home/me/a - DOWN", "/home/me/a cmd -", "home Wsl[distro=Ubuntu]");
+    }
+
+    @Test
+    @DisplayName("이전 대화 · 더 보기 노드는 아직 행을 만들지 않는다 — 대화가 붙어도 행이 그대로다(#214)")
+    void conversationNodesAreNotRendered() {
+        // given
+        WorkHistory h = history("/home/me/a", "/home/me/b");
+        List<PastConversation> conversations = new ArrayList<>();
+        for (int i = 1; i <= 7; i++) {
+            conversations.add(new PastConversation(
+                    VisitSource.CLAUDE_CODE,
+                    new ConversationId("c" + i),
+                    wsl("/home/me/a"),
+                    Optional.of("대화 " + i),
+                    T0.plusSeconds(i)));
+        }
+        TreeQuery q = new TreeQuery("", false, List.of(UBUNTU));
+
+        // when
+        current.set(DirectoryTree.project(h, List.of(), q));
+        List<String> without = onEdt(() -> visibleRows(expandAll(new SidebarPanel(query, manage, ui, interactions))));
+        current.set(DirectoryTree.project(h, List.of(), conversations, q));
+        List<String> with = onEdt(() -> visibleRows(expandAll(new SidebarPanel(query, manage, ui, interactions))));
+
+        // then
+        assertThat(with).containsExactlyElementsOf(without).containsExactly("WSL · Ubuntu", "/home/me", "a", "b");
+    }
+
+    private static JTree expandAll(SidebarPanel panel) {
+        panel.refresh();
+        for (int row = 0; row < panel.tree().getRowCount(); row++) {
+            panel.tree().expandRow(row);
+        }
+        return panel.tree();
     }
 
     private static SidebarItem item(JTree tree, String label) {

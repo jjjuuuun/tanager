@@ -100,6 +100,8 @@ record ExpansionState(Set<NodeKey> expanded, Optional<NodeKey> selected) {
                     }
                     reveal |= remembered || childReveal;
                 }
+                // 아직 그리지 않는 노드라 펼침 · 선택이 없다(#203).
+                case TreeNode.Conversation _, TreeNode.MoreConversations _ -> {}
             }
         }
         return reveal;

@@ -28,19 +28,24 @@ final class Nodes {
         return keys;
     }
 
-    static NodeKey keyOf(TreeNode node) {
-        return switch (node) {
-            case TreeNode.Folder folder -> new NodeKey.Folder(folder.path());
-            case TreeNode.Session session ->
-                new NodeKey.Session(session.session().pane());
-        };
+    static NodeKey keyOf(TreeNode.Folder folder) {
+        return new NodeKey.Folder(folder.path());
     }
 
+    static NodeKey keyOf(TreeNode.Session session) {
+        return new NodeKey.Session(session.session().pane());
+    }
+
+    // 이전 대화 · 더 보기는 아직 그리지 않아 키도 없다 — 모양은 사이드바 대화 이슈(#203)가 정한다.
     private static void collect(List<TreeNode> nodes, Set<NodeKey> keys) {
         for (TreeNode node : nodes) {
-            keys.add(keyOf(node));
-            if (node instanceof TreeNode.Folder folder) {
-                collect(folder.children(), keys);
+            switch (node) {
+                case TreeNode.Folder folder -> {
+                    keys.add(keyOf(folder));
+                    collect(folder.children(), keys);
+                }
+                case TreeNode.Session session -> keys.add(keyOf(session));
+                case TreeNode.Conversation _, TreeNode.MoreConversations _ -> {}
             }
         }
     }

@@ -691,6 +691,8 @@ public final class SidebarPanel {
                                             session.session().status() instanceof SessionStatus.Exited)),
                                     false,
                                     false));
+                // 이전 대화 · 더 보기는 시안(#203)이 정해질 때까지 행을 만들지 않는다.
+                case TreeNode.Conversation _, TreeNode.MoreConversations _ -> {}
             }
         }
     }

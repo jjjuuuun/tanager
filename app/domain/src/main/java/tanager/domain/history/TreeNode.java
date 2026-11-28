@@ -4,7 +4,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
-/** 환경 노드 아래의 트리 노드 — 폴더 또는 그 폴더에서 도는 세션. */
+/** 환경 노드 아래의 트리 노드 — 폴더, 그 폴더에서 도는 세션, 그 폴더의 이전 대화와 "더 보기". */
 public sealed interface TreeNode {
 
     /**
@@ -53,6 +53,23 @@ public sealed interface TreeNode {
     record Session(SessionLeaf session) implements TreeNode {
         public Session {
             Objects.requireNonNull(session, "session");
+        }
+    }
+
+    /** 방문 폴더 아래의 이전 대화(FR-TK-09). 폴더의 자식 중 세션 · 하위 폴더 뒤에 최근 순으로 온다. */
+    record Conversation(PastConversation conversation) implements TreeNode {
+        public Conversation {
+            Objects.requireNonNull(conversation, "conversation");
+        }
+    }
+
+    /** {@code folder} 의 보일 수를 넘어 감춘 대화 수("더 보기"). 대화 자식의 맨 끝에 하나만 온다. 불변식: hidden ≥ 1. */
+    record MoreConversations(WorkspacePath folder, int hidden) implements TreeNode {
+        public MoreConversations {
+            Objects.requireNonNull(folder, "folder");
+            if (hidden < 1) {
+                throw new IllegalArgumentException("감춘 대화 수는 1 이상이어야 한다: " + hidden);
+            }
         }
     }
 }
