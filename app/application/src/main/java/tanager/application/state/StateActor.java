@@ -80,6 +80,11 @@ public final class StateActor {
         return () -> listeners.remove(registration);
     }
 
+    /** 지금 붙어 있는 이벤트 구독자 수. 창 · 탭 · 셸을 되풀이해도 늘지 않는지 보는 데 쓴다(#223). */
+    public int listenerCount() {
+        return listeners.size();
+    }
+
     // 실행기 스레드에서만 돈다. Error 는 실행기에 맡기되 제출한 쪽이 영원히 기다리지 않게 응답부터 완료한다
     private <R> void run(Command<R> command, CompletableFuture<R> reply) {
         try {

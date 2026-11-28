@@ -21,6 +21,7 @@ import tanager.domain.history.WorkspacePath;
 import tanager.domain.session.ShellLine;
 import tanager.domain.session.TerminalSession;
 import tanager.domain.shared.PaneId;
+import tanager.domain.workspace.Workspace;
 
 /**
  * 새 창의 첫 셸에 한 번 입력할 시작 명령(FR-TK-09, #216 · ADR-0020). 창 ID → (요청한 폴더, 명령)의 메모리 표다 — {@code PaneSpec} ·
@@ -32,6 +33,7 @@ import tanager.domain.shared.PaneId;
  *   <li>추적하지 않으면(통합 없음 · 모드 NONE) 띄운 경로가 그 폴더일 때 {@link #UNTRACKED_DELAY} 뒤에 쓴다 — rc · 프로필을 읽는 동안
  *       쓰면 입력이 먹히거나 두 번 보인다.
  *   <li>셸이 먼저 끝나면 버린다. 창을 닫아 끝났으면 알리지 않는다.
+ *   <li>셸이 뜨기 전에 창이 닫히면(작업 공간에서 빠지면) 버린다.
  * </ul>
  *
  * <p>쓰기는 I/O 실행기에서 한다 — {@link TerminalStream#write} 는 블로킹될 수 있고 첫 보고는 PTY 읽기 스레드에서 온다. 표와 각 셸의
@@ -53,12 +55,24 @@ public final class StartupCommands {
     /**
      * @param scheduler 첫 보고 시간 제한 · 추적하지 않는 셸의 지연 쓰기
      * @param io 셸에 쓰는 실행기(블로킹 가능 — 가상 스레드)
-     * @param state 건너뛴 알림({@link AppEvent.SessionNotice})을 낸다
+     * @param state 건너뛴 알림({@link AppEvent.SessionNotice})을 내고, 작업 공간이 바뀌면 닫힌 창의 명령을 버린다
      */
     public StartupCommands(Scheduler scheduler, Executor io, StateActor state) {
         this.scheduler = Objects.requireNonNull(scheduler, "scheduler");
         this.io = Objects.requireNonNull(io, "io");
         this.state = Objects.requireNonNull(state, "state");
+        state.subscribe(this::onEvent);
+    }
+
+    // 셸이 뜨기 전에 창을 닫으면(기동 실패 뒤 닫기 등) 꺼낼 셸이 다시 오지 않는다 — 창 번호는 다시 쓰이지 않으므로 버린다(#223)
+    private void onEvent(AppEvent event) {
+        if (event instanceof AppEvent.LayoutChanged(Workspace workspace)) {
+            forgetClosed(workspace);
+        }
+    }
+
+    private synchronized void forgetClosed(Workspace workspace) {
+        pending.keySet().removeIf(pane -> workspace.spec(pane).isEmpty());
     }
 
     /** 요청한 폴더와 쓸 명령. */
@@ -69,6 +83,11 @@ public final class StartupCommands {
         pending.put(
                 Objects.requireNonNull(pane, "pane"),
                 new Pending(Objects.requireNonNull(folder, "folder"), Objects.requireNonNull(line, "line")));
+    }
+
+    /** 아직 셸에 달지 않은 시작 명령 수(테스트용, #223). */
+    synchronized int pendingCount() {
+        return pending.size();
     }
 
     private synchronized Optional<Pending> take(PaneId pane) {
