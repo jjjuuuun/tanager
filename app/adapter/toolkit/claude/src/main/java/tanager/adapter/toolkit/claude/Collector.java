@@ -30,18 +30,18 @@ import tanager.domain.toolkit.ToolkitWarning;
  */
 final class Collector {
 
-    private final Optional<TranscriptOpener> opener;
+    private final Optional<FileOpener> opener;
     private final Map<Path, Optional<Instant>> inputs = new LinkedHashMap<>();
     private final Set<Path> entered = new HashSet<>();
     private final List<ToolkitItem> items = new ArrayList<>();
     private final List<ToolkitWarning> warnings = new ArrayList<>();
 
-    private Collector(Optional<TranscriptOpener> opener) {
+    private Collector(Optional<FileOpener> opener) {
         this.opener = opener;
     }
 
     /** 파일 내용까지 읽어 항목 · 경고를 모은다. */
-    static Collector scanning(TranscriptOpener opener) {
+    static Collector scanning(FileOpener opener) {
         return new Collector(Optional.of(Objects.requireNonNull(opener, "opener")));
     }
 

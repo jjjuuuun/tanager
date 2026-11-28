@@ -50,14 +50,14 @@ public final class ClaudeToolkitProvider implements ToolkitProvider {
     private static final List<ClaudeReader> READERS =
             List.of(new SkillReader(), new CommandReader(), new AgentReader());
 
-    private final TranscriptOpener opener;
+    private final FileOpener opener;
 
     /** {@code ServiceLoader} 용. */
     public ClaudeToolkitProvider() {
         this(Files::newInputStream);
     }
 
-    ClaudeToolkitProvider(TranscriptOpener opener) {
+    ClaudeToolkitProvider(FileOpener opener) {
         this.opener = Objects.requireNonNull(opener, "opener");
     }
 

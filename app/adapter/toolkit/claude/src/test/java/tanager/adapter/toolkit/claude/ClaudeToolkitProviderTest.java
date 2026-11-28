@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static tanager.adapter.toolkit.claude.ClaudeFixture.path;
 
+import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -402,7 +403,7 @@ class ClaudeToolkitProviderTest {
         }
         Files.writeString(huge.resolve("SKILL.md"), body, StandardCharsets.UTF_8);
         AtomicLong hugeBytes = new AtomicLong();
-        TranscriptOpener counting = file -> {
+        FileOpener counting = file -> {
             InputStream in = Files.newInputStream(file);
             return file.getParent().getFileName().toString().equals("huge") ? new CountingStream(in, hugeBytes) : in;
         };
@@ -459,7 +460,7 @@ class ClaudeToolkitProviderTest {
     }
 
     /** 밑 스트림에서 실제로 읽힌 바이트를 센다. */
-    private static final class CountingStream extends java.io.FilterInputStream {
+    private static final class CountingStream extends FilterInputStream {
         private final AtomicLong count;
 
         CountingStream(InputStream in, AtomicLong count) {
