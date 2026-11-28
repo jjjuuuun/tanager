@@ -22,7 +22,7 @@ final class RuleReader implements ClaudeReader {
     static final String ALWAYS = "always";
     static final String PATHS = "paths";
 
-    private record RuleFile(Result<Frontmatter, FrontmatterError> frontmatter, MarkdownText text) {
+    private record RuleFile(Result<Frontmatter, FormatError> frontmatter, MarkdownText text) {
         static RuleFile read(InputStream raw) throws IOException {
             byte[] head = MarkdownText.head(raw);
             return new RuleFile(Frontmatter.read(new ByteArrayInputStream(head)), MarkdownText.of(head));

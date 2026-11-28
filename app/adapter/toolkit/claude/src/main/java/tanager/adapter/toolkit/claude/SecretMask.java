@@ -4,12 +4,10 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import tanager.domain.toolkit.Attribute;
@@ -46,16 +44,12 @@ final class SecretMask {
 
     private SecretMask() {}
 
-    /** env · headers 의 키마다 {@code <prefix>.<키>} = Masked. 키는 한 줄로 펴고, 펴서 겹치면 하나만 둔다. */
+    /** env · headers 의 키마다 {@code <prefix>.<키>} = Masked. 키는 한 줄로 편다(겹침은 {@link McpServer} 가 정리). */
     static List<Attribute> keysOnly(String prefix, List<String> keys) {
-        Set<String> names = new LinkedHashSet<>();
+        List<Attribute> attributes = new ArrayList<>();
         for (String key : keys) {
             Frontmatter.clean(prefix + "." + key, AttributeValue.Plain.MAX_CODE_POINTS)
-                    .ifPresent(names::add);
-        }
-        List<Attribute> attributes = new ArrayList<>();
-        for (String name : names) {
-            attributes.add(new Attribute(name, new AttributeValue.Masked()));
+                    .ifPresent(name -> attributes.add(ClaudeItems.masked(name)));
         }
         return List.copyOf(attributes);
     }

@@ -52,11 +52,11 @@ final class McpJson {
      *
      * @throws IOException 읽기 실패(형식 오류가 아니다)
      */
-    static Result<Config, FrontmatterError> read(InputStream in, Optional<WorkspacePath> project) throws IOException {
+    static Result<Config, FormatError> read(InputStream in, Optional<WorkspacePath> project) throws IOException {
         Objects.requireNonNull(project, "project");
         try (JsonParser p = JSON.createParser(in)) {
             if (p.nextToken() != JsonToken.START_OBJECT) {
-                return Result.err(new FrontmatterError(lineOf(p.currentTokenLocation())));
+                return Result.err(new FormatError(lineOf(p.currentTokenLocation())));
             }
             List<McpServer> servers = List.of();
             List<McpServer> local = new ArrayList<>();
@@ -74,7 +74,7 @@ final class McpJson {
         } catch (JacksonIOException e) {
             throw e.getCause();
         } catch (JacksonException e) {
-            return Result.err(new FrontmatterError(lineOf(e.getLocation())));
+            return Result.err(new FormatError(lineOf(e.getLocation())));
         }
     }
 

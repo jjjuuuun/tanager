@@ -119,7 +119,7 @@ final class Collector {
     }
 
     /** 그 파일의 형식 오류 경고. */
-    void malformed(Location file, FrontmatterError error) {
+    void malformed(Location file, FormatError error) {
         warn(new ToolkitWarning.Malformed(new SourceRef(file.env()), error.line()));
     }
 

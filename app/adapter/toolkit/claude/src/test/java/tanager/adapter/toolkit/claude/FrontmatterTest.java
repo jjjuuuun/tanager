@@ -12,12 +12,12 @@ import tanager.domain.shared.Result;
 
 class FrontmatterTest {
 
-    private static Result<Frontmatter, FrontmatterError> read(String text) throws IOException {
+    private static Result<Frontmatter, FormatError> read(String text) throws IOException {
         return Frontmatter.read(new ByteArrayInputStream(text.getBytes(StandardCharsets.UTF_8)));
     }
 
     private static Frontmatter ok(String text) throws IOException {
-        Result<Frontmatter, FrontmatterError> result = read(text);
+        Result<Frontmatter, FormatError> result = read(text);
         assertThat(result.error()).isEmpty();
         return result.value().orElseThrow();
     }
@@ -83,7 +83,7 @@ class FrontmatterTest {
     @DisplayName("닫는 --- 가 없으면 1번 줄의 형식 오류다")
     void unclosed() throws IOException {
         // when / then
-        assertThat(read("---\nname: x\n").error()).contains(new FrontmatterError(OptionalInt.of(1)));
+        assertThat(read("---\nname: x\n").error()).contains(new FormatError(OptionalInt.of(1)));
     }
 
     @Test
@@ -91,14 +91,14 @@ class FrontmatterTest {
     void brokenYamlLine() throws IOException {
         // when / then
         assertThat(read("---\ndescription: fine\nname: \"unterminated\n---\n").error())
-                .contains(new FrontmatterError(OptionalInt.of(3)));
+                .contains(new FormatError(OptionalInt.of(3)));
     }
 
     @Test
     @DisplayName("YAML 의 맨 위가 맵이 아니면 줄 번호 없는 형식 오류다")
     void notAMapping() throws IOException {
         // when / then
-        assertThat(read("---\n- a\n- b\n---\n").error()).contains(new FrontmatterError(OptionalInt.empty()));
+        assertThat(read("---\n- a\n- b\n---\n").error()).contains(new FormatError(OptionalInt.empty()));
     }
 
     @Test

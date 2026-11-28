@@ -55,9 +55,9 @@ record McpServer(String name, List<Attribute> attributes) {
                 .ifPresent(line -> attributes.add(ClaudeItems.plain("command", line)));
         url.ifPresent(raw -> attributes.add(SecretMask.origin(raw)
                 .map(origin -> ClaudeItems.plain("url", origin))
-                .orElseGet(() -> masked("url"))));
+                .orElseGet(() -> ClaudeItems.masked("url"))));
         if (headersHelper) {
-            attributes.add(masked("headersHelper"));
+            attributes.add(ClaudeItems.masked("headersHelper"));
         }
         attributes.addAll(SecretMask.keysOnly("env", envKeys));
         attributes.addAll(SecretMask.keysOnly("headers", headerKeys));
@@ -68,11 +68,7 @@ record McpServer(String name, List<Attribute> attributes) {
         return Frontmatter.clean(text, AttributeValue.Plain.MAX_CODE_POINTS);
     }
 
-    private static Attribute masked(String key) {
-        return new Attribute(key, new AttributeValue.Masked());
-    }
-
-    // env.X 와 headers.X 처럼 이름이 다르면 둘 다 남고, 펴서 같아진 키만 앞의 것을 둔다(도메인 불변식: key 유일)
+    // 펴서 같아진 키(env 의 "A\nB" 와 "A B" 등)는 앞의 것만 둔다 — 도메인 불변식: key 유일
     private static List<Attribute> unique(List<Attribute> attributes) {
         Set<String> seen = new LinkedHashSet<>();
         List<Attribute> out = new ArrayList<>();

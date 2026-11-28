@@ -75,4 +75,9 @@ final class ClaudeItems {
     static Attribute plain(String key, String value) {
         return new Attribute(key, new AttributeValue.Plain(value));
     }
+
+    /** 값이 없는 속성 — 키만 보인다. */
+    static Attribute masked(String key) {
+        return new Attribute(key, new AttributeValue.Masked());
+    }
 }
