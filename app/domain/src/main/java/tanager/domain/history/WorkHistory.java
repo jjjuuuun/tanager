@@ -186,8 +186,14 @@ public record WorkHistory(
 
     // 배치 안에서 같은 경로의 두 방문 — 경로 표기는 먼저 나온 것
     private static ImportedVisit widened(ImportedVisit first, ImportedVisit later) {
-        Instant from = first.firstSeen().isBefore(later.firstSeen()) ? first.firstSeen() : later.firstSeen();
-        return new ImportedVisit(first.path(), from, latest(first.lastSeen(), later.lastSeen()));
+        return new ImportedVisit(
+                first.path(),
+                earliest(first.firstSeen(), later.firstSeen()),
+                latest(first.lastSeen(), later.lastSeen()));
+    }
+
+    private static Instant earliest(Instant a, Instant b) {
+        return a.isBefore(b) ? a : b;
     }
 
     private static Instant latest(Instant a, Instant b) {

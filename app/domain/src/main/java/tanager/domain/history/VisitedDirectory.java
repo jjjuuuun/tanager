@@ -116,9 +116,6 @@ public record VisitedDirectory(
     /** 같은 키의 중복 항목을 합친다. 경로 표기 · 별칭은 이쪽(먼저 나온 것)이 이긴다. 출처는 합집합. */
     VisitedDirectory mergedWith(VisitedDirectory later) {
         boolean mergedPinned = pinned || later.pinned;
-        Set<VisitSource> mergedSources = new TreeSet<>(SOURCE_ORDER);
-        mergedSources.addAll(sources);
-        mergedSources.addAll(later.sources);
         return new VisitedDirectory(
                 path,
                 earliest(firstVisited, later.firstVisited),
@@ -127,16 +124,17 @@ public record VisitedDirectory(
                 mergedPinned,
                 alias.or(later::alias),
                 !mergedPinned && (hidden || later.hidden),
-                mergedSources);
+                union(sources, later.sources));
     }
 
     private Set<VisitSource> withSource(VisitSource source) {
-        if (sources.contains(source)) {
-            return sources;
-        }
+        return sources.contains(source) ? sources : union(sources, Set.of(source));
+    }
+
+    private static Set<VisitSource> union(Set<VisitSource> a, Set<VisitSource> b) {
         Set<VisitSource> out = new TreeSet<>(SOURCE_ORDER);
-        out.addAll(sources);
-        out.add(source);
+        out.addAll(a);
+        out.addAll(b);
         return out;
     }
 
