@@ -37,6 +37,7 @@ public final class ClaudeToolkitProvider implements ToolkitProvider {
      *   <li>커맨드 — 커맨드는 스킬로 합쳐졌고 같은 위치 규칙을 따른다(문서에 커맨드끼리의 순서가 따로 없어 스킬 표를 쓴다):
      *       https://code.claude.com/docs/en/skills
      *   <li>서브에이전트 — managed(1) &gt; 프로젝트(3) &gt; 사용자(4): https://code.claude.com/docs/en/sub-agents
+     *   <li>메모리 · 규칙 — 모두 합쳐 적용되므로 표에 넣지 않는다(가리지 않는다): https://code.claude.com/docs/en/memory
      * </ul>
      */
     static final ScopePrecedence PRECEDENCE = new ScopePrecedence(Map.of(
@@ -46,9 +47,9 @@ public final class ClaudeToolkitProvider implements ToolkitProvider {
 
     private static final System.Logger LOG = System.getLogger(ClaudeToolkitProvider.class.getName());
 
-    /** 종류마다의 읽기. 메모리 · MCP · 훅 · 권한은 여기에 한 줄씩 더한다. */
+    /** 종류마다의 읽기. MCP · 훅 · 권한은 여기에 한 줄씩 더한다. */
     private static final List<ClaudeReader> READERS =
-            List.of(new SkillReader(), new CommandReader(), new AgentReader());
+            List.of(new SkillReader(), new CommandReader(), new AgentReader(), new MemoryReader(), new RuleReader());
 
     private final FileOpener opener;
 

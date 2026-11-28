@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
+import tanager.domain.history.ShellEnvironment;
 import tanager.domain.history.WorkspacePath;
 import tanager.domain.toolkit.ToolkitScope;
 
@@ -17,6 +18,20 @@ import tanager.domain.toolkit.ToolkitScope;
  * @param host 환경 경로 → 앱이 읽을 경로
  */
 record ClaudeLayout(WorkspacePath project, Optional<WorkspacePath> home, Function<WorkspacePath, Optional<Path>> host) {
+
+    /**
+     * 위로 올라가며 메모리를 찾을 최대 단계. {@code \\wsl.localhost} 에서는 단계마다 파일 시각을 묻는 왕복이 생긴다(#211).
+     */
+    static final int MAX_ANCESTORS = 32;
+
+    /**
+     * 관리형(조직 배포) 폴더 — Claude Code 문서(2026-11-28 확인, https://code.claude.com/docs/en/memory#deploy-organization-wide-claude-md
+     * · https://code.claude.com/docs/en/managed-settings): Linux · WSL {@code /etc/claude-code}, Windows {@code C:\Program
+     * Files\ClaudeCode}. 옛 Windows 위치 {@code C:\ProgramData\ClaudeCode} 는 Claude Code 가 더는 읽지 않는다.
+     */
+    private static final String MANAGED_WSL = "/etc/claude-code";
+
+    private static final String MANAGED_WINDOWS = "C:\\Program Files\\ClaudeCode";
 
     /** 한 범위의 {@code .claude/} 폴더. */
     record Root(ToolkitScope scope, Location dir) {}
@@ -40,7 +55,36 @@ record ClaudeLayout(WorkspacePath project, Optional<WorkspacePath> home, Functio
         return List.copyOf(roots);
     }
 
+    /** 고른 폴더 자신. */
+    Optional<Location> base() {
+        return locate(project);
+    }
+
+    /** 고른 폴더의 부모부터 루트 쪽으로(가까운 순) 최대 {@link #MAX_ANCESTORS} 개. 앱이 열 수 없는 쪽은 뺀다. */
+    List<Location> ancestors() {
+        List<Location> ancestors = new ArrayList<>();
+        Optional<WorkspacePath> current = project.parent();
+        for (int step = 0; step < MAX_ANCESTORS && current.isPresent(); step++) {
+            locate(current.get()).ifPresent(ancestors::add);
+            current = current.get().parent();
+        }
+        return List.copyOf(ancestors);
+    }
+
+    /** 그 환경의 관리형 폴더. 앱이 열 수 없으면 empty. */
+    Optional<Location> managed() {
+        String raw = switch (project.env()) {
+            case ShellEnvironment.Wsl _ -> MANAGED_WSL;
+            case ShellEnvironment.Windows _ -> MANAGED_WINDOWS;
+        };
+        return WorkspacePath.of(project.env(), raw).value().flatMap(this::locate);
+    }
+
     private Optional<Location> claudeDir(WorkspacePath base) {
-        return host.apply(base).flatMap(hostBase -> new Location(base, hostBase).child(".claude"));
+        return locate(base).flatMap(dir -> dir.child(".claude"));
+    }
+
+    private Optional<Location> locate(WorkspacePath path) {
+        return host.apply(path).map(hostPath -> new Location(path, hostPath));
     }
 }

@@ -1,6 +1,7 @@
 package tanager.adapter.toolkit.claude;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -15,7 +16,6 @@ import java.util.Optional;
 import java.util.Set;
 import tanager.application.port.out.ScanStamp;
 import tanager.application.port.out.ToolkitScan;
-import tanager.domain.shared.Result;
 import tanager.domain.toolkit.ScopePrecedence;
 import tanager.domain.toolkit.Shadowing;
 import tanager.domain.toolkit.SourceRef;
@@ -29,6 +29,12 @@ import tanager.domain.toolkit.ToolkitWarning;
  * <p>한 스레드에서 한 번만 쓰고 버린다.
  */
 final class Collector {
+
+    /** 파일 내용 읽기. 스트림은 {@link Collector} 가 닫는다. */
+    @FunctionalInterface
+    interface Parser<T> {
+        T parse(InputStream in) throws IOException;
+    }
 
     private final Optional<FileOpener> opener;
     private final Map<Path, Optional<Instant>> inputs = new LinkedHashMap<>();
@@ -92,19 +98,29 @@ final class Collector {
      * {@code Unreadable} 경고를 싣고 empty.
      */
     Optional<Frontmatter> frontmatter(Location file) {
+        return read(file, Frontmatter::read).flatMap(read -> {
+            read.error().ifPresent(error -> malformed(file, error));
+            return read.value();
+        });
+    }
+
+    /** 파일 내용을 {@code parser} 로 읽는다. 파일을 지문 입력으로 적는다. 지문 재기 중이거나 일반 파일이 아니면 empty, 읽지 못하면 {@code Unreadable} 경고를 싣고 empty. */
+    <T> Optional<T> read(Location file, Parser<T> parser) {
         note(file.host());
         if (opener.isEmpty() || !Files.isRegularFile(file.host())) {
             return Optional.empty();
         }
-        Result<Frontmatter, FrontmatterError> read;
-        try {
-            read = Frontmatter.read(opener.get().open(file.host()));
+        try (InputStream in = opener.get().open(file.host())) {
+            return Optional.of(parser.parse(in));
         } catch (IOException e) {
             warn(new ToolkitWarning.Unreadable(new SourceRef(file.env())));
             return Optional.empty();
         }
-        read.error().ifPresent(error -> warn(new ToolkitWarning.Malformed(new SourceRef(file.env()), error.line())));
-        return read.value();
+    }
+
+    /** 그 파일의 형식 오류 경고. */
+    void malformed(Location file, FrontmatterError error) {
+        warn(new ToolkitWarning.Malformed(new SourceRef(file.env()), error.line()));
     }
 
     void item(ToolkitItem item) {

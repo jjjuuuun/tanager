@@ -1,0 +1,12 @@
+# CLAUDE.md
+
+Synthetic project memory for the fixture.
+
+- conventions @docs/x.md
+@docs/x.md
+
+Mention `@docs/ignored.md` without importing it.
+
+```bash
+# synthetic shell comment @docs/fenced.md
+```
