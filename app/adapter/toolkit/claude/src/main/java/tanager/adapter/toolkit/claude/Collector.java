@@ -22,7 +22,6 @@ import tanager.domain.toolkit.Shadowing;
 import tanager.domain.toolkit.SourceRef;
 import tanager.domain.toolkit.ToolkitItem;
 import tanager.domain.toolkit.ToolkitKind;
-import tanager.domain.toolkit.ToolkitScope;
 import tanager.domain.toolkit.ToolkitWarning;
 
 /**
@@ -143,8 +142,11 @@ final class Collector {
     ToolkitScan scan(ScopePrecedence precedence) {
         List<ToolkitItem> marked = new ArrayList<>();
         for (ToolkitItem item : Shadowing.mark(items, precedence)) {
-            ToolkitScope owner = precedence.exclusive().get(item.kind());
-            boolean blocked = exclusive.contains(item.kind()) && owner != null && item.scope() != owner;
+            boolean blocked = exclusive.contains(item.kind())
+                    && precedence
+                            .exclusiveScope(item.kind())
+                            .filter(owner -> owner != item.scope())
+                            .isPresent();
             marked.add(blocked ? item.withShadowed(true) : item);
         }
         return new ToolkitScan(marked, warnings, Optional.of(stamp()));

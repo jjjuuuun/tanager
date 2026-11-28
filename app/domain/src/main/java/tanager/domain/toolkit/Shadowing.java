@@ -75,12 +75,11 @@ public final class Shadowing {
         if (!excluded(shadowed, exclusions(marked, precedence), precedence)) {
             return Optional.empty();
         }
-        ToolkitScope owner = precedence.exclusive().get(shadowed.kind());
         for (ToolkitItem item : marked) {
             if (!item.shadowed()
                     && item.provider().equals(shadowed.provider())
                     && item.kind() == shadowed.kind()
-                    && item.scope() == owner) {
+                    && ownsExclusively(item, precedence)) {
                 return Optional.of(item);
             }
         }
@@ -90,7 +89,7 @@ public final class Shadowing {
     private static Set<Exclusion> exclusions(List<ToolkitItem> items, ScopePrecedence precedence) {
         Set<Exclusion> active = new HashSet<>();
         for (ToolkitItem item : items) {
-            if (item.scope() == precedence.exclusive().get(item.kind())) {
+            if (ownsExclusively(item, precedence)) {
                 active.add(new Exclusion(item.provider(), item.kind()));
             }
         }
@@ -98,12 +97,16 @@ public final class Shadowing {
     }
 
     private static boolean excluded(ToolkitItem item, Set<Exclusion> exclusions, ScopePrecedence precedence) {
-        return exclusions.contains(new Exclusion(item.provider(), item.kind()))
-                && item.scope() != precedence.exclusive().get(item.kind());
+        return exclusions.contains(new Exclusion(item.provider(), item.kind())) && !ownsExclusively(item, precedence);
+    }
+
+    /** 이 항목이 그 종류를 독점하는 범위에 있는가. */
+    private static boolean ownsExclusively(ToolkitItem item, ScopePrecedence precedence) {
+        return precedence.exclusiveScope(item.kind()).map(item.scope()::equals).orElse(false);
     }
 
     private static Identity identityOf(ToolkitItem item, ScopePrecedence precedence) {
-        ScopePrecedence.NameSpace space = spaceOf(item.kind(), precedence);
+        ScopePrecedence.NameSpace space = precedence.nameSpaceOf(item.kind());
         String key = switch (space.match()) {
             case EXACT -> item.name();
             case LOOSE -> loose(item.name());
@@ -111,18 +114,9 @@ public final class Shadowing {
         return new Identity(item.provider(), space.kinds(), key);
     }
 
-    private static ScopePrecedence.NameSpace spaceOf(ToolkitKind kind, ScopePrecedence precedence) {
-        for (ScopePrecedence.NameSpace space : precedence.nameSpaces()) {
-            if (space.kinds().contains(kind)) {
-                return space;
-            }
-        }
-        return new ScopePrecedence.NameSpace(List.of(kind), ScopePrecedence.NameMatch.EXACT);
-    }
-
     /** {@code candidate} 가 지금 이기는 {@code best} 를 이기는가 — 이름 공간의 종류 순서, 다음 범위 순서. 같으면 먼저 나온 쪽({@code best}). */
     private static boolean beats(ToolkitItem candidate, ToolkitItem best, ScopePrecedence precedence) {
-        List<ToolkitKind> kinds = spaceOf(candidate.kind(), precedence).kinds();
+        List<ToolkitKind> kinds = precedence.nameSpaceOf(candidate.kind()).kinds();
         int byKind = Integer.compare(kinds.indexOf(candidate.kind()), kinds.indexOf(best.kind()));
         if (byKind != 0) {
             return byKind < 0;

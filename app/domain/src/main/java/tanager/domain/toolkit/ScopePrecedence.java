@@ -6,6 +6,7 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -93,6 +94,22 @@ public record ScopePrecedence(
     /** 범위 순서만 있는 표(이름 공간은 종류마다 따로, 대소문자 구분, 독점 없음). */
     public ScopePrecedence(Map<ToolkitKind, List<ToolkitScope>> order) {
         this(order, List.of(), Map.of());
+    }
+
+    /** {@code kind} 가 든 이름 공간. 묶음에 없으면 그 종류만의 {@link NameMatch#EXACT} 이름 공간. */
+    public NameSpace nameSpaceOf(ToolkitKind kind) {
+        Objects.requireNonNull(kind, "kind");
+        for (NameSpace space : nameSpaces) {
+            if (space.kinds().contains(kind)) {
+                return space;
+            }
+        }
+        return new NameSpace(List.of(kind), NameMatch.EXACT);
+    }
+
+    /** {@code kind} 를 독점하는 범위. 독점 규칙이 없으면 empty. */
+    public Optional<ToolkitScope> exclusiveScope(ToolkitKind kind) {
+        return Optional.ofNullable(exclusive.get(Objects.requireNonNull(kind, "kind")));
     }
 
     /** {@code kinds} 가 이름을 같이 쓰는(앞이 이기는) 이름 공간을 더한 표. */
