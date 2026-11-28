@@ -2,7 +2,7 @@
 
 - 상태: 채택(#209, 2026-11-28)
 - 날짜: 2026-11-28
-- 관련: #209 · #204 · #205 · #206 · #208, FR-TK-01 · FR-TK-04 · FR-TK-07 · FR-TK-08 · FR-TK-10 · NFR-06 · NFR-07, SDD §7.4 · §8.1, ADR-0002 · 0013 · 0020
+- 관련: #209 · #204 · #205 · #206 · #208 · #220, FR-TK-01 · FR-TK-04 · FR-TK-07 · FR-TK-08 · FR-TK-10 · NFR-06 · NFR-07, SDD §7.4 · §8.1, ADR-0002 · 0013 · 0020
 
 ## 맥락
 도구함(FR-TK-01)은 폴더 · 세션을 고르면 그 경로에서 쓸 수 있는 AI 도구 구성을 보여 준다. 지금 읽을 도구는 Claude Code 하나지만 Codex · Gemini CLI 같은 도구를 어댑터만 더해 붙일 수 있어야 한다(FR-TK-10). 도메인 카탈로그(`ToolkitItem` · `ToolkitView` · `ToolkitWarning`, #204), 환경의 홈과 앱이 읽을 경로(`HostFiles`, #205), 설정 `toolkit.providers`(#206)는 이미 있다.
@@ -47,4 +47,6 @@
 - 바뀌지 않은 경로는 시각 확인만으로 끝나 포커스 때마다 다시 읽어도 싸다. 대가로 수정 시각을 바꾸지 않는 변경(같은 초 안의 두 번 저장 등)은 놓칠 수 있다 — 수동 새로고침(`FORCE`)이 있다.
 - 시간을 넘긴 공급자의 읽기는 멈추지 않고 결과만 버린다(블로킹 I/O 를 끊을 방법이 없다). 가상 스레드 하나가 그동안 남는다.
 - 진행 중 조회를 같이 받으므로 `FORCE` 가 진행 중 `REUSE_IF_UNCHANGED` 에 묻힐 수 있다 — 같은 순간의 결과라 문제 삼지 않는다.
-- 후속: Claude 공급자(`ClaudeToolkitProvider`), 도구함 패널 · 진행 표시 · 새로고침(UI), 파일 쓰기 금지 ArchUnit 규칙.
+- 후속: Claude 공급자(`ClaudeToolkitProvider`), 도구함 패널 · 진행 표시 · 새로고침(UI).
+- **ArchUnit 으로 고정(#220)**: `toolkitAdaptersDoNotWriteFiles`(`adapter.toolkit..` 은 `Files` 의 쓰기 · 생성 · 삭제 · 이동 · 복사 · 속성 변경, `File` 의 변경 메서드, `FileOutputStream` · `FileWriter` · `RandomAccessFile` · `FileChannel` · `AsynchronousFileChannel` · `FileSystemProvider`, 파일 이름을 받는 `PrintWriter` · `PrintStream` · `Formatter`, Jackson 의 `File` · `Path` 쓰기를 쓰지 않는다 — `FileChannel.open` · `newByteChannel` 은 여는 옵션을 정적으로 가릴 수 없어 통째로 막는다), `noNetworkAccess`(제품 코드 전체에서 `java.net.http` · `javax.net` · 소켓 · `URLConnection` · 소켓 채널 · `URL.openConnection`/`openStream`/`getContent` 금지, `java.net.URI` 허용 — NFR-06), `domainToolkitKnowsOnlyHistoryAndShared`, `ToolkitProvider` · `ConversationSource` 구현 위치. 리플렉션 · 동적 로딩으로 우회하는 코드는 잡지 못한다 — 리뷰 몫이다.
+- **제3자 라이브러리 네트워크 확인(#220, 2026-11-28)**: 규칙은 `tanager..` 만 본다. 런타임 jar(FlatLaf 3.8 · JediTerm core/ui 3.76 · pty4j 0.14.0 · JNA 5.19.1 · Jackson 3.3.0 core/databind/yaml · SnakeYAML Engine 3.0.1 · slf4j 2.0.19 · kotlin-stdlib)의 클래스 상수에서 `java/net/Socket` · `ServerSocket` · `DatagramSocket` · `URLConnection` · `HttpURLConnection` · `java/net/http` · `javax/net` · `openConnection` 참조는 없다. `URL.openStream` 은 FlatLaf(`UIDefaultsLoader` 등 — 클래스패스의 테마 · 네이티브 리소스) · pty4j(`ExtractedNative` — 번들 네이티브 라이브러리) · Jackson(`createParser(URL)` API, 앱은 부르지 않음)에만 있고 모두 로컬 리소스다. JediTerm 은 사용자가 터미널의 링크를 누르면 `Desktop.browse` 로 OS 브라우저에 넘길 뿐 스스로 통신하지 않는다. 라이브러리를 올릴 때 같은 확인을 다시 한다.
