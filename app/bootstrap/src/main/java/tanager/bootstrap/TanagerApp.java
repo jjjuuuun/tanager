@@ -17,6 +17,7 @@ import tanager.domain.shared.Result;
 import tanager.ui.PaneCommands;
 import tanager.ui.SwingUi;
 import tanager.ui.SwingUiDispatcher;
+import tanager.ui.measure.Measurement;
 
 /**
  * 조립 루트(ADR-0002). OS 를 읽고 플랫폼 모듈을 고르는 곳은 여기 한 곳뿐이다(architecture.md).
@@ -27,6 +28,8 @@ public final class TanagerApp {
     static final String STARTUP_TRAINING = "--startup-training";
     // 빌드가 AOT 캐시를 만들었을 때만 실행 옵션에 넣는 jar 기록 파일 경로(#221)
     private static final String AOT_STAMPS = "tanager.aot.stamps";
+    // 측정 모드(#222): -Dtanager.measure=true 일 때만 입력 반응 · EDT 정지 · 수집 부하를 로그로 남긴다
+    static final String MEASURE = "tanager.measure";
 
     private TanagerApp() {}
 
@@ -34,6 +37,7 @@ public final class TanagerApp {
         StartupClock startup = StartupClock.sinceProcessStart();
         startup.mark(StartupPhase.MAIN);
         boolean training = List.of(args).contains(STARTUP_TRAINING);
+        boolean measure = Boolean.getBoolean(MEASURE);
         OperatingSystem os = currentOs();
         List<PlatformModule> candidates = ServiceLoader.load(PlatformModule.class).stream()
                 .map(ServiceLoader.Provider::get)
@@ -53,7 +57,7 @@ public final class TanagerApp {
                 SwingUiDispatcher ui = new SwingUiDispatcher();
                 PtyLauncher shells =
                         new FirstByteLauncher(new Pty4jLauncher(), () -> startup.mark(StartupPhase.FIRST_BYTE));
-                Assembly assembly = Assembly.assemble(platform, shells, ui, startup::mark);
+                Assembly assembly = Assembly.assemble(platform, shells, ui, startup::mark, measure);
                 AppEvents events = new UiAppEvents(assembly.state(), ui);
                 // 외부 명령(Windows: reg.exe)을 쓸 수 있어 EDT 가 아닌 여기서 한 번 읽는다. 그 뒤의 변경은 ApplyThemeUseCase 가 알린다
                 assembly.readAppearance();
@@ -85,6 +89,7 @@ public final class TanagerApp {
                         // 창 상태도 조립 때 읽었다 — 화면 밖인지는 UI 가 지금 모니터들로 판정한다(#180)
                         assembly.windowState(),
                         assembly.state().snapshot().window(),
+                        Measurement.of(measure),
                         assembly::shutdown);
                 // UI 가 구독한 뒤라 불러오기 알림 · 시작 때의 SettingsChanged 를 UI 가 받는다
                 assembly.startStore();
