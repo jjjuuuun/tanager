@@ -239,15 +239,100 @@ class KeymapResolveTest {
                 .contains(new LayoutAction.Zoom());
     }
 
+    private static KeymapResolution resolvePrefix(String prefix, Map<String, String> bindings) {
+        return Keymap.resolve(Keymap.defaults(), new KeyConfig(Optional.of(prefix), bindings));
+    }
+
     @Test
-    @DisplayName("prefix 를 적으면 아직 지원하지 않는다고 알리고 무시한다(FR-LAY-08 은 후속 이슈)")
-    void prefixNotSupported() {
+    @DisplayName("기본값에는 prefix 가 없다(prefix 모드 꺼짐)")
+    void noPrefixByDefault() {
+        // then
+        assertThat(Keymap.defaults().prefix()).isEmpty();
+        assertThat(Keymap.resolve(Keymap.defaults(), KeyConfig.defaults())
+                        .keymap()
+                        .prefix())
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("prefix \"ctrl B\" 를 적으면 prefix 모드가 켜지고 다른 키는 그대로다(FR-LAY-08)")
+    void prefixEnabled() {
         // when
-        KeymapResolution resolution = Keymap.resolve(Keymap.defaults(), new KeyConfig(Optional.of("ctrl B"), Map.of()));
+        KeymapResolution resolution = resolvePrefix("ctrl B", Map.of());
 
         // then
-        assertThat(resolution.problems()).containsExactly(new KeyProblem.PrefixNotSupported("ctrl B"));
+        assertThat(resolution.problems()).isEmpty();
+        assertThat(resolution.keymap().prefix()).contains(new Key(KeyEvent.VK_B, CTRL_DOWN_MASK));
         assertThat(resolution.keymap().bindings()).isEqualTo(Keymap.defaults().bindings());
+    }
+
+    @Test
+    @DisplayName("읽지 못한 prefix 는 알리고 prefix 모드를 끈다")
+    void prefixUnparseable() {
+        // when
+        KeymapResolution resolution = resolvePrefix("ctrl bogus", Map.of());
+
+        // then
+        assertThat(resolution.problems()).containsExactly(new KeyProblem.PrefixUnparseable("ctrl bogus"));
+        assertThat(resolution.keymap().prefix()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("예약 키(Ctrl+C)를 prefix 로 적으면 알리고 끈다 — 재정의와 같은 예약 키 규칙이다")
+    void prefixReserved() {
+        // when
+        KeymapResolution resolution = resolvePrefix("ctrl C", Map.of());
+
+        // then
+        assertThat(resolution.problems()).containsExactly(new KeyProblem.PrefixReserved("Ctrl+C"));
+        assertThat(resolution.keymap().prefix()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("prefix 가 기본 키와 겹치면 알리고 prefix 를 끈다 — 기본 키는 그대로다")
+    void prefixConflictsWithDefault() {
+        // when
+        KeymapResolution resolution = resolvePrefix("ctrl shift E", Map.of());
+
+        // then
+        assertThat(resolution.problems())
+                .containsExactly(new KeyProblem.PrefixConflict("Ctrl+Shift+E", "sidebar.toggle"));
+        assertThat(resolution.keymap().prefix()).isEmpty();
+        assertThat(resolution.keymap().actionFor(KeyEvent.VK_E, CTRL_SHIFT)).contains(new KeyAction.ToggleSidebar());
+    }
+
+    @Test
+    @DisplayName("prefix 가 재정의 키와 겹치면 알리고 prefix 를 끈다 — 재정의는 적용한다")
+    void prefixConflictsWithOverride() {
+        // when
+        KeymapResolution resolution = resolvePrefix("ctrl B", Map.of("pane.zoom", "ctrl B"));
+
+        // then
+        assertThat(resolution.problems()).containsExactly(new KeyProblem.PrefixConflict("Ctrl+B", "pane.zoom"));
+        assertThat(resolution.keymap().prefix()).isEmpty();
+        assertThat(resolution.keymap().actionFor(KeyEvent.VK_B, CTRL_DOWN_MASK)).contains(new LayoutAction.Zoom());
+    }
+
+    @Test
+    @DisplayName("Ctrl+Alt prefix 는 켜되 AltGr 와 겹친다고 경고한다")
+    void prefixAltGraphWarning() {
+        // when
+        KeymapResolution resolution = resolvePrefix("ctrl alt B", Map.of());
+
+        // then
+        assertThat(resolution.problems()).containsExactly(new KeyProblem.AltGraph("keys.prefix", "Ctrl+Alt+B"));
+        assertThat(resolution.keymap().prefix()).contains(new Key(KeyEvent.VK_B, CTRL_DOWN_MASK | ALT_DOWN_MASK));
+    }
+
+    @Test
+    @DisplayName("prefix 문제는 동작 id 문제보다 앞이다")
+    void prefixProblemFirst() {
+        // when
+        KeymapResolution resolution = resolvePrefix("ctrl C", Map.of("a.b", "F5"));
+
+        // then
+        assertThat(resolution.problems())
+                .containsExactly(new KeyProblem.PrefixReserved("Ctrl+C"), new KeyProblem.UnknownAction("a.b"));
     }
 
     @Test

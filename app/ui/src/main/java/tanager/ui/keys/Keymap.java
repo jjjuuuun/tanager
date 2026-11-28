@@ -47,37 +47,51 @@ public final class Keymap {
     }
 
     // 같은 동작의 키가 여럿이면 처음 것이 툴팁에 보인다. = 와 - 는 자판 · 숫자패드에 따라 키 코드가 다르다
-    private static final Keymap DEFAULTS = new Keymap(List.of(
-            new Binding(KeyEvent.VK_EQUALS, ALT_SHIFT, "Alt+Shift+=", new LayoutAction.Split(Orientation.ROW)),
-            new Binding(KeyEvent.VK_PLUS, ALT_SHIFT, "Alt+Shift+=", new LayoutAction.Split(Orientation.ROW)),
-            new Binding(KeyEvent.VK_ADD, ALT_SHIFT, "Alt+Shift+=", new LayoutAction.Split(Orientation.ROW)),
-            new Binding(KeyEvent.VK_MINUS, ALT_SHIFT, "Alt+Shift+-", new LayoutAction.Split(Orientation.COLUMN)),
-            new Binding(KeyEvent.VK_SUBTRACT, ALT_SHIFT, "Alt+Shift+-", new LayoutAction.Split(Orientation.COLUMN)),
-            new Binding(KeyEvent.VK_LEFT, ALT, "Alt+←", new LayoutAction.Focus(Direction.LEFT)),
-            new Binding(KeyEvent.VK_RIGHT, ALT, "Alt+→", new LayoutAction.Focus(Direction.RIGHT)),
-            new Binding(KeyEvent.VK_UP, ALT, "Alt+↑", new LayoutAction.Focus(Direction.UP)),
-            new Binding(KeyEvent.VK_DOWN, ALT, "Alt+↓", new LayoutAction.Focus(Direction.DOWN)),
-            new Binding(KeyEvent.VK_LEFT, ALT_SHIFT, "Alt+Shift+←", new LayoutAction.Resize(Direction.LEFT)),
-            new Binding(KeyEvent.VK_RIGHT, ALT_SHIFT, "Alt+Shift+→", new LayoutAction.Resize(Direction.RIGHT)),
-            new Binding(KeyEvent.VK_UP, ALT_SHIFT, "Alt+Shift+↑", new LayoutAction.Resize(Direction.UP)),
-            new Binding(KeyEvent.VK_DOWN, ALT_SHIFT, "Alt+Shift+↓", new LayoutAction.Resize(Direction.DOWN)),
-            new Binding(KeyEvent.VK_Z, CTRL_SHIFT, "Ctrl+Shift+Z", new LayoutAction.Zoom()),
-            new Binding(KeyEvent.VK_W, CTRL_SHIFT, "Ctrl+Shift+W", new LayoutAction.Close()),
-            new Binding(KeyEvent.VK_LEFT, CTRL_SHIFT, "Ctrl+Shift+←", new LayoutAction.Swap(Direction.LEFT)),
-            new Binding(KeyEvent.VK_RIGHT, CTRL_SHIFT, "Ctrl+Shift+→", new LayoutAction.Swap(Direction.RIGHT)),
-            new Binding(KeyEvent.VK_E, CTRL_SHIFT, "Ctrl+Shift+E", new KeyAction.ToggleSidebar()),
-            new Binding(KeyEvent.VK_F, CTRL_SHIFT, "Ctrl+Shift+F", new KeyAction.SearchTree()),
-            new Binding(KeyEvent.VK_COMMA, CTRL, "Ctrl+,", new KeyAction.OpenSettings())));
+    private static final Keymap DEFAULTS = new Keymap(
+            List.of(
+                    new Binding(KeyEvent.VK_EQUALS, ALT_SHIFT, "Alt+Shift+=", new LayoutAction.Split(Orientation.ROW)),
+                    new Binding(KeyEvent.VK_PLUS, ALT_SHIFT, "Alt+Shift+=", new LayoutAction.Split(Orientation.ROW)),
+                    new Binding(KeyEvent.VK_ADD, ALT_SHIFT, "Alt+Shift+=", new LayoutAction.Split(Orientation.ROW)),
+                    new Binding(
+                            KeyEvent.VK_MINUS, ALT_SHIFT, "Alt+Shift+-", new LayoutAction.Split(Orientation.COLUMN)),
+                    new Binding(
+                            KeyEvent.VK_SUBTRACT, ALT_SHIFT, "Alt+Shift+-", new LayoutAction.Split(Orientation.COLUMN)),
+                    new Binding(KeyEvent.VK_LEFT, ALT, "Alt+←", new LayoutAction.Focus(Direction.LEFT)),
+                    new Binding(KeyEvent.VK_RIGHT, ALT, "Alt+→", new LayoutAction.Focus(Direction.RIGHT)),
+                    new Binding(KeyEvent.VK_UP, ALT, "Alt+↑", new LayoutAction.Focus(Direction.UP)),
+                    new Binding(KeyEvent.VK_DOWN, ALT, "Alt+↓", new LayoutAction.Focus(Direction.DOWN)),
+                    new Binding(KeyEvent.VK_LEFT, ALT_SHIFT, "Alt+Shift+←", new LayoutAction.Resize(Direction.LEFT)),
+                    new Binding(KeyEvent.VK_RIGHT, ALT_SHIFT, "Alt+Shift+→", new LayoutAction.Resize(Direction.RIGHT)),
+                    new Binding(KeyEvent.VK_UP, ALT_SHIFT, "Alt+Shift+↑", new LayoutAction.Resize(Direction.UP)),
+                    new Binding(KeyEvent.VK_DOWN, ALT_SHIFT, "Alt+Shift+↓", new LayoutAction.Resize(Direction.DOWN)),
+                    new Binding(KeyEvent.VK_Z, CTRL_SHIFT, "Ctrl+Shift+Z", new LayoutAction.Zoom()),
+                    new Binding(KeyEvent.VK_W, CTRL_SHIFT, "Ctrl+Shift+W", new LayoutAction.Close()),
+                    new Binding(KeyEvent.VK_LEFT, CTRL_SHIFT, "Ctrl+Shift+←", new LayoutAction.Swap(Direction.LEFT)),
+                    new Binding(KeyEvent.VK_RIGHT, CTRL_SHIFT, "Ctrl+Shift+→", new LayoutAction.Swap(Direction.RIGHT)),
+                    new Binding(KeyEvent.VK_E, CTRL_SHIFT, "Ctrl+Shift+E", new KeyAction.ToggleSidebar()),
+                    new Binding(KeyEvent.VK_F, CTRL_SHIFT, "Ctrl+Shift+F", new KeyAction.SearchTree()),
+                    new Binding(KeyEvent.VK_COMMA, CTRL, "Ctrl+,", new KeyAction.OpenSettings())),
+            Optional.empty());
+
+    /** 설정 파일에서 prefix 키를 부르는 이름. 문제 알림에 동작 id 자리로 쓴다. */
+    static final String PREFIX_ID = "keys.prefix";
 
     private final List<Binding> bindings;
+    private final Optional<Key> prefix;
 
-    private Keymap(List<Binding> bindings) {
+    private Keymap(List<Binding> bindings, Optional<Key> prefix) {
         this.bindings = List.copyOf(bindings);
+        this.prefix = Objects.requireNonNull(prefix, "prefix");
     }
 
     /** SDD §8.2 의 기본 키. */
     public static Keymap defaults() {
         return DEFAULTS;
+    }
+
+    /** prefix 모드(FR-LAY-08, #193)의 prefix 키. 비어 있으면 prefix 모드를 쓰지 않는다(기본값). */
+    public Optional<Key> prefix() {
+        return prefix;
     }
 
     /** 표의 바인딩(툴팁 순서). */
@@ -123,6 +137,8 @@ public final class Keymap {
      *   <li>재정의가 기본 키를 이긴다. 키를 잃은 동작은 그 키가 없어지고 {@link KeyProblem.Unbound} 다. 그래서 두 동작의 키를 맞바꿀 수 있다.
      *   <li>재정의끼리 같은 키면 모두 버리고 기본 키로 돌린 뒤 다시 검사한다({@link KeyProblem.Conflict}).
      *   <li>읽지 못한 키 · 예약 키는 그 동작만 기본 키다. 모르는 동작은 무시한다.
+     *   <li>prefix 키(#193)는 재정의와 같은 예약 키 규칙을 따르고, 결과 표의 키(기본 키 · 재정의)와 겹치면 쓰지 않는다. 쓸 수 없는 prefix 는
+     *       prefix 모드를 끈다 — 다른 키에는 영향이 없다.
      * </ul>
      *
      * 문제는 prefix → 동작 id 순서의 한 줄 문제 → 겹침 → 키를 잃은 동작 순서다.
@@ -131,7 +147,6 @@ public final class Keymap {
         Objects.requireNonNull(defaults, "defaults");
         Objects.requireNonNull(config, "config");
         List<KeyProblem> problems = new ArrayList<>();
-        config.prefix().ifPresent(raw -> problems.add(new KeyProblem.PrefixNotSupported(raw)));
         Map<KeyAction, Key> overrides = parsed(config.bindings(), problems);
         dropConflicts(overrides, problems);
 
@@ -139,7 +154,34 @@ public final class Keymap {
         List<Binding> result = merged(defaults, overrides, lost.keySet());
         lost.forEach((named, by) ->
                 problems.add(new KeyProblem.Unbound(ActionIds.idOf(named.action()), named.text(), ActionIds.idOf(by))));
-        return new KeymapResolution(new Keymap(result), problems);
+        List<KeyProblem> prefixProblems = new ArrayList<>();
+        Optional<Key> prefix = config.prefix().flatMap(raw -> prefix(raw, result, prefixProblems));
+        problems.addAll(0, prefixProblems);
+        return new KeymapResolution(new Keymap(result, prefix), problems);
+    }
+
+    // 쓸 수 없으면 비어 있다(prefix 모드 끔). 겹침은 결과 표와 본다 — 재정의가 가져간 키도, 재정의에 잃은 기본 키는 빼고
+    private static Optional<Key> prefix(String raw, List<Binding> bindings, List<KeyProblem> problems) {
+        Optional<Key> parsed = Key.parse(raw);
+        if (parsed.isEmpty()) {
+            problems.add(new KeyProblem.PrefixUnparseable(raw));
+            return Optional.empty();
+        }
+        Key key = parsed.get();
+        if (ReservedKeys.reserved(key)) {
+            problems.add(new KeyProblem.PrefixReserved(key.text()));
+            return Optional.empty();
+        }
+        for (Binding binding : bindings) {
+            if (binding.key().equals(key)) {
+                problems.add(new KeyProblem.PrefixConflict(key.text(), ActionIds.idOf(binding.action())));
+                return Optional.empty();
+            }
+        }
+        if (ReservedKeys.altGraphLike(key)) {
+            problems.add(new KeyProblem.AltGraph(PREFIX_ID, key.text()));
+        }
+        return Optional.of(key);
     }
 
     /** 동작의 키 하나(이름 기준 — 키 코드만 다른 바인딩은 같은 키다). */

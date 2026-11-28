@@ -54,10 +54,25 @@ public sealed interface KeyProblem {
         }
     }
 
-    /** prefix 모드(FR-LAY-08)는 아직 없다 — {@code keys.prefix} 를 무시한다. */
-    record PrefixNotSupported(String raw) implements KeyProblem {
-        public PrefixNotSupported {
+    /** {@code keys.prefix} 원문을 읽지 못해 prefix 모드(FR-LAY-08)를 껐다. */
+    record PrefixUnparseable(String raw) implements KeyProblem {
+        public PrefixUnparseable {
             Objects.requireNonNull(raw, "raw");
+        }
+    }
+
+    /** prefix 키가 셸 · 에디터 · 터미널이 쓰는 키라 prefix 모드를 껐다(재정의와 같은 예약 키 규칙). */
+    record PrefixReserved(String key) implements KeyProblem {
+        public PrefixReserved {
+            Objects.requireNonNull(key, "key");
+        }
+    }
+
+    /** prefix 키를 동작 {@code action}(기본 키 또는 재정의)이 이미 써서 prefix 모드를 껐다. 그 동작의 키는 그대로다. */
+    record PrefixConflict(String key, String action) implements KeyProblem {
+        public PrefixConflict {
+            Objects.requireNonNull(key, "key");
+            Objects.requireNonNull(action, "action");
         }
     }
 }
