@@ -84,6 +84,7 @@ public enum Msg {
     OPEN_MISMATCH("open.mismatch"),
     OPEN_UNKNOWN_PROFILE("open.unknownProfile"),
     OPEN_UNKNOWN_PANE("open.unknownPane"),
+    OPEN_UNKNOWN_SOURCE("open.unknownSource"),
 
     FORGET_CONFIRM("forget.confirm"),
     FORGET_TITLE("forget.title"),
@@ -110,6 +111,9 @@ public enum Msg {
     START_MISSING_DIRECTORY("start.missingDirectory"),
     START_DEFAULT_NOT_SAVED("start.defaultNotSaved"),
     START_INTEGRATION_UNAVAILABLE("start.integrationUnavailable"),
+    START_COMMAND_PATH_MISMATCH("start.command.pathMismatch"),
+    START_COMMAND_SHELL_EXITED("start.command.shellExited"),
+    START_COMMAND_TIMED_OUT("start.command.timedOut"),
     INTEGRATION_NOT_SUPPORTED("integration.notSupported"),
     INTEGRATION_INSTALL_FAILED("integration.installFailed"),
     INTEGRATION_CRASHED("integration.crashed"),

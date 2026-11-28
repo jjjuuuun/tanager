@@ -49,6 +49,12 @@ public final class NoticeText {
                 t(Msg.START_DEFAULT_NOT_SAVED, profile.value(), of(error));
             case StartNotice.IntegrationUnavailable(Integration.Problem problem) ->
                 t(Msg.START_INTEGRATION_UNAVAILABLE, of(problem));
+            case StartNotice.StartupCommandSkipped(var line, var reason) ->
+                switch (reason) {
+                    case PATH_MISMATCH -> t(Msg.START_COMMAND_PATH_MISMATCH, line.text());
+                    case SHELL_EXITED -> t(Msg.START_COMMAND_SHELL_EXITED, line.text());
+                    case TIMED_OUT -> t(Msg.START_COMMAND_TIMED_OUT, line.text());
+                };
         };
     }
 
@@ -231,6 +237,7 @@ public final class NoticeText {
                 t(Msg.OPEN_MISMATCH, profile.value(), path.path());
             case OpenError.UnknownProfile(var profile) -> t(Msg.OPEN_UNKNOWN_PROFILE, profile.value());
             case OpenError.UnknownPane(var pane) -> t(Msg.OPEN_UNKNOWN_PANE, pane.value());
+            case OpenError.UnknownSource(var source) -> t(Msg.OPEN_UNKNOWN_SOURCE, toolName(source));
         };
     }
 

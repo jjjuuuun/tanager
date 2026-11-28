@@ -6,6 +6,7 @@ import tanager.application.port.out.ConfigWarning;
 import tanager.application.port.out.Integration;
 import tanager.domain.history.WorkspacePath;
 import tanager.domain.session.ProfileId;
+import tanager.domain.session.ShellLine;
 
 /** 세션은 떴지만 사용자에게 알릴 것. */
 public sealed interface StartNotice {
@@ -86,6 +87,33 @@ public sealed interface StartNotice {
         @Override
         public String describe() {
             return "셸 통합을 쓸 수 없어 이동한 경로를 기록하지 않는다 — " + problem.describe();
+        }
+    }
+
+    /**
+     * 새 창에 달린 시작 명령 {@code line}(예: {@code claude --resume <id>}, FR-TK-09)을 셸에 쓰지 않고 버렸다(#216). 세션이 뜬 뒤에 정해지므로
+     * {@link AppEvent.SessionNotice} 로 온다.
+     */
+    record StartupCommandSkipped(ShellLine line, Reason reason) implements StartNotice {
+        public StartupCommandSkipped {
+            Objects.requireNonNull(line, "line");
+            Objects.requireNonNull(reason, "reason");
+        }
+
+        /** 버린 이유. */
+        public enum Reason {
+            /** 셸이 처음 알린(통합이 없으면 띄운) 경로가 요청한 폴더가 아니다 — 경로가 사라져 홈에서 떴을 때 등. */
+            PATH_MISMATCH,
+            /** 셸이 첫 프롬프트 전에 끝났다. */
+            SHELL_EXITED,
+            /** 정한 시간 안에 셸이 경로를 알리지 않았다. */
+            TIMED_OUT
+        }
+
+        // 명령 내용은 로그에 남기지 않는다(java-style 12)
+        @Override
+        public String describe() {
+            return "새 창의 시작 명령을 실행하지 않았다 — " + reason;
         }
     }
 }

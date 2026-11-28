@@ -90,4 +90,19 @@ class NoticesTest {
                 .hasValueSatisfying(text -> assertThat(text).contains("Claude Code"));
         assertThat(Notices.messageOf(changed)).isEmpty();
     }
+
+    @Test
+    @DisplayName("창의 시작 명령을 건너뛴 알림은 상태줄 문장이 된다(#216)")
+    void sessionNoticeBecomesStatusMessage() {
+        // given
+        AppEvent notice = new AppEvent.SessionNotice(
+                new tanager.domain.shared.PaneId("p2"),
+                new tanager.application.port.in.StartNotice.StartupCommandSkipped(
+                        new tanager.domain.session.ShellLine("claude --continue"),
+                        tanager.application.port.in.StartNotice.StartupCommandSkipped.Reason.TIMED_OUT));
+
+        // when / then
+        assertThat(Notices.messageOf(notice))
+                .hasValueSatisfying(text -> assertThat(text).contains("claude --continue"));
+    }
 }

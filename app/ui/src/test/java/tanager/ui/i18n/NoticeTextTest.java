@@ -203,4 +203,31 @@ class NoticeTextTest {
                         new ImportOrigin(new VisitSource("codex"), new ShellEnvironment.Windows()))))
                 .contains("codex");
     }
+
+    @Test
+    @DisplayName("시작 명령을 건너뛴 이유 세 가지와 공급자 없는 출처가 두 언어로 나온다(#216)")
+    void startupCommandSkipped() {
+        // given
+        var line = new tanager.domain.session.ShellLine("claude --resume 7f3a");
+        var mismatch =
+                new StartNotice.StartupCommandSkipped(line, StartNotice.StartupCommandSkipped.Reason.PATH_MISMATCH);
+        var exited = new StartNotice.StartupCommandSkipped(line, StartNotice.StartupCommandSkipped.Reason.SHELL_EXITED);
+        var timedOut = new StartNotice.StartupCommandSkipped(line, StartNotice.StartupCommandSkipped.Reason.TIMED_OUT);
+        var unknown = new OpenError.UnknownSource(new VisitSource("codex"));
+
+        // when / then
+        assertThat(EN.of(mismatch))
+                .isEqualTo("Did not run \"claude --resume 7f3a\" — the shell did not start in the requested folder");
+        assertThat(KO.of(mismatch)).isEqualTo("셸이 요청한 폴더에서 뜨지 않아 \"claude --resume 7f3a\" 를 실행하지 않았다");
+        assertThat(EN.of(exited))
+                .isEqualTo("Did not run \"claude --resume 7f3a\" — the shell exited before its first prompt");
+        assertThat(KO.of(exited)).isEqualTo("셸이 첫 프롬프트 전에 끝나 \"claude --resume 7f3a\" 를 실행하지 않았다");
+        assertThat(EN.of(timedOut))
+                .isEqualTo("Did not run \"claude --resume 7f3a\" — the shell did not report its folder in time");
+        assertThat(KO.of(timedOut)).isEqualTo("셸이 제때 경로를 알리지 않아 \"claude --resume 7f3a\" 를 실행하지 않았다");
+        assertThat(EN.of(unknown)).isEqualTo("No conversation provider for codex");
+        assertThat(KO.of(unknown)).isEqualTo("codex 대화 공급자가 없다");
+        assertThat(EN.of(new OpenError.UnknownSource(VisitSource.CLAUDE_CODE)))
+                .isEqualTo("No conversation provider for Claude Code");
+    }
 }
