@@ -1,11 +1,15 @@
 package tanager.platform.macos;
 
 import java.lang.management.ManagementFactory;
+import java.nio.file.InvalidPathException;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import tanager.application.platform.OperatingSystem;
 import tanager.application.port.out.DirectoryProbe;
+import tanager.application.port.out.HomeError;
+import tanager.application.port.out.HostFiles;
 import tanager.application.port.out.Integration;
 import tanager.application.port.out.LaunchCommand;
 import tanager.application.port.out.PathTranslation;
@@ -16,6 +20,7 @@ import tanager.application.port.out.ResourceProbe;
 import tanager.application.port.out.ShellIntegration;
 import tanager.application.port.out.SystemAppearance;
 import tanager.application.port.out.SystemTools;
+import tanager.domain.history.ShellEnvironment;
 import tanager.domain.history.WorkspacePath;
 import tanager.domain.monitor.DiskUsage;
 import tanager.domain.monitor.HostUsage;
@@ -72,6 +77,29 @@ public final class MacPlatformModule implements PlatformModule {
     @Override
     public DirectoryProbe directories() {
         return (path, timeout) -> Optional.empty();
+    }
+
+    /**
+     * 호스트 경로는 그대로다(같은 파일시스템). 홈은 M7 에서 Posix 환경과 함께 {@code user.home} 으로 채운다 — 지금 있는 환경(WSL · Windows)은
+     * macOS 에 없어 모두 {@link HomeError.NotRunnable} 이다.
+     */
+    @Override
+    public HostFiles hostFiles() {
+        return new HostFiles() {
+            @Override
+            public Optional<Path> hostPath(WorkspacePath path) {
+                try {
+                    return Optional.of(Path.of(path.path()));
+                } catch (InvalidPathException e) {
+                    return Optional.empty();
+                }
+            }
+
+            @Override
+            public Result<WorkspacePath, HomeError> home(ShellEnvironment env) {
+                return Result.err(new HomeError.NotRunnable(env));
+            }
+        };
     }
 
     /** M7 에서 NSWorkspace 의 '동작 줄이기'를 읽는다. 그때까지 애니메이션을 켠다. */

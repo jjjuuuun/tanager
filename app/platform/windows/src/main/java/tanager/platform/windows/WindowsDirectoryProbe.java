@@ -12,7 +12,6 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import tanager.application.port.out.DirectoryProbe;
-import tanager.domain.history.PathTranslator;
 import tanager.domain.history.ShellEnvironment;
 import tanager.domain.history.WorkspacePath;
 import tanager.domain.history.WslMount;
@@ -26,8 +25,6 @@ import tanager.domain.history.WslMount;
  */
 final class WindowsDirectoryProbe implements DirectoryProbe {
     private static final Logger LOG = System.getLogger(WindowsDirectoryProbe.class.getName());
-    private static final ShellEnvironment WINDOWS = new ShellEnvironment.Windows();
-    private static final String WSL_HOST = "\\\\wsl.localhost\\";
 
     private final WindowsFiles files;
     private final WslMountRoots mounts;
@@ -68,12 +65,12 @@ final class WindowsDirectoryProbe implements DirectoryProbe {
         switch (path.env()) {
             case ShellEnvironment.Windows _ -> answer.complete(files.isDirectory(path.path()));
             case ShellEnvironment.Wsl(String distro) -> {
-                Optional<WorkspacePath> onDrive = PathTranslator.translate(path, WINDOWS, mounts.snapshot());
+                Optional<String> onDrive = WindowsHostPaths.onDrive(path, mounts.snapshot());
                 if (onDrive.isPresent()) {
-                    answer.complete(files.isDirectory(onDrive.get().path()));
+                    answer.complete(files.isDirectory(onDrive.get()));
                     return;
                 }
-                Optional<Boolean> found = files.isDirectory(unc(distro, path));
+                Optional<Boolean> found = files.isDirectory(WindowsHostPaths.wslUnc(distro, path));
                 answer.complete(found);
                 // 배포판이 답했으면 이미 깨어 있다 — 이때만 wsl.conf 를 읽어 다음 확인 · 경로 변환이 그 루트를 쓰게 한다
                 if (found.isPresent() && !mounts.knows(distro)) {
@@ -84,12 +81,8 @@ final class WindowsDirectoryProbe implements DirectoryProbe {
     }
 
     private void learnMountRoot(String distro) {
-        files.readText(WSL_HOST + distro + "\\etc\\wsl.conf")
+        files.readText(WindowsHostPaths.wslRoot(distro) + "\\etc\\wsl.conf")
                 .ifPresent(conf -> mounts.remember(
                         distro, WslConfParser.automountRoot(conf).orElse(WslMount.DEFAULT)));
-    }
-
-    private static String unc(String distro, WorkspacePath path) {
-        return WSL_HOST + distro + "\\" + String.join("\\", path.segments());
     }
 }

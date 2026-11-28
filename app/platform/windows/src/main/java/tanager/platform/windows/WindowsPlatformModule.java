@@ -9,6 +9,7 @@ import java.util.concurrent.Executor;
 import java.util.function.Function;
 import tanager.application.platform.OperatingSystem;
 import tanager.application.port.out.DirectoryProbe;
+import tanager.application.port.out.HostFiles;
 import tanager.application.port.out.Integration;
 import tanager.application.port.out.LaunchCommand;
 import tanager.application.port.out.PathTranslation;
@@ -44,6 +45,7 @@ public final class WindowsPlatformModule implements PlatformModule {
     private final CommandRunner appearanceRunner;
     private final WslMountRoots mounts = new WslMountRoots();
     private final DirectoryProbe directories;
+    private final HostFiles hostFiles;
 
     /** ServiceLoader 용. 실제 프로세스 실행과 시스템 환경변수를 쓴다. */
     public WindowsPlatformModule() {
@@ -106,6 +108,7 @@ public final class WindowsPlatformModule implements PlatformModule {
         this.appData = nonBlank(env, "APPDATA")
                 .map(dir -> Path.of(dir, APP_FOLDER))
                 .orElseGet(() -> Path.of(fallbackHome, "AppData", "Roaming", APP_FOLDER));
+        this.hostFiles = new WindowsHostFiles(mounts, new ProcessCommandRunner(), userProfile);
     }
 
     private static Optional<String> nonBlank(Function<String, Optional<String>> env, String name) {
@@ -157,6 +160,15 @@ public final class WindowsPlatformModule implements PlatformModule {
     @Override
     public DirectoryProbe directories() {
         return directories;
+    }
+
+    /**
+     * 드라이브 자리는 {@link #paths()} 와 같은 배포판별 마운트 루트를 쓴다. WSL 홈은 배포판마다 처음 한 번 wsl.exe 로 묻는다(VM 을 깨운다). 같은
+     * 인스턴스를 돌려준다.
+     */
+    @Override
+    public HostFiles hostFiles() {
+        return hostFiles;
     }
 
     /** 다크/라이트(#184)와 '애니메이션 효과'(#152) 설정을 레지스트리에서 읽는다. 부를 때마다 reg.exe 를 두 번 실행한다. */
