@@ -10,6 +10,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.BiFunction;
 import tanager.application.port.out.AnimationMode;
 import tanager.application.port.out.AppearanceConfig;
 import tanager.application.port.out.ConfigWarning;
@@ -250,16 +251,9 @@ final class ConfigSections {
     }
 
     private Optional<List<String>> globs(JsonNode node, String key) {
-        return array(node, key).map(array -> {
-            List<String> globs = new ArrayList<>();
-            for (int i = 0; i < array.size(); i++) {
-                String element = key + "[" + i + "]";
-                nonBlankString(array.get(i), element)
-                        .filter(raw -> isGlob(raw, element))
-                        .ifPresent(globs::add);
-            }
-            return globs;
-        });
+        return array(node, key)
+                .map(array ->
+                        elements(array, key, (raw, element) -> Optional.of(raw).filter(glob -> isGlob(glob, element))));
     }
 
     // 해석은 domain 이 한다 — 여기서는 읽을 수 있는지만 보고 못 읽는 항목을 알린다(#186)
@@ -275,12 +269,7 @@ final class ConfigSections {
         String key = "monitor.items";
         return array(node, key).map(array -> {
             Set<MonitorItem> items = EnumSet.noneOf(MonitorItem.class);
-            for (int i = 0; i < array.size(); i++) {
-                String element = key + "[" + i + "]";
-                nonBlankString(array.get(i), element)
-                        .flatMap(raw -> constant(MonitorItem.class, raw, element))
-                        .ifPresent(items::add);
-            }
+            items.addAll(elements(array, key, (raw, element) -> constant(MonitorItem.class, raw, element)));
             return items;
         });
     }
@@ -288,16 +277,22 @@ final class ConfigSections {
     // 형식만 본다 — 아직 설치되지 않은 공급자 id 는 틀린 값이 아니다. 같은 id 는 처음 것만 남긴다
     private Optional<List<String>> providers(JsonNode node) {
         String key = "toolkit.providers";
-        return array(node, key).map(array -> {
-            Set<String> providers = new LinkedHashSet<>();
-            for (int i = 0; i < array.size(); i++) {
-                String element = key + "[" + i + "]";
-                nonBlankString(array.get(i), element)
-                        .filter(raw -> isProviderId(raw, element))
-                        .ifPresent(providers::add);
-            }
-            return List.copyOf(providers);
-        });
+        return array(node, key)
+                .map(array -> elements(
+                        array, key, (raw, element) -> Optional.of(raw).filter(id -> isProviderId(id, element))))
+                .map(ids -> List.copyOf(new LinkedHashSet<>(ids)));
+    }
+
+    // 원소마다 비어 있지 않은 문자열인지 보고 read 로 바꾼다. 못 쓰는 원소는 key[i] 로 경고하고 뺀다(파일 순서 유지)
+    private <T> List<T> elements(ArrayNode array, String key, BiFunction<String, String, Optional<T>> read) {
+        List<T> values = new ArrayList<>();
+        for (int i = 0; i < array.size(); i++) {
+            String element = key + "[" + i + "]";
+            nonBlankString(array.get(i), element)
+                    .flatMap(raw -> read.apply(raw, element))
+                    .ifPresent(values::add);
+        }
+        return values;
     }
 
     private boolean isProviderId(String raw, String key) {
