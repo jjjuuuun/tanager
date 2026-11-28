@@ -58,7 +58,7 @@ class DirectoryTreeConversationsTest {
                 .toList();
     }
 
-    private static List<TreeNode> onlyRootChildren(HistoryTree tree, ShellEnvironment env) {
+    private static List<TreeNode> rootChildren(HistoryTree tree, ShellEnvironment env) {
         return folder(env(tree, env).children().getFirst()).children();
     }
 
@@ -135,8 +135,7 @@ class DirectoryTreeConversationsTest {
             HistoryTree tree = project(history(A), conversations, ALL);
 
             // then
-            assertThat(labels(folder(env(tree, WSL_U).children().getFirst()).children()))
-                    .containsExactly("mid", "alpha", "zeta");
+            assertThat(labels(rootChildren(tree, WSL_U))).containsExactly("mid", "alpha", "zeta");
         }
     }
 
@@ -150,8 +149,7 @@ class DirectoryTreeConversationsTest {
             HistoryTree tree = project(history(A), seven(A), ALL);
 
             // then
-            List<TreeNode> children =
-                    folder(env(tree, WSL_U).children().getFirst()).children();
+            List<TreeNode> children = rootChildren(tree, WSL_U);
             assertThat(labels(children)).containsExactly("c7", "c6", "c5", "c4", "c3", "+2");
             assertThat(children.getLast()).isEqualTo(new TreeNode.MoreConversations(A, 2));
         }
@@ -163,8 +161,7 @@ class DirectoryTreeConversationsTest {
             HistoryTree tree = project(history(A), seven(A), query("", false, 5, Set.of(A)));
 
             // then
-            assertThat(labels(folder(env(tree, WSL_U).children().getFirst()).children()))
-                    .containsExactly("c7", "c6", "c5", "c4", "c3", "c2", "c1");
+            assertThat(labels(rootChildren(tree, WSL_U))).containsExactly("c7", "c6", "c5", "c4", "c3", "c2", "c1");
         }
 
         @Test
@@ -174,9 +171,7 @@ class DirectoryTreeConversationsTest {
             HistoryTree tree = project(history(A), seven(A), query("", false, 7, Set.of()));
 
             // then
-            assertThat(labels(folder(env(tree, WSL_U).children().getFirst()).children()))
-                    .hasSize(7)
-                    .doesNotContain("+0");
+            assertThat(labels(rootChildren(tree, WSL_U))).hasSize(7).doesNotContain("+0");
         }
 
         @Test
@@ -186,8 +181,7 @@ class DirectoryTreeConversationsTest {
             HistoryTree tree = project(history(A), seven(A), query("", false, 0, Set.of(A)));
 
             // then
-            assertThat(folder(env(tree, WSL_U).children().getFirst()).children())
-                    .isEmpty();
+            assertThat(rootChildren(tree, WSL_U)).isEmpty();
         }
 
         @Test
@@ -222,11 +216,8 @@ class DirectoryTreeConversationsTest {
             HistoryTree opened = project(history(visited), conversations, query("", false, 5, Set.of(cwd)));
 
             // then
-            assertThat(labels(folder(env(folded, WIN).children().getFirst()).children()))
-                    .containsExactly("w6", "w5", "w4", "w3", "w2", "+1");
-            assertThat(labels(folder(env(opened, WIN).children().getFirst()).children()))
-                    .hasSize(6)
-                    .doesNotContain("+1");
+            assertThat(labels(rootChildren(folded, WIN))).containsExactly("w6", "w5", "w4", "w3", "w2", "+1");
+            assertThat(labels(rootChildren(opened, WIN))).hasSize(6).doesNotContain("+1");
         }
 
         @Test
@@ -276,8 +267,7 @@ class DirectoryTreeConversationsTest {
 
             // then
             assertThat(conversationCount(hidden)).isZero();
-            assertThat(labels(folder(env(shown, WSL_U).children().getFirst()).children()))
-                    .containsExactly("c1");
+            assertThat(labels(rootChildren(shown, WSL_U))).containsExactly("c1");
         }
 
         @Test
@@ -361,8 +351,7 @@ class DirectoryTreeConversationsTest {
             HistoryTree tree = project(history(A), conversations, query("  login ", false, 5, Set.of()));
 
             // then
-            assertThat(labels(folder(env(tree, WSL_U).children().getFirst()).children()))
-                    .containsExactly("c1");
+            assertThat(labels(rootChildren(tree, WSL_U))).containsExactly("c1");
         }
 
         @Test
@@ -391,8 +380,7 @@ class DirectoryTreeConversationsTest {
             HistoryTree tree = project(history(A), conversations, query("로그인", false, 5, Set.of()));
 
             // then
-            assertThat(labels(folder(env(tree, WSL_U).children().getFirst()).children()))
-                    .containsExactly("m7", "m6", "m5", "m4", "m3", "+2");
+            assertThat(labels(rootChildren(tree, WSL_U))).containsExactly("m7", "m6", "m5", "m4", "m3", "+2");
         }
 
         @Test
@@ -422,8 +410,7 @@ class DirectoryTreeConversationsTest {
                     history(A), List.of(session(1, A)), conversations, query("로그인", false, 5, Set.of()));
 
             // then
-            assertThat(labels(folder(env(tree, WSL_U).children().getFirst()).children()))
-                    .containsExactly("#1", "c1");
+            assertThat(labels(rootChildren(tree, WSL_U))).containsExactly("#1", "c1");
         }
     }
 
@@ -443,9 +430,9 @@ class DirectoryTreeConversationsTest {
 
             // then
             assertThat(tree.pinned()).extracting(p -> p.entry().path()).containsExactly(A);
-            assertThat(labels(onlyRootChildren(tree, WSL_U))).containsExactly("c1");
+            assertThat(labels(rootChildren(tree, WSL_U))).containsExactly("c1");
             assertThat(searched.pinned()).isEmpty();
-            assertThat(labels(onlyRootChildren(searched, WSL_U))).containsExactly("c1");
+            assertThat(labels(rootChildren(searched, WSL_U))).containsExactly("c1");
         }
     }
 }

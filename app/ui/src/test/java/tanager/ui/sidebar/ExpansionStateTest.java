@@ -3,6 +3,7 @@ package tanager.ui.sidebar;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -147,7 +148,7 @@ class ExpansionStateTest {
         // given: /home/me/a 에 대화 7개(5개 + 더 보기)
         WorkHistory history = WorkHistory.empty(HistoryPolicy.DEFAULT).recordVisit(wsl("/home/me/a"), T0);
         history = history.recordVisit(wsl("/home/me/b"), T0);
-        List<PastConversation> conversations = new java.util.ArrayList<>();
+        List<PastConversation> conversations = new ArrayList<>();
         for (int i = 1; i <= 7; i++) {
             conversations.add(new PastConversation(
                     VisitSource.CLAUDE_CODE,

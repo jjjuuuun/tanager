@@ -27,14 +27,17 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import tanager.application.port.in.ManageHistoryUseCase;
 import tanager.application.port.in.QueryHistoryTreeUseCase;
+import tanager.domain.history.ConversationId;
 import tanager.domain.history.DirectoryTree;
 import tanager.domain.history.HistoryError;
 import tanager.domain.history.HistoryPolicy;
 import tanager.domain.history.HistoryTree;
+import tanager.domain.history.PastConversation;
 import tanager.domain.history.SessionLeaf;
 import tanager.domain.history.SessionStatus;
 import tanager.domain.history.ShellEnvironment;
 import tanager.domain.history.TreeQuery;
+import tanager.domain.history.VisitSource;
 import tanager.domain.history.VisitedDirectory;
 import tanager.domain.history.WorkHistory;
 import tanager.domain.history.WorkspacePath;
@@ -631,11 +634,11 @@ class SidebarPanelTest {
     void conversationNodesAreNotRendered() {
         // given
         WorkHistory h = history("/home/me/a", "/home/me/b");
-        List<tanager.domain.history.PastConversation> conversations = new ArrayList<>();
+        List<PastConversation> conversations = new ArrayList<>();
         for (int i = 1; i <= 7; i++) {
-            conversations.add(new tanager.domain.history.PastConversation(
-                    tanager.domain.history.VisitSource.CLAUDE_CODE,
-                    new tanager.domain.history.ConversationId("c" + i),
+            conversations.add(new PastConversation(
+                    VisitSource.CLAUDE_CODE,
+                    new ConversationId("c" + i),
                     wsl("/home/me/a"),
                     Optional.of("대화 " + i),
                     T0.plusSeconds(i)));
