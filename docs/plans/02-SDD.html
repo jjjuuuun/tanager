@@ -463,7 +463,7 @@ public record CpuWindow(List&lt;Double&gt; recent) {                            
 <ul class="small">
 <li><code>PtyLauncher</code> → <code>TerminalStream</code>(subscribe · write · resize · close · onExit)</li>
 <li><code>HistoryRepository</code> · <code>WorkspaceRepository</code> · <code>ConfigRepository</code></li>
-<li><code>PlatformModule</code> — <code>shells()</code> · <code>launchCommand(profile, WorkingDir, Integration)</code>(M3, ADR-0014) · <code>integration()</code>(M3) · <code>paths()</code>(M5, #53) · <code>dirs()</code> · <code>defaultKeymap()</code> · <code>fileOpener()</code> · <code>resources()</code> · <code>appearance()</code></li>
+<li><code>PlatformModule</code> — <code>shells()</code> · <code>launchCommand(profile, WorkingDir, Integration)</code>(M3, ADR-0014) · <code>integration()</code>(M3) · <code>paths()</code>(M5, #53) · <code>hostFiles()</code>(M6, #205 — <code>hostPath</code> · <code>home</code>) · <code>dirs()</code> · <code>defaultKeymap()</code> · <code>fileOpener()</code> · <code>resources()</code> · <code>appearance()</code></li>
 <li><code>ToolkitProvider</code> (여러 개)</li>
 <li><code>Clock</code> · <code>IdGenerator</code> · <code>UiDispatcher</code></li>
 </ul></div>
@@ -709,9 +709,10 @@ function global:prompt {
 <div class="tbl-wrap"><table>
 <tr><th>from</th><th>to</th><th>규칙</th></tr>
 <tr><td>WSL <code>/mnt/c/work/infra</code></td><td>Windows <code>C:\work\infra</code></td><td>automount 루트(기본 <code>/mnt/</code>) + 드라이브 문자. 루트는 탐지 시 배포판별로 <code>wslpath</code> 로 확인</td></tr>
-<tr><td>WSL <code>/home/me/proj</code></td><td>Windows <code>\\wsl.localhost\Ubuntu-24.04\home\me\proj</code></td><td>파일 열기·도구함 읽기용. 셸 cwd 로는 쓰지 않음(PowerShell 로 열기 메뉴 비활성)</td></tr>
+<tr><td>WSL <code>/home/me/proj</code></td><td>Windows <code>\\wsl.localhost\Ubuntu-24.04\home\me\proj</code></td><td>파일 열기·도구함 읽기용 — <code>PathTranslator</code> 가 아니라 <code>PlatformModule.hostFiles().hostPath</code>(#205). 셸 cwd 로는 쓰지 않음(PowerShell 로 열기 메뉴 비활성)</td></tr>
 <tr><td>Windows <code>C:\work</code></td><td>WSL <code>/mnt/c/work</code></td><td>역방향</td></tr>
 </table></div>
+<p><code>hostFiles()</code>(#205)는 앱(JVM)이 <code>java.nio</code> 로 읽을 경로를 준다: Windows 경로는 그대로, WSL 의 드라이브 마운트 아래는 <code>C:\…</code>(9P 를 거치지 않는다 — NFR-07), 그 밖은 <code>\\wsl.localhost\&lt;배포판&gt;\…</code>, Windows 이름으로 옮길 수 없는 이름(예약 글자 <code>&lt;&gt;:|?*</code> · 끝 점 · 끝 공백)은 없음. 순수 계산이라 VM 을 깨우지 않는다. 환경의 홈(FR-TK-04)은 Windows 가 <code>%USERPROFILE%</code>, WSL 은 배포판마다 처음 한 번 <code>wsl.exe -d &lt;배포판&gt; --exec printenv HOME</code>(<code>WSL_UTF8=1</code>, 5초)으로 묻고 성공한 값만 기억한다 — VM 을 깨우므로 부르는 쪽이 정한다(도구함은 WSL 폴더를 고를 때, 대화 가져오기는 그 배포판에 세션이 있을 때).</p>
 <p>트리에서는 같은 물리 폴더라도 환경별로 따로 보인다(사용자가 실제로 쓴 환경을 기록). 대신 우클릭 "다른 프로파일로 열기"가 변환을 이용한다.</p>
 <h3>10.4 macOS 확장 계획 (M7)</h3>
 <ul>
