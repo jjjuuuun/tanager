@@ -36,22 +36,30 @@ public final class ClaudeToolkitProvider implements ToolkitProvider {
      *       https://code.claude.com/docs/en/skills#resolve-skills-that-share-a-name
      *   <li>커맨드 — 커맨드는 스킬로 합쳐졌고 같은 위치 규칙을 따른다(문서에 커맨드끼리의 순서가 따로 없어 스킬 표를 쓴다):
      *       https://code.claude.com/docs/en/skills
+     *   <li>스킬 · 커맨드는 한 이름 공간이고 스킬이 이긴다 — "A skill and a file in {@code .claude/commands/}: The skill"(같은 절). 이름은
+     *       "ignores case, spacing, and invisible characters, and treats compatibility forms such as fullwidth letters and
+     *       dash variants as their plain equivalents" 로 비교한다(LOOSE, 2026-11-28 확인):
+     *       https://code.claude.com/docs/en/skills#when-a-synced-skill-name-matches-another-command
      *   <li>서브에이전트 — managed(1) &gt; 프로젝트(3) &gt; 사용자(4): https://code.claude.com/docs/en/sub-agents
      *   <li>메모리 · 규칙 — 모두 합쳐 적용되므로 표에 넣지 않는다(가리지 않는다): https://code.claude.com/docs/en/memory
      *   <li>MCP 서버 — "1. Local scope 2. Project scope 3. User scope", 같은 이름이면 위의 정의 하나만 쓴다:
      *       https://code.claude.com/docs/en/mcp#scope-hierarchy-and-precedence. 관리형 {@code managed-mcp.json} 은 배포되면 그
-     *       서버만 쓰므로(exclusive control) 맨 앞: https://code.claude.com/docs/en/managed-mcp
+     *       서버만 쓰므로 맨 앞이고 독점이다 — "Users can't add, modify, or use any other MCP servers"(2026-11-28 확인):
+     *       https://code.claude.com/docs/en/managed-mcp#exclusive-control-with-managed-mcp-json. 서버가 빈 파일(MCP 끄기)은
+     *       {@link McpReader} 가 알린다
      *   <li>훅 · 권한 — 범위를 넘어 합쳐 적용되므로 표에 넣지 않는다: "Hook entries merge across settings levels rather than
      *       replacing each other"(https://code.claude.com/docs/en/hooks#hook-locations), "deny rules from any scope are
      *       evaluated before allow rules"(https://code.claude.com/docs/en/permissions)
      * </ul>
      */
     static final ScopePrecedence PRECEDENCE = new ScopePrecedence(Map.of(
-            ToolkitKind.SKILL, List.of(ToolkitScope.MANAGED, ToolkitScope.USER, ToolkitScope.PROJECT),
-            ToolkitKind.COMMAND, List.of(ToolkitScope.MANAGED, ToolkitScope.USER, ToolkitScope.PROJECT),
-            ToolkitKind.SUBAGENT, List.of(ToolkitScope.MANAGED, ToolkitScope.PROJECT, ToolkitScope.USER),
-            ToolkitKind.MCP_SERVER,
-                    List.of(ToolkitScope.MANAGED, ToolkitScope.LOCAL, ToolkitScope.PROJECT, ToolkitScope.USER)));
+                    ToolkitKind.SKILL, List.of(ToolkitScope.MANAGED, ToolkitScope.USER, ToolkitScope.PROJECT),
+                    ToolkitKind.COMMAND, List.of(ToolkitScope.MANAGED, ToolkitScope.USER, ToolkitScope.PROJECT),
+                    ToolkitKind.SUBAGENT, List.of(ToolkitScope.MANAGED, ToolkitScope.PROJECT, ToolkitScope.USER),
+                    ToolkitKind.MCP_SERVER,
+                            List.of(ToolkitScope.MANAGED, ToolkitScope.LOCAL, ToolkitScope.PROJECT, ToolkitScope.USER)))
+            .sharing(ScopePrecedence.NameMatch.LOOSE, ToolkitKind.SKILL, ToolkitKind.COMMAND)
+            .exclusive(ToolkitKind.MCP_SERVER, ToolkitScope.MANAGED);
 
     private static final System.Logger LOG = System.getLogger(ClaudeToolkitProvider.class.getName());
 

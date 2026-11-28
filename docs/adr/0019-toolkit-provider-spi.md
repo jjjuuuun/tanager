@@ -2,7 +2,7 @@
 
 - 상태: 채택(#209, 2026-11-28)
 - 날짜: 2026-11-28
-- 관련: #209 · #204 · #205 · #206 · #208 · #220, FR-TK-01 · FR-TK-04 · FR-TK-07 · FR-TK-08 · FR-TK-10 · NFR-06 · NFR-07, SDD §7.4 · §8.1, ADR-0002 · 0013 · 0020
+- 관련: #209 · #204 · #205 · #206 · #208 · #220 · #247, FR-TK-01 · FR-TK-04 · FR-TK-07 · FR-TK-08 · FR-TK-10 · NFR-06 · NFR-07, SDD §7.4 · §8.1, ADR-0002 · 0013 · 0020
 
 ## 맥락
 도구함(FR-TK-01)은 폴더 · 세션을 고르면 그 경로에서 쓸 수 있는 AI 도구 구성을 보여 준다. 지금 읽을 도구는 Claude Code 하나지만 Codex · Gemini CLI 같은 도구를 어댑터만 더해 붙일 수 있어야 한다(FR-TK-10). 도메인 카탈로그(`ToolkitItem` · `ToolkitView` · `ToolkitWarning`, #204), 환경의 홈과 앱이 읽을 경로(`HostFiles`, #205), 설정 `toolkit.providers`(#206)는 이미 있다.
@@ -40,6 +40,12 @@
   - 도구함은 저장 상태가 아니므로 `StateActor` 를 거치지 않는다. 캐시 · 진행 중 조회는 출력 포트 조율용 가변 상태라 `HistorySaver` 와 같이 단일 monitor 로 지켜 application.service 에 둔다(java-style 8, ADR-0013).
   - 캐시: (경로, 공급자) → scan. `REUSE_IF_UNCHANGED` 면 `stamp()` 가 지난 지문과 같을 때 재사용, `FORCE` 면 늘 다시 읽는다. 지문 없는 scan · 실패는 캐시하지 않는다. 64 경로 LRU.
   - 같은 경로의 조회가 진행 중이면 새로 읽지 않고 그 결과를 같이 받는다(`FORCE` 여도).
+- **가려짐 규칙(#247)**: 어느 항목이 쓰이는지는 도구마다 다르므로 공급자가 도메인 `ScopePrecedence` 표로 넘기고, 판정은 도메인 `Shadowing` 순수 함수가 한다(공급자가 `shadowed` 를 직접 정하지 않는다 — 규칙이 한 곳에 있고 jqwik 속성으로 검사된다). 표는 세 가지를 담는다.
+  - `order` — 종류마다 이기는 범위 순서(이전과 같음).
+  - `nameSpaces` — 이름을 같이 쓰는 종류 묶음(앞 종류가 범위와 상관없이 이김)과 이름 비교 방식 `NameMatch`(`EXACT` · `LOOSE` — 대소문자 · 공백 · 서식 문자 무시, NFKC · 대시 변형을 기본형으로. 다른 문자 체계의 닮은 글자는 다름). 묶음에 없는 종류는 그 종류만의 `EXACT`.
+  - `exclusive` — 그 공급자 · 종류의 항목이 독점 범위에 하나라도 있으면 다른 범위의 같은 종류는 이름과 상관없이 가려진다.
+  - `Shadowing.mark` 는 여전히 입력의 `shadowed` 를 보지 않아 멱등이다. 가린 쪽은 `Shadowing.winnerOf(items, item, 표)` — 같은 이름 묶음의 승자, 없으면 독점 범위의 첫 항목. `ToolkitView.winnerOf(item)` 은 규칙 없는 표(같은 공급자 · 종류 · 이름, 대소문자 구분)로 찾는다 — 뷰는 여러 공급자를 담아 공급자의 표를 모른다.
+  - Claude(2026-11-28 문서 확인): 스킬 · 커맨드는 한 `LOOSE` 이름 공간에서 스킬 우선(skills "Resolve skills that share a name" · "When it compares names, Claude Code ignores case, spacing, and invisible characters…"), MCP 서버는 `MANAGED` 독점(managed-mcp "Exclusive control with managed-mcp.json"). 서버가 빈 `managed-mcp.json`(MCP 끄기)은 독점 범위에 항목이 없어 도메인 규칙이 걸리지 않으므로 어댑터(`McpReader` → `Collector.exclusive`)가 다른 범위의 MCP 서버를 가린다 — 이때 가린 항목은 없다(`winnerOf` empty). 관리형 설정의 `managedMcpServers`(독점 아님)는 아직 읽지 않는다 — 읽게 되면 `MANAGED` 범위라도 독점을 발동하지 않도록 범위나 출처로 구분해야 한다.
 - **조립**: `app/bootstrap` 이 `ServiceLoader.load(ToolkitProvider.class)` 로 모두 찾는다. 등록이 없으면 빈 view.
 
 ## 결과

@@ -1,35 +1,45 @@
 package tanager.domain.toolkit;
 
+import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
 
-/** 같은 이름이 여러 범위에 있을 때 어느 항목이 적용되는지 정한다(FR-TK-05). */
+/** 같은 이름이 여러 범위에 있을 때 어느 항목이 적용되는지 정한다(FR-TK-05). 규칙은 {@link ScopePrecedence}. */
 public final class Shadowing {
     private Shadowing() {}
 
-    private record Identity(ProviderId provider, ToolkitKind kind, String name) {}
+    /** 같은 이름의 묶음 — 공급자, 이름 공간(종류 목록), 비교용으로 접은 이름. */
+    private record Identity(ProviderId provider, List<ToolkitKind> space, String key) {}
+
+    /** 독점 규칙이 걸린 (공급자, 종류). */
+    private record Exclusion(ProviderId provider, ToolkitKind kind) {}
 
     /**
-     * 같은 공급자 · 종류 · 이름(대소문자 구분)끼리 우선순위가 가장 높은 하나만 남기고 나머지를 {@code shadowed=true} 로 한다. 표에 없는
-     * 종류는 모두 {@code shadowed=false}. 표에 없는 범위는 표의 범위보다 지고, 같은 순위끼리는 목록에서 먼저 나온 쪽이 이긴다 — 그래서 묶음마다
-     * 이기는 항목은 정확히 하나다. 입력의 {@code shadowed} 는 보지 않으므로 멱등이다. 목록 순서는 바꾸지 않는다.
+     * 같은 공급자 · 이름 공간 · 이름끼리 우선순위가 가장 높은 하나만 남기고 나머지를 {@code shadowed=true} 로 한다. 이름 공간 안에서는 앞 종류가
+     * 이기고, 같은 종류끼리는 범위 순서로 정한다. 독점 범위에 그 공급자 · 종류의 항목이 있으면 다른 범위의 같은 종류는 모두 가려진다. 표에 없는 종류는
+     * 모두 {@code shadowed=false}. 표에 없는 범위는 표의 범위보다 지고, 같은 순위끼리는 목록에서 먼저 나온 쪽이 이긴다 — 그래서 묶음마다 이기는 항목은
+     * 독점에 막히지 않은 항목이 있으면 정확히 하나, 없으면 없다. 입력의 {@code shadowed} 는 보지 않으므로 멱등이다. 목록 순서는 바꾸지 않는다.
      */
     public static List<ToolkitItem> mark(List<ToolkitItem> items, ScopePrecedence precedence) {
         Objects.requireNonNull(items, "items");
         Objects.requireNonNull(precedence, "precedence");
+        Set<Exclusion> exclusions = exclusions(items, precedence);
         Map<Identity, Integer> winners = new HashMap<>();
         for (int i = 0; i < items.size(); i++) {
             ToolkitItem item = items.get(i);
-            List<ToolkitScope> order = precedence.order().get(item.kind());
-            if (order == null) {
+            if (!precedence.order().containsKey(item.kind()) || excluded(item, exclusions, precedence)) {
                 continue;
             }
-            Identity identity = identityOf(item);
+            Identity identity = identityOf(item, precedence);
             Integer best = winners.get(identity);
-            if (best == null || rank(order, item) < rank(order, items.get(best))) {
+            if (best == null || beats(item, items.get(best), precedence)) {
                 winners.put(identity, i);
             }
         }
@@ -37,23 +47,102 @@ public final class Shadowing {
         for (int i = 0; i < items.size(); i++) {
             ToolkitItem item = items.get(i);
             boolean listed = precedence.order().containsKey(item.kind());
-            boolean shadowed = listed && winners.get(identityOf(item)) != i;
+            Integer winner = listed ? winners.get(identityOf(item, precedence)) : null;
+            boolean shadowed = listed && (winner == null || winner != i);
             marked.add(item.withShadowed(shadowed));
         }
         return List.copyOf(marked);
     }
 
-    /** {@code candidate} 가 {@code shadowed} 와 같은 공급자 · 종류 · 이름인가. */
-    static boolean sameIdentity(ToolkitItem candidate, ToolkitItem shadowed) {
-        return identityOf(candidate).equals(identityOf(shadowed));
+    /**
+     * 가려진 항목을 가린 항목. {@code marked} 는 같은 {@code precedence} 로 {@link #mark} 한 목록이다. 같은 이름 묶음에서 가려지지 않은 것, 없으면
+     * (독점에 막힌 항목이면) 독점 범위의 같은 공급자 · 종류 중 가려지지 않은 첫 항목. 가려지지 않은 항목이면 empty.
+     */
+    public static Optional<ToolkitItem> winnerOf(
+            List<ToolkitItem> marked, ToolkitItem shadowed, ScopePrecedence precedence) {
+        Objects.requireNonNull(marked, "marked");
+        Objects.requireNonNull(shadowed, "shadowed");
+        Objects.requireNonNull(precedence, "precedence");
+        if (!shadowed.shadowed()) {
+            return Optional.empty();
+        }
+        Identity identity = identityOf(shadowed, precedence);
+        for (ToolkitItem item : marked) {
+            if (!item.shadowed() && identityOf(item, precedence).equals(identity)) {
+                return Optional.of(item);
+            }
+        }
+        if (!excluded(shadowed, exclusions(marked, precedence), precedence)) {
+            return Optional.empty();
+        }
+        for (ToolkitItem item : marked) {
+            if (!item.shadowed()
+                    && item.provider().equals(shadowed.provider())
+                    && item.kind() == shadowed.kind()
+                    && ownsExclusively(item, precedence)) {
+                return Optional.of(item);
+            }
+        }
+        return Optional.empty();
     }
 
-    private static Identity identityOf(ToolkitItem item) {
-        return new Identity(item.provider(), item.kind(), item.name());
+    private static Set<Exclusion> exclusions(List<ToolkitItem> items, ScopePrecedence precedence) {
+        Set<Exclusion> active = new HashSet<>();
+        for (ToolkitItem item : items) {
+            if (ownsExclusively(item, precedence)) {
+                active.add(new Exclusion(item.provider(), item.kind()));
+            }
+        }
+        return active;
+    }
+
+    private static boolean excluded(ToolkitItem item, Set<Exclusion> exclusions, ScopePrecedence precedence) {
+        return exclusions.contains(new Exclusion(item.provider(), item.kind())) && !ownsExclusively(item, precedence);
+    }
+
+    /** 이 항목이 그 종류를 독점하는 범위에 있는가. */
+    private static boolean ownsExclusively(ToolkitItem item, ScopePrecedence precedence) {
+        return precedence.exclusiveScope(item.kind()).map(item.scope()::equals).orElse(false);
+    }
+
+    private static Identity identityOf(ToolkitItem item, ScopePrecedence precedence) {
+        ScopePrecedence.NameSpace space = precedence.nameSpaceOf(item.kind());
+        String key = switch (space.match()) {
+            case EXACT -> item.name();
+            case LOOSE -> loose(item.name());
+        };
+        return new Identity(item.provider(), space.kinds(), key);
+    }
+
+    /** {@code candidate} 가 지금 이기는 {@code best} 를 이기는가 — 이름 공간의 종류 순서, 다음 범위 순서. 같으면 먼저 나온 쪽({@code best}). */
+    private static boolean beats(ToolkitItem candidate, ToolkitItem best, ScopePrecedence precedence) {
+        List<ToolkitKind> kinds = precedence.nameSpaceOf(candidate.kind()).kinds();
+        int byKind = Integer.compare(kinds.indexOf(candidate.kind()), kinds.indexOf(best.kind()));
+        if (byKind != 0) {
+            return byKind < 0;
+        }
+        List<ToolkitScope> order = precedence.order().get(candidate.kind());
+        return rank(order, candidate) < rank(order, best);
     }
 
     private static int rank(List<ToolkitScope> order, ToolkitItem item) {
         int index = order.indexOf(item.scope());
         return index < 0 ? order.size() : index;
+    }
+
+    /** {@link ScopePrecedence.NameMatch#LOOSE} 비교용 이름. */
+    private static String loose(String name) {
+        String compatible = Normalizer.normalize(name, Normalizer.Form.NFKC);
+        StringBuilder out = new StringBuilder(compatible.length());
+        for (int i = 0; i < compatible.length(); ) {
+            int cp = compatible.codePointAt(i);
+            i += Character.charCount(cp);
+            int type = Character.getType(cp);
+            if (Character.isWhitespace(cp) || Character.isSpaceChar(cp) || type == Character.FORMAT) {
+                continue;
+            }
+            out.appendCodePoint(type == Character.DASH_PUNCTUATION ? '-' : cp);
+        }
+        return out.toString().toUpperCase(Locale.ROOT).toLowerCase(Locale.ROOT);
     }
 }
