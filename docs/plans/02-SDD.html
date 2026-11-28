@@ -415,7 +415,7 @@ public record CpuWindow(List&lt;Double&gt; recent) {                            
 <tr><th>탭</th><th>이 프로젝트 (PROJECT)</th><th>로컬 (LOCAL, 개인·커밋 안 함)</th><th>전체 공통 (USER)</th></tr>
 <tr><td>스킬</td><td><code>my-app/.claude/skills/*/SKILL.md</code><br><code>my-app/.claude/commands/**/*.md</code></td><td>—</td><td><code>~/.claude/skills/</code><br><code>~/.claude/commands/</code></td></tr>
 <tr><td>서브에이전트</td><td><code>my-app/.claude/agents/**/*.md</code></td><td>—</td><td><code>~/.claude/agents/</code></td></tr>
-<tr><td>메모리</td><td><code>my-app/CLAUDE.md</code> 또는 <code>my-app/.claude/CLAUDE.md</code><br><code>my-app/.claude/rules/**/*.md</code><br>상위 디렉터리의 <code>CLAUDE.md</code> (PARENT)</td><td><code>my-app/CLAUDE.local.md</code></td><td><code>~/.claude/CLAUDE.md</code><br><code>~/.claude/rules/</code></td></tr>
+<tr><td>메모리</td><td><code>my-app/CLAUDE.md</code> 또는 <code>my-app/.claude/CLAUDE.md</code><br><code>my-app/.claude/rules/**/*.md</code><br>상위 디렉터리의 <code>CLAUDE.md</code> · <code>CLAUDE.local.md</code> (PARENT, 부모부터 최대 32단계)</td><td><code>my-app/CLAUDE.local.md</code></td><td><code>~/.claude/CLAUDE.md</code><br><code>~/.claude/rules/</code></td></tr>
 <tr><td>MCP 서버</td><td><code>my-app/.mcp.json</code> 의 <code>mcpServers</code></td><td><code>~/.claude.json</code> 의 <code>projects["&lt;절대경로&gt;"].mcpServers</code></td><td><code>~/.claude.json</code> 의 <code>mcpServers</code></td></tr>
 <tr><td>훅 · 권한</td><td><code>my-app/.claude/settings.json</code></td><td><code>my-app/.claude/settings.local.json</code></td><td><code>~/.claude/settings.json</code></td></tr>
 </table></div>
@@ -432,6 +432,7 @@ public record CpuWindow(List&lt;Double&gt; recent) {                            
 </table></div>
 <ul>
 <li><b>가려짐</b>: 같은 종류·같은 이름이 여러 범위에 있으면 우선순위가 낮은 쪽을 <code>shadowed=true</code> 로 흐리게 표시한다.</li>
+<li><b>메모리 · rules</b>(#211): 관리형 <code>CLAUDE.md</code>(WSL <code>/etc/claude-code/</code>, Windows <code>C:\Program Files\ClaudeCode\</code>)는 MANAGED 다. 메모리 · 규칙은 모두 합쳐 적용되므로 가리지 않는다. 본문은 앞 1MB 만 읽어 줄 수(넘으면 <code>&gt;N</code>) · 첫 제목(80자) · <code>@경로</code> import 수를 보인다. <b>import 는 따라가지 않는다</b>(v1.0 범위 밖). 규칙 프런트매터가 깨지면 Claude Code 처럼 <code>paths</code> 없는 규칙(항상 로드)으로 보이고 경고를 함께 단다. <code>AGENTS.md</code> · 자동 메모리(<code>MEMORY.md</code>)는 v1.0 범위 밖이다.</li>
 <li><b>오류 허용</b>: 파싱 실패한 파일은 항목 대신 <code>ToolkitWarning</code>(파일, 이유)으로 보여 주고 나머지는 계속 보인다.</li>
 <li><b>읽기 전용</b>: 어댑터는 파일을 쓰지 않는다. "파일 열기"는 OS 기본 편집기에 넘길 뿐이다(Windows: <code>Desktop.open</code>, WSL 파일은 <code>\\wsl.localhost</code> 경로로).</li>
 <li><b>터미널에 입력</b>: 포커스 창의 <code>TerminalStream.write</code> 로 <code>/이름 </code> 을 보낸다. Enter 는 보내지 않는다. 포커스 창이 다른 환경이면 경고만 한다.</li>

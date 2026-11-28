@@ -17,12 +17,15 @@ import tanager.domain.history.WorkspacePath;
 
 /**
  * 테스트용 가짜 홈 · 프로젝트. {@code src/test/resources/claude/<이름>/} 을 임시 폴더로 복사하며 {@code dot-claude} 를 {@code .claude}
- * 로 바꾼다 — 저장소 안에 진짜 {@code .claude/} 를 두면 이 저장소에서 도는 Claude Code 가 픽스처 스킬을 읽는다. 내용은 모두 합성이다.
+ * 로, {@code <이름>.fixture} 를 {@code <이름>} 으로 바꾼다 — 저장소 안에 진짜 {@code .claude/} · {@code CLAUDE.md} 를 두면 이 저장소에서
+ * 도는 Claude Code 가 픽스처 스킬 · 메모리를 읽는다. 내용은 모두 합성이다.
  *
  * <p>환경 경로 → 앱이 읽을 경로 변환({@link #host})은 가장 긴 접두 경로를 찾아 나머지 이름을 임시 폴더 아래로 잇는다({@code
  * \\wsl.localhost} 변환과 같은 모양).
  */
 final class ClaudeFixture {
+
+    private static final String FIXTURE_SUFFIX = ".fixture";
 
     private record Mount(WorkspacePath env, Path host) {}
 
@@ -88,13 +91,20 @@ final class ClaudeFixture {
         }
     }
 
+    private static String fixtureName(String name) {
+        if (name.equals("dot-claude")) {
+            return ".claude";
+        }
+        return name.endsWith(FIXTURE_SUFFIX) ? name.substring(0, name.length() - FIXTURE_SUFFIX.length()) : name;
+    }
+
     private static void copyTree(Path from, Path to) {
         try (Stream<Path> walk = Files.walk(from)) {
             for (Path source : walk.sorted(Comparator.naturalOrder()).toList()) {
                 Path target = to;
                 for (Path name : from.relativize(source)) {
                     String text = name.toString();
-                    target = target.resolve(text.equals("dot-claude") ? ".claude" : text);
+                    target = target.resolve(fixtureName(text));
                 }
                 if (Files.isDirectory(source)) {
                     Files.createDirectories(target);
