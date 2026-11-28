@@ -5,6 +5,7 @@ import static java.awt.event.InputEvent.SHIFT_DOWN_MASK;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
+import com.jediterm.terminal.model.TerminalTextBuffer;
 import com.jediterm.terminal.ui.TerminalPanel;
 import java.awt.event.KeyEvent;
 import java.io.ByteArrayOutputStream;
@@ -40,6 +41,9 @@ import tanager.ui.theme.SoftDarkLaf;
 class ShortcutKeysTerminalTest {
     private static final Duration WAIT = Duration.ofSeconds(2);
     private static final byte[] MARKER = {'q'};
+    private static final String READY = "ready";
+    // 첫 위젯은 글꼴 · 클래스 적재로 늦게 뜬다. 준비를 기다릴 뿐 판정이 아니다
+    private static final Duration CONNECT_WAIT = Duration.ofSeconds(10);
 
     private final ManualTime time = new ManualTime();
     private final List<KeyAction> ran = new ArrayList<>();
@@ -64,6 +68,15 @@ class ShortcutKeysTerminalTest {
             return created;
         });
         stream.start();
+        awaitConnected();
+    }
+
+    // start() 는 에뮬레이터 작업을 다른 스레드에 맡기고 바로 돌아온다. 그 작업이 터미널 키 처리기를 붙이기 전의 키는 JediTerm 의
+    // PreConnectHandler 가 버린다 — 그 스레드가 처리기를 붙인 뒤에야 셸 출력을 읽으므로, 출력이 화면에 보이면 키가 셸로 간다
+    private void awaitConnected() {
+        stream.emit(READY);
+        TerminalTextBuffer buffer = widget.getTerminalTextBuffer();
+        await().atMost(CONNECT_WAIT).until(() -> buffer.getLine(0).getText().startsWith(READY));
     }
 
     @AfterEach
