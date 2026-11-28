@@ -188,22 +188,21 @@ final class ArchitectureRules {
      * 모듈 하나로 붙고, 그 밖의 계층이 공급자를 몰래 만들어 등록하지 않게 한다.
      */
     static ArchRule toolkitProvidersLiveInToolkitAdapters(String base) {
-        return classes()
-                .that()
-                .implement(ToolkitProvider.class)
-                .should()
-                .resideInAPackage(base + ".adapter.toolkit..")
-                .because("새 AI 도구 = app/adapter/toolkit/<도구> 모듈 + ToolkitProvider 등록(architecture.md)");
+        return implementationsLiveInToolkitAdapters(base, ToolkitProvider.class);
     }
 
     /** 대화 기록 공급자({@link ConversationSource}) 구현도 toolkit 어댑터에만 둔다(ADR-0020). 이유는 {@link ToolkitProvider} 와 같다. */
     static ArchRule conversationSourcesLiveInToolkitAdapters(String base) {
+        return implementationsLiveInToolkitAdapters(base, ConversationSource.class);
+    }
+
+    private static ArchRule implementationsLiveInToolkitAdapters(String base, Class<?> spi) {
         return classes()
                 .that()
-                .implement(ConversationSource.class)
+                .implement(spi)
                 .should()
                 .resideInAPackage(base + ".adapter.toolkit..")
-                .because("새 AI 도구 = app/adapter/toolkit/<도구> 모듈 + ConversationSource 등록(architecture.md)");
+                .because("새 AI 도구 = app/adapter/toolkit/<도구> 모듈 + " + spi.getSimpleName() + " 등록(architecture.md)");
     }
 
     /**
@@ -226,10 +225,12 @@ final class ArchitectureRules {
                 .because("Tanager 는 네트워크 통신을 하지 않는다 — 사용자 경로 · 설정이 밖으로 나가지 않게(NFR-06)");
     }
 
+    /** {@code URL} 값은 두되 연결을 여는 메서드는 막는다. */
+    private static final Set<String> URL_OPENERS = Set.of("openConnection", "openStream", "getContent");
+
     private static final DescribedPredicate<JavaAccess<?>> OPENS_URL = DescribedPredicate.describe(
             "open a URL connection",
-            access -> access.getTargetOwner().isEquivalentTo(URL.class)
-                    && Set.of("openConnection", "openStream", "getContent").contains(access.getName()));
+            access -> access.getTargetOwner().isEquivalentTo(URL.class) && URL_OPENERS.contains(access.getName()));
 
     /**
      * toolkit 어댑터는 파일을 쓰거나 지우지 않는다(FR-TK-07, ADR-0019) — 사용자 AI 도구 설정은 읽기만 한다. {@code FileChannel} 은 여는 옵션을
@@ -247,73 +248,8 @@ final class ArchitectureRules {
                         .or(assignableTo(AsynchronousFileChannel.class))
                         .or(assignableTo(FileSystemProvider.class)))
                 .orShould()
-                .accessTargetWhere(WRITES_FILES)
+                .accessTargetWhere(FileWrites.PREDICATE)
                 .because("toolkit 어댑터는 사용자 설정 파일을 절대 쓰지 않는다(architecture.md, FR-TK-07)");
-    }
-
-    private static final Set<String> FILES_MUTATORS = Set.of(
-            "write",
-            "writeString",
-            "newOutputStream",
-            "newBufferedWriter",
-            "newByteChannel",
-            "createFile",
-            "createDirectory",
-            "createDirectories",
-            "createTempFile",
-            "createTempDirectory",
-            "createLink",
-            "createSymbolicLink",
-            "delete",
-            "deleteIfExists",
-            "move",
-            "copy",
-            "setLastModifiedTime",
-            "setAttribute",
-            "setOwner",
-            "setPosixFilePermissions");
-    private static final Set<String> FILE_MUTATORS = Set.of(
-            "createNewFile",
-            "createTempFile",
-            "delete",
-            "deleteOnExit",
-            "mkdir",
-            "mkdirs",
-            "renameTo",
-            "setExecutable",
-            "setLastModified",
-            "setReadOnly",
-            "setReadable",
-            "setWritable");
-    /** 첫 인수가 파일 이름 · {@code File} 이면 파일을 만든다. {@code Writer} · {@code OutputStream} 을 받는 생성자는 허용한다. */
-    private static final Set<String> FILE_OPENING_WRITERS =
-            Set.of("java.io.PrintWriter", "java.io.PrintStream", "java.util.Formatter");
-
-    private static final DescribedPredicate<JavaAccess<?>> WRITES_FILES =
-            DescribedPredicate.describe("write, move or delete files", ArchitectureRules::writesFiles);
-
-    private static boolean writesFiles(JavaAccess<?> access) {
-        JavaClass owner = access.getTargetOwner();
-        String name = access.getName();
-        List<JavaClass> params = access.getTarget() instanceof AccessTarget.CodeUnitAccessTarget target
-                ? target.getRawParameterTypes()
-                : List.of();
-        if (owner.isEquivalentTo(Files.class)) {
-            return FILES_MUTATORS.contains(name);
-        }
-        if (owner.isEquivalentTo(File.class)) {
-            return FILE_MUTATORS.contains(name);
-        }
-        if (FILE_OPENING_WRITERS.contains(owner.getName()) && name.equals("<init>")) {
-            return !params.isEmpty()
-                    && (params.getFirst().isEquivalentTo(String.class)
-                            || params.getFirst().isEquivalentTo(File.class));
-        }
-        if (owner.getPackageName().startsWith("tools.jackson")
-                && (name.startsWith("writeValue") || name.equals("createGenerator"))) {
-            return params.stream().anyMatch(p -> p.isEquivalentTo(File.class) || p.isEquivalentTo(Path.class));
-        }
-        return false;
     }
 
     /** domain.toolkit 은 domain 중 history · shared 만 안다(SDD §12) — 세션 · 레이아웃 · 작업 공간 · 모니터와 섞이지 않는다. */
@@ -407,5 +343,78 @@ final class ArchitectureRules {
                     .orElse(false);
             return isStatic || DERIVING_METHODS.contains(name) || KNOWN_FACTORIES.contains(name);
         }
+    }
+
+    /**
+     * 파일을 쓰거나 만들거나 지우거나 옮기는 호출 · 참조. 생성자 · 메서드 이름과 인수 타입만 본다 — 쓰기 스트림 타입 의존은
+     * {@link #toolkitAdaptersDoNotWriteFiles} 가 따로 막는다.
+     */
+    private static final class FileWrites {
+        private static final Set<String> FILES_MUTATORS = Set.of(
+                "write",
+                "writeString",
+                "newOutputStream",
+                "newBufferedWriter",
+                "newByteChannel",
+                "createFile",
+                "createDirectory",
+                "createDirectories",
+                "createTempFile",
+                "createTempDirectory",
+                "createLink",
+                "createSymbolicLink",
+                "delete",
+                "deleteIfExists",
+                "move",
+                "copy",
+                "setLastModifiedTime",
+                "setAttribute",
+                "setOwner",
+                "setPosixFilePermissions");
+        private static final Set<String> FILE_MUTATORS = Set.of(
+                "createNewFile",
+                "createTempFile",
+                "delete",
+                "deleteOnExit",
+                "mkdir",
+                "mkdirs",
+                "renameTo",
+                "setExecutable",
+                "setLastModified",
+                "setReadOnly",
+                "setReadable",
+                "setWritable");
+        /** 첫 인수가 파일 이름 · {@code File} 이면 파일을 만든다. {@code Writer} · {@code OutputStream} 을 받는 생성자는 허용한다. */
+        private static final Set<String> FILE_OPENING_WRITERS =
+                Set.of("java.io.PrintWriter", "java.io.PrintStream", "java.util.Formatter");
+
+        private static boolean writes(JavaAccess<?> access) {
+            JavaClass owner = access.getTargetOwner();
+            String name = access.getName();
+            List<JavaClass> params = access.getTarget() instanceof AccessTarget.CodeUnitAccessTarget target
+                    ? target.getRawParameterTypes()
+                    : List.of();
+            if (owner.isEquivalentTo(Files.class)) {
+                return FILES_MUTATORS.contains(name);
+            }
+            if (owner.isEquivalentTo(File.class)) {
+                return FILE_MUTATORS.contains(name);
+            }
+            if (FILE_OPENING_WRITERS.contains(owner.getName()) && name.equals("<init>")) {
+                return !params.isEmpty()
+                        && (params.getFirst().isEquivalentTo(String.class)
+                                || params.getFirst().isEquivalentTo(File.class));
+            }
+            if (owner.getPackageName().startsWith("tools.jackson")
+                    && (name.startsWith("writeValue") || name.equals("createGenerator"))) {
+                return params.stream().anyMatch(p -> p.isEquivalentTo(File.class) || p.isEquivalentTo(Path.class));
+            }
+            return false;
+        }
+
+        static final DescribedPredicate<JavaAccess<?>> PREDICATE =
+                DescribedPredicate.describe("write, move or delete files", FileWrites::writes);
+
+        private FileWrites() {}
     }
 }
