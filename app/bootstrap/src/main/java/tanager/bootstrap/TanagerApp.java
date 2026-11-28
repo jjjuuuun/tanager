@@ -9,6 +9,7 @@ import tanager.application.platform.PlatformSelection;
 import tanager.application.platform.PlatformSelectionError;
 import tanager.application.port.in.AppEvents;
 import tanager.application.port.out.PlatformModule;
+import tanager.application.port.out.PtyLauncher;
 import tanager.application.state.UiAppEvents;
 import tanager.domain.shared.Result;
 import tanager.ui.PaneCommands;
@@ -20,10 +21,15 @@ import tanager.ui.SwingUiDispatcher;
  */
 public final class TanagerApp {
     private static final System.Logger LOG = System.getLogger(TanagerApp.class.getName());
+    // 숨은 인수: 첫 창 · 첫 셸 첫 바이트까지 간 뒤 스스로 끝낸다 — AOT 캐시를 만드는 훈련 실행(#221)
+    static final String STARTUP_TRAINING = "--startup-training";
 
     private TanagerApp() {}
 
     public static void main(String[] args) {
+        StartupClock startup = StartupClock.sinceProcessStart();
+        startup.mark(StartupPhase.MAIN);
+        boolean training = List.of(args).contains(STARTUP_TRAINING);
         OperatingSystem os = currentOs();
         List<PlatformModule> candidates = ServiceLoader.load(PlatformModule.class).stream()
                 .map(ServiceLoader.Provider::get)
@@ -41,10 +47,18 @@ public final class TanagerApp {
             case Result.Ok<PlatformModule, PlatformSelectionError>(PlatformModule platform) -> {
                 LOG.log(System.Logger.Level.INFO, "플랫폼: {0} ({1})", platform.id(), os.describe());
                 SwingUiDispatcher ui = new SwingUiDispatcher();
-                Assembly assembly = Assembly.assemble(platform, new Pty4jLauncher(), ui);
+                PtyLauncher shells =
+                        new FirstByteLauncher(new Pty4jLauncher(), () -> startup.mark(StartupPhase.FIRST_BYTE));
+                Assembly assembly = Assembly.assemble(platform, shells, ui, startup::mark);
                 AppEvents events = new UiAppEvents(assembly.state(), ui);
                 // 외부 명령(Windows: reg.exe)을 쓸 수 있어 EDT 가 아닌 여기서 한 번 읽는다. 그 뒤의 변경은 ApplyThemeUseCase 가 알린다
                 assembly.readAppearance();
+                StartupWindow window = StartupWindow.watch(startup);
+                startup.reported().thenAccept(line -> LOG.log(System.Logger.Level.INFO, line));
+                if (training) {
+                    LOG.log(System.Logger.Level.INFO, "시작 훈련 실행 — 첫 창 · 첫 셸 출력 뒤 끝낸다");
+                    startup.reported().thenRun(window::close);
+                }
                 SwingUi.showMainWindow(
                         assembly.sessions(),
                         assembly.profiles(),
