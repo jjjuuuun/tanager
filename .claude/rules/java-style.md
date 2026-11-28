@@ -21,7 +21,7 @@ paths:
 7. 클래스는 기본 `final`. 패키지 전용(package-private)을 기본 가시성으로.
 8. 가변 상태는 adapter 와 `StateActor` 안에만. `static` 가변 필드 금지.
    - 예외: 스트림 구독 콜백 안의 스레드 한정 파서 상태는 application 에 둘 수 있다(ADR-0015).
-   - 예외: 출력 포트 일정 조율용 가변 상태는 단일 monitor 로 지켜 application.service 에 둘 수 있다(`HistorySaver`, ADR-0013).
+   - 예외: 출력 포트 일정 조율용 가변 상태는 단일 monitor 로 지켜 application.service 에 둘 수 있다(`HistorySaver` · `ThrottledSaver` · `MissingPathScanner` · `StartupCommands`, ADR-0013).
 9. 스트림은 읽기 쉬울 때만. 3단계 넘는 체인·부수효과 있는 `forEach` 대신 for 문.
 10. 이름: 유스케이스 `XxxUseCase`(port.in), 출력 포트 `XxxPort` 대신 역할명(`HistoryRepository`, `PtyLauncher`), 구현체는 기술명 접두(`JsonHistoryRepository`, `Pty4jLauncher`).
 11. 주석은 "왜"만. 공개 포트·도메인 타입에는 Javadoc 한 줄 이상.

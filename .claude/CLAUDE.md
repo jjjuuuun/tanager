@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - 스택: Java 25(최신 LTS, preview 금지) · Gradle 9.9 · Swing + FlatLaf · JediTerm(에뮬레이터) · pty4j(ConPTY/Unix PTY) · Jackson · jpackage
 - 설계 문서: `docs/plans/01-프로젝트-구성-설계.html`(개발 체계), `docs/plans/02-SDD.html`(요구사항·설계). 결정 기록: `docs/adr/`
-- 상태: **v0.3.0 릴리스**(2026-11-27, M3 이력 · 트리) — 세 셸의 셸 통합 · cwd 추적 → `state.json` 이력, 사이드바 폴더 · 세션 트리 · 검색(Ctrl+Shift+F) · 우클릭 메뉴, 머리줄 경로, 마지막 경로에서 재시작. 다음은 **M4 분할(v0.4.0)** — 분할 · 크기 · 포커스 · 줌 · 이동과 트리에서 열기(#91). 이전: v0.2.0(2026-11-26, M2 단일 터미널), v0.1.0(2026-11-25, M1 스캐폴딩 · MIT). M0 결과는 ADR-0001 · 0003.
+- 상태: **v0.4.0 릴리스**(2026-11-28, M4 분할) — 분할 · 크기 · 포커스 · 줌 · 이동과 트리에서 열기. **M5 복원 · 탭 · 설정(v0.5.0)** 은 미릴리스 — 구현은 병합됐고 제목 표시줄 탭 막대(#181) · 로고(#114) · 시안(#175)만 사용자 시안 선택 대기. **M6 도구함** 진행 중 — Claude 공급자(스킬 · 커맨드 · 서브에이전트 · 메모리 · rules · MCP(마스킹) · 훅 · 권한), Claude 대화 가져오기 · 이어서 하기, prefix 모드, 시작 AOT 캐시 병합. 도구함 패널 · 사이드바 UI 는 시안(#203) 대기. 이전: v0.3.1 · v0.3.0(2026-11-27, M3 이력 · 트리), v0.2.0(2026-11-26, M2 단일 터미널), v0.1.0(2026-11-25, M1 스캐폴딩 · MIT). M0 결과는 ADR-0001 · 0003.
 
 ## 명령 (M1 스캐폴딩 이후 유효)
 
@@ -52,7 +52,7 @@ git config core.autocrlf false        # 줄바꿈은 .gitattributes 가 결정
 `state.json`(스키마 버전 포함)에 이력 + 탭/레이아웃 + 창(pane)별 프로파일·마지막 cwd + 창 위치를 저장한다. 시작 시 레이아웃을 그대로 만들고 각 창을 마지막 cwd 에서 새 셸로 띄운다(프로세스 자체는 복원하지 않는다). 경로가 사라졌으면 홈에서 띄우고 알림.
 
 **도구함(toolkit)**
-사이드바에서 폴더·세션을 선택 → `QueryToolkitUseCase(WorkspacePath)` → 등록된 `ToolkitProvider` 들(지금은 `app/adapter/toolkit/claude` 하나)이 그 경로의 프로젝트 범위(경로와 상위 디렉터리의 `.claude/`, `CLAUDE.md`, `.mcp.json`)와 해당 **환경의 홈**(WSL 세션이면 `\\wsl.localhost\<배포판>\home\<user>\.claude`, Windows 면 `%USERPROFILE%\.claude`)의 사용자 범위를 읽어 `ToolkitItem` 목록을 돌려준다. 읽기 전용이며 비밀값은 마스킹. 경로 변환은 `PlatformModule.paths()` 를 쓴다.
+사이드바에서 폴더·세션을 선택 → `QueryToolkitUseCase(WorkspacePath)` → `ServiceLoader` 로 찾은 `ToolkitProvider` 들(application `port.out` 의 SPI, ADR-0019 — 지금은 `app/adapter/toolkit/claude` 하나)이 그 경로의 프로젝트 범위(경로와 상위 디렉터리의 `.claude/`, `CLAUDE.md`, `.mcp.json`)와 해당 **환경의 홈**(WSL 세션이면 `\\wsl.localhost\<배포판>\home\<user>\.claude`, Windows 면 `%USERPROFILE%\.claude`)의 사용자 범위를 읽어 `ToolkitItem` 목록을 돌려준다. 읽기 전용이며 비밀값은 마스킹. 앱이 읽을 경로와 환경의 홈은 `PlatformModule.hostFiles()`(`hostPath` · `home`, #205)가 준다(`paths()` 는 셸 cwd 변환). Claude 대화 기록은 별도 SPI `ConversationSource`(ADR-0020)가 읽는다.
 
 **플랫폼 확장**
 OS 차이(셸 탐지, 경로 변환, 앱 디렉터리, 셸 통합, 기동 명령, 리소스 수집, 다크/라이트·애니메이션 설정 감지)는 전부 application 의 `PlatformModule` 포트 뒤에 있다. `app/bootstrap` 이 `ServiceLoader` 로 현재 OS 구현 하나를 고른다. macOS 추가 시 다른 모듈을 바꾸게 된다면 설계 결함이다.
