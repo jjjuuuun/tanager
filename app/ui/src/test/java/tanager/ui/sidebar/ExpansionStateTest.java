@@ -8,13 +8,16 @@ import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import tanager.domain.history.ConversationId;
 import tanager.domain.history.DirectoryTree;
 import tanager.domain.history.HistoryPolicy;
 import tanager.domain.history.HistoryTree;
+import tanager.domain.history.PastConversation;
 import tanager.domain.history.SessionLeaf;
 import tanager.domain.history.SessionStatus;
 import tanager.domain.history.ShellEnvironment;
 import tanager.domain.history.TreeQuery;
+import tanager.domain.history.VisitSource;
 import tanager.domain.history.WorkHistory;
 import tanager.domain.history.WorkspacePath;
 import tanager.domain.shared.PaneId;
@@ -136,5 +139,31 @@ class ExpansionStateTest {
         // then
         assertThat(restored.expanded()).isEmpty();
         assertThat(restored.selected()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("이전 대화 · 더 보기 노드는 키가 없어 건너뛴다 — 대화가 붙어도 노드 키와 복원이 같다(#214)")
+    void conversationNodesAreSkipped() {
+        // given: /home/me/a 에 대화 7개(5개 + 더 보기)
+        WorkHistory history = WorkHistory.empty(HistoryPolicy.DEFAULT).recordVisit(wsl("/home/me/a"), T0);
+        history = history.recordVisit(wsl("/home/me/b"), T0);
+        List<PastConversation> conversations = new java.util.ArrayList<>();
+        for (int i = 1; i <= 7; i++) {
+            conversations.add(new PastConversation(
+                    VisitSource.CLAUDE_CODE,
+                    new ConversationId("c" + i),
+                    wsl("/home/me/a"),
+                    Optional.of("대화 " + i),
+                    T0.plusSeconds(i)));
+        }
+        TreeQuery q = new TreeQuery("", false, List.of(UBUNTU));
+        HistoryTree with = DirectoryTree.project(history, List.of(), conversations, q);
+        HistoryTree without = DirectoryTree.project(history, List.of(), q);
+        ExpansionState state = new ExpansionState(
+                Set.of(ENV, folder("/home/me"), folder("/home/me/a")), Optional.of(folder("/home/me/a")));
+
+        // when · then
+        assertThat(Nodes.keys(with)).containsExactlyElementsOf(Nodes.keys(without));
+        assertThat(state.restoreIn(with)).isEqualTo(state.restoreIn(without));
     }
 }

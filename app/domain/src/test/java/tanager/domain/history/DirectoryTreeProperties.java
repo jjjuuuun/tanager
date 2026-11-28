@@ -251,6 +251,7 @@ class DirectoryTreeProperties {
                 case TreeNode.Session s ->
                     out.computeIfAbsent(s.session(), k -> new ArrayList<>()).add(parent);
                 case TreeNode.Folder f -> collectSessionParents(f, f.children(), out);
+                case TreeNode.Conversation _, TreeNode.MoreConversations _ -> {}
             }
         }
     }
@@ -309,6 +310,7 @@ class DirectoryTreeProperties {
                     siblings.add(f);
                     assertSorted(f.children(), false);
                 }
+                case TreeNode.Conversation _, TreeNode.MoreConversations _ -> {}
             }
         }
         assertThat(sessions).isSortedAccordingTo(SESSION_ORDER);
@@ -395,6 +397,10 @@ class DirectoryTreeProperties {
                             .append('\n');
                     shape(f.children(), depth + 1, sb);
                 }
+                case TreeNode.Conversation c ->
+                    sb.append('~').append(c.conversation().id().value()).append('\n');
+                case TreeNode.MoreConversations m ->
+                    sb.append('+').append(m.hidden()).append('\n');
             }
         }
     }

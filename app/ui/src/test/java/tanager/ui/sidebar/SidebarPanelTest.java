@@ -626,6 +626,40 @@ class SidebarPanelTest {
         assertThat(opener.opened).containsExactly("/home/me/a - DOWN", "/home/me/a cmd -", "home Wsl[distro=Ubuntu]");
     }
 
+    @Test
+    @DisplayName("이전 대화 · 더 보기 노드는 아직 행을 만들지 않는다 — 대화가 붙어도 행이 그대로다(#214)")
+    void conversationNodesAreNotRendered() {
+        // given
+        WorkHistory h = history("/home/me/a", "/home/me/b");
+        List<tanager.domain.history.PastConversation> conversations = new ArrayList<>();
+        for (int i = 1; i <= 7; i++) {
+            conversations.add(new tanager.domain.history.PastConversation(
+                    tanager.domain.history.VisitSource.CLAUDE_CODE,
+                    new tanager.domain.history.ConversationId("c" + i),
+                    wsl("/home/me/a"),
+                    Optional.of("대화 " + i),
+                    T0.plusSeconds(i)));
+        }
+        TreeQuery q = new TreeQuery("", false, List.of(UBUNTU));
+
+        // when
+        current.set(DirectoryTree.project(h, List.of(), q));
+        List<String> without = onEdt(() -> visibleRows(expandAll(new SidebarPanel(query, manage, ui, interactions))));
+        current.set(DirectoryTree.project(h, List.of(), conversations, q));
+        List<String> with = onEdt(() -> visibleRows(expandAll(new SidebarPanel(query, manage, ui, interactions))));
+
+        // then
+        assertThat(with).containsExactlyElementsOf(without).containsExactly("WSL · Ubuntu", "/home/me", "a", "b");
+    }
+
+    private static JTree expandAll(SidebarPanel panel) {
+        panel.refresh();
+        for (int row = 0; row < panel.tree().getRowCount(); row++) {
+            panel.tree().expandRow(row);
+        }
+        return panel.tree();
+    }
+
     private static SidebarItem item(JTree tree, String label) {
         return (SidebarItem) ((DefaultMutableTreeNode) pathOf(tree, label).getLastPathComponent()).getUserObject();
     }
