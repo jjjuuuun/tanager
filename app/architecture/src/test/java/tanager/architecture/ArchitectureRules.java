@@ -1,13 +1,17 @@
 package tanager.architecture;
 
 import static com.tngtech.archunit.base.DescribedPredicate.not;
+import static com.tngtech.archunit.core.domain.JavaClass.Predicates.assignableTo;
 import static com.tngtech.archunit.core.domain.JavaClass.Predicates.resideInAPackage;
+import static com.tngtech.archunit.core.domain.JavaClass.Predicates.resideInAnyPackage;
 import static com.tngtech.archunit.core.domain.properties.HasName.Predicates.name;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static com.tngtech.archunit.library.Architectures.layeredArchitecture;
 import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.slices;
 
+import com.tngtech.archunit.base.DescribedPredicate;
+import com.tngtech.archunit.core.domain.AccessTarget;
 import com.tngtech.archunit.core.domain.JavaAccess;
 import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaCodeUnitAccess;
@@ -16,10 +20,26 @@ import com.tngtech.archunit.lang.ArchCondition;
 import com.tngtech.archunit.lang.ArchRule;
 import com.tngtech.archunit.lang.ConditionEvents;
 import com.tngtech.archunit.lang.SimpleConditionEvent;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.FileWriter;
+import java.io.RandomAccessFile;
+import java.net.DatagramSocket;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.net.URL;
+import java.net.URLConnection;
+import java.nio.channels.AsynchronousFileChannel;
+import java.nio.channels.FileChannel;
+import java.nio.channels.NetworkChannel;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.spi.FileSystemProvider;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import tanager.application.port.out.ConversationSource;
 import tanager.application.port.out.ToolkitProvider;
 
 /**
@@ -174,6 +194,138 @@ final class ArchitectureRules {
                 .should()
                 .resideInAPackage(base + ".adapter.toolkit..")
                 .because("새 AI 도구 = app/adapter/toolkit/<도구> 모듈 + ToolkitProvider 등록(architecture.md)");
+    }
+
+    /** 대화 기록 공급자({@link ConversationSource}) 구현도 toolkit 어댑터에만 둔다(ADR-0020). 이유는 {@link ToolkitProvider} 와 같다. */
+    static ArchRule conversationSourcesLiveInToolkitAdapters(String base) {
+        return classes()
+                .that()
+                .implement(ConversationSource.class)
+                .should()
+                .resideInAPackage(base + ".adapter.toolkit..")
+                .because("새 AI 도구 = app/adapter/toolkit/<도구> 모듈 + ConversationSource 등록(architecture.md)");
+    }
+
+    /**
+     * 앱은 네트워크로 나가지 않는다(NFR-06, ADR-0019). HTTP 클라이언트 · 소켓 · TLS · 소켓 채널 · URL 연결을 금지한다. {@code java.net.URI}
+     * 와 {@code URL} 값 자체는 허용한다 — OSC 7 의 {@code file://} 해석에 쓴다. 제3자 라이브러리 안은 검사 밖이다(ADR-0019 결과에 확인 기록).
+     */
+    static ArchRule noNetworkAccess(String base) {
+        return noClasses()
+                .that()
+                .resideInAPackage(base + "..")
+                .should()
+                .dependOnClassesThat(resideInAnyPackage("java.net.http..", "javax.net..")
+                        .or(assignableTo(Socket.class))
+                        .or(assignableTo(ServerSocket.class))
+                        .or(assignableTo(DatagramSocket.class))
+                        .or(assignableTo(URLConnection.class))
+                        .or(assignableTo(NetworkChannel.class)))
+                .orShould()
+                .accessTargetWhere(OPENS_URL)
+                .because("Tanager 는 네트워크 통신을 하지 않는다 — 사용자 경로 · 설정이 밖으로 나가지 않게(NFR-06)");
+    }
+
+    private static final DescribedPredicate<JavaAccess<?>> OPENS_URL = DescribedPredicate.describe(
+            "open a URL connection",
+            access -> access.getTargetOwner().isEquivalentTo(URL.class)
+                    && Set.of("openConnection", "openStream", "getContent").contains(access.getName()));
+
+    /**
+     * toolkit 어댑터는 파일을 쓰거나 지우지 않는다(FR-TK-07, ADR-0019) — 사용자 AI 도구 설정은 읽기만 한다. {@code FileChannel} 은 여는 옵션을
+     * 정적으로 가릴 수 없어 의존 자체를 막는다. Jackson 은 파일 · 경로로 바로 쓰는 메서드만 막는다(문자열로 쓰기는 메모리 안이다).
+     */
+    static ArchRule toolkitAdaptersDoNotWriteFiles(String base) {
+        return noClasses()
+                .that()
+                .resideInAPackage(base + ".adapter.toolkit..")
+                .should()
+                .dependOnClassesThat(assignableTo(FileOutputStream.class)
+                        .or(assignableTo(FileWriter.class))
+                        .or(assignableTo(RandomAccessFile.class))
+                        .or(assignableTo(FileChannel.class))
+                        .or(assignableTo(AsynchronousFileChannel.class))
+                        .or(assignableTo(FileSystemProvider.class)))
+                .orShould()
+                .accessTargetWhere(WRITES_FILES)
+                .because("toolkit 어댑터는 사용자 설정 파일을 절대 쓰지 않는다(architecture.md, FR-TK-07)");
+    }
+
+    private static final Set<String> FILES_MUTATORS = Set.of(
+            "write",
+            "writeString",
+            "newOutputStream",
+            "newBufferedWriter",
+            "newByteChannel",
+            "createFile",
+            "createDirectory",
+            "createDirectories",
+            "createTempFile",
+            "createTempDirectory",
+            "createLink",
+            "createSymbolicLink",
+            "delete",
+            "deleteIfExists",
+            "move",
+            "copy",
+            "setLastModifiedTime",
+            "setAttribute",
+            "setOwner",
+            "setPosixFilePermissions");
+    private static final Set<String> FILE_MUTATORS = Set.of(
+            "createNewFile",
+            "createTempFile",
+            "delete",
+            "deleteOnExit",
+            "mkdir",
+            "mkdirs",
+            "renameTo",
+            "setExecutable",
+            "setLastModified",
+            "setReadOnly",
+            "setReadable",
+            "setWritable");
+    /** 첫 인수가 파일 이름 · {@code File} 이면 파일을 만든다. {@code Writer} · {@code OutputStream} 을 받는 생성자는 허용한다. */
+    private static final Set<String> FILE_OPENING_WRITERS =
+            Set.of("java.io.PrintWriter", "java.io.PrintStream", "java.util.Formatter");
+
+    private static final DescribedPredicate<JavaAccess<?>> WRITES_FILES =
+            DescribedPredicate.describe("write, move or delete files", ArchitectureRules::writesFiles);
+
+    private static boolean writesFiles(JavaAccess<?> access) {
+        JavaClass owner = access.getTargetOwner();
+        String name = access.getName();
+        List<JavaClass> params = access.getTarget() instanceof AccessTarget.CodeUnitAccessTarget target
+                ? target.getRawParameterTypes()
+                : List.of();
+        if (owner.isEquivalentTo(Files.class)) {
+            return FILES_MUTATORS.contains(name);
+        }
+        if (owner.isEquivalentTo(File.class)) {
+            return FILE_MUTATORS.contains(name);
+        }
+        if (FILE_OPENING_WRITERS.contains(owner.getName()) && name.equals("<init>")) {
+            return !params.isEmpty()
+                    && (params.getFirst().isEquivalentTo(String.class)
+                            || params.getFirst().isEquivalentTo(File.class));
+        }
+        if (owner.getPackageName().startsWith("tools.jackson")
+                && (name.startsWith("writeValue") || name.equals("createGenerator"))) {
+            return params.stream().anyMatch(p -> p.isEquivalentTo(File.class) || p.isEquivalentTo(Path.class));
+        }
+        return false;
+    }
+
+    /** domain.toolkit 은 domain 중 history · shared 만 안다(SDD §12) — 세션 · 레이아웃 · 작업 공간 · 모니터와 섞이지 않는다. */
+    static ArchRule domainToolkitKnowsOnlyHistoryAndShared(String base) {
+        return noClasses()
+                .that()
+                .resideInAPackage(base + ".domain.toolkit..")
+                .should()
+                .dependOnClassesThat(resideInAPackage(base + ".domain..")
+                        .and(not(resideInAnyPackage(
+                                base + ".domain.toolkit..", base + ".domain.history..", base + ".domain.shared.."))))
+                .because("도구함 카탈로그는 경로(history)와 공통 값(shared)만으로 설명된다");
     }
 
     /** 색은 ui.theme 의 토큰에서만 온다. 그 밖의 ui 코드는 색을 만들지 않는다(SDD §8.5, ADR-0010). */

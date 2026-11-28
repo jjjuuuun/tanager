@@ -42,11 +42,13 @@ class ArchitectureTest {
     @DisplayName("규칙이 공허하게 통과하지 않도록 실제 제품 클래스를 import 하고 테스트 클래스는 뺀다")
     void importsRealProductionClassesOnly() {
         assertThat(production.stream().map(JavaClass::getName))
-                // 클래스가 있는 제품 모듈마다 대표 하나(persistence · toolkit:claude 는 아직 클래스가 없다 — 생기면 더한다)
+                // 제품 모듈마다 대표 하나 — toolkit 쓰기 금지 규칙이 공허하지 않게 Collector(유일한 파일 읽기 경로)도 본다
                 .contains(
                         "tanager.domain.shared.Result",
                         "tanager.application.port.out.PlatformModule",
                         "tanager.adapter.pty.Pty4jLauncher",
+                        "tanager.adapter.persistence.JsonStateRepository",
+                        "tanager.adapter.toolkit.claude.Collector",
                         "tanager.platform.windows.WindowsPlatformModule",
                         "tanager.platform.macos.MacPlatformModule",
                         "tanager.ui.SwingUi",
@@ -115,6 +117,36 @@ class ArchitectureTest {
     @DisplayName("도구함 공급자(ToolkitProvider) 구현은 tanager.adapter.toolkit.. 에만 있다")
     void toolkitProvidersLiveInToolkitAdapters() {
         ArchitectureRules.toolkitProvidersLiveInToolkitAdapters(BASE)
+                .allowEmptyShould(true)
+                .check(production);
+    }
+
+    @Test
+    @DisplayName("대화 기록 공급자(ConversationSource) 구현은 tanager.adapter.toolkit.. 에만 있다")
+    void conversationSourcesLiveInToolkitAdapters() {
+        ArchitectureRules.conversationSourcesLiveInToolkitAdapters(BASE)
+                .allowEmptyShould(true)
+                .check(production);
+    }
+
+    @Test
+    @DisplayName("제품 코드는 네트워크 API(HTTP · 소켓 · URL 연결)를 쓰지 않는다")
+    void noNetworkAccess() {
+        ArchitectureRules.noNetworkAccess(BASE).allowEmptyShould(true).check(production);
+    }
+
+    @Test
+    @DisplayName("도구함 어댑터는 파일을 쓰거나 지우지 않는다")
+    void toolkitAdaptersDoNotWriteFiles() {
+        ArchitectureRules.toolkitAdaptersDoNotWriteFiles(BASE)
+                .allowEmptyShould(true)
+                .check(production);
+    }
+
+    @Test
+    @DisplayName("domain.toolkit 은 domain 중 history · shared 만 안다")
+    void domainToolkitKnowsOnlyHistoryAndShared() {
+        ArchitectureRules.domainToolkitKnowsOnlyHistoryAndShared(BASE)
                 .allowEmptyShould(true)
                 .check(production);
     }
