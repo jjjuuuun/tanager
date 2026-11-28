@@ -51,6 +51,7 @@ public final class JsonConfigRepository implements ConfigRepository {
     private static final String KEY_HISTORY = "history";
     private static final String KEY_MONITOR = "monitor";
     private static final String KEY_KEYS = "keys";
+    private static final String KEY_TOOLKIT = "toolkit";
     private static final byte[] UTF8_BOM = {(byte) 0xEF, (byte) 0xBB, (byte) 0xBF};
     private static final byte[] NEW_FILE =
             ("{\n  \"" + KEY_SCHEMA_VERSION + "\": " + SCHEMA_VERSION + "\n}\n").getBytes(StandardCharsets.UTF_8);
@@ -205,7 +206,8 @@ public final class JsonConfigRepository implements ConfigRepository {
                         sections.terminal(root.get(KEY_TERMINAL)),
                         sections.history(root.get(KEY_HISTORY)),
                         sections.monitor(root.get(KEY_MONITOR)),
-                        sections.keys(root.get(KEY_KEYS))),
+                        sections.keys(root.get(KEY_KEYS)),
+                        sections.toolkit(root.get(KEY_TOOLKIT))),
                 warnings);
     }
 

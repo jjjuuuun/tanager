@@ -4,11 +4,13 @@ import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.BiFunction;
 import tanager.application.port.out.AnimationMode;
 import tanager.application.port.out.AppearanceConfig;
 import tanager.application.port.out.ConfigWarning;
@@ -19,13 +21,15 @@ import tanager.application.port.out.MonitorConfig;
 import tanager.application.port.out.MonitorItem;
 import tanager.application.port.out.TerminalConfig;
 import tanager.application.port.out.ThemeMode;
+import tanager.application.port.out.ToolkitConfig;
 import tanager.domain.history.PathPattern;
+import tanager.domain.toolkit.ProviderId;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.node.ArrayNode;
 import tools.jackson.databind.node.ObjectNode;
 
 /**
- * config.json 의 appearance · terminal · history · monitor · keys 를 읽는다(SDD §9.3, ADR-0009). 키마다 따로 판단한다 — 형식이 틀린 키는
+ * config.json 의 appearance · terminal · history · monitor · keys · toolkit 을 읽는다(SDD §9.3, ADR-0009). 키마다 따로 판단한다 — 형식이 틀린 키는
  * 그 키만 기본값으로 두고, 범위 밖 숫자는 경계로 고정하며, 배열 · 객체 안의 틀린 항목은 그 항목만 뺀다. 경고는 만들 때 받은 목록에 쌓는다.
  * 읽기 한 번에 하나씩 만든다.
  */
@@ -127,6 +131,16 @@ final class ConfigSections {
         KeyConfig defaults = KeyConfig.defaults();
         return section(node, "keys")
                 .map(s -> new KeyConfig(prefix(s.get("prefix")), bindings(s.get("bindings"))))
+                .orElse(defaults);
+    }
+
+    ToolkitConfig toolkit(JsonNode node) {
+        ToolkitConfig defaults = ToolkitConfig.defaults();
+        return section(node, "toolkit")
+                .map(s -> new ToolkitConfig(
+                        providers(s.get("providers")).orElse(defaults.providers()),
+                        bool(s.get("importClaudeProjects"), "toolkit.importClaudeProjects")
+                                .orElse(defaults.importClaudeProjects())))
                 .orElse(defaults);
     }
 
@@ -237,16 +251,9 @@ final class ConfigSections {
     }
 
     private Optional<List<String>> globs(JsonNode node, String key) {
-        return array(node, key).map(array -> {
-            List<String> globs = new ArrayList<>();
-            for (int i = 0; i < array.size(); i++) {
-                String element = key + "[" + i + "]";
-                nonBlankString(array.get(i), element)
-                        .filter(raw -> isGlob(raw, element))
-                        .ifPresent(globs::add);
-            }
-            return globs;
-        });
+        return array(node, key)
+                .map(array ->
+                        elements(array, key, (raw, element) -> Optional.of(raw).filter(glob -> isGlob(glob, element))));
     }
 
     // 해석은 domain 이 한다 — 여기서는 읽을 수 있는지만 보고 못 읽는 항목을 알린다(#186)
@@ -262,14 +269,40 @@ final class ConfigSections {
         String key = "monitor.items";
         return array(node, key).map(array -> {
             Set<MonitorItem> items = EnumSet.noneOf(MonitorItem.class);
-            for (int i = 0; i < array.size(); i++) {
-                String element = key + "[" + i + "]";
-                nonBlankString(array.get(i), element)
-                        .flatMap(raw -> constant(MonitorItem.class, raw, element))
-                        .ifPresent(items::add);
-            }
+            items.addAll(elements(array, key, (raw, element) -> constant(MonitorItem.class, raw, element)));
             return items;
         });
+    }
+
+    // 형식만 본다 — 아직 설치되지 않은 공급자 id 는 틀린 값이 아니다. 같은 id 는 처음 것만 남긴다
+    private Optional<List<String>> providers(JsonNode node) {
+        String key = "toolkit.providers";
+        return array(node, key)
+                .map(array -> elements(
+                        array, key, (raw, element) -> Optional.of(raw).filter(id -> isProviderId(id, element))))
+                .map(ids -> List.copyOf(new LinkedHashSet<>(ids)));
+    }
+
+    // 원소마다 비어 있지 않은 문자열인지 보고 read 로 바꾼다. 못 쓰는 원소는 key[i] 로 경고하고 뺀다(파일 순서 유지)
+    private <T> List<T> elements(ArrayNode array, String key, BiFunction<String, String, Optional<T>> read) {
+        List<T> values = new ArrayList<>();
+        for (int i = 0; i < array.size(); i++) {
+            String element = key + "[" + i + "]";
+            nonBlankString(array.get(i), element)
+                    .flatMap(raw -> read.apply(raw, element))
+                    .ifPresent(values::add);
+        }
+        return values;
+    }
+
+    private boolean isProviderId(String raw, String key) {
+        try {
+            new ProviderId(raw);
+            return true;
+        } catch (IllegalArgumentException e) {
+            ignore(key, IgnoredReason.INVALID_PROVIDER_ID);
+            return false;
+        }
     }
 
     private Optional<ArrayNode> array(JsonNode node, String key) {

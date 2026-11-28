@@ -135,6 +135,7 @@ public enum Msg {
     CONFIG_IGNORED_NOT_STRING("config.ignored.notString"),
     CONFIG_IGNORED_EMPTY_NAME("config.ignored.emptyName"),
     CONFIG_IGNORED_INVALID_GLOB("config.ignored.invalidGlob"),
+    CONFIG_IGNORED_INVALID_PROVIDER_ID("config.ignored.invalidProviderId"),
     CONFIG_OUT_OF_RANGE("config.outOfRange"),
     CONFIG_NEWER_VERSION("config.newerVersion"),
     SETTINGS_KEPT_PREVIOUS("settings.keptPrevious"),

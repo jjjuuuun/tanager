@@ -616,7 +616,7 @@ public record CpuWindow(List&lt;Double&gt; recent) {                            
   &quot;profiles&quot;: { &quot;powershell&quot;: { &quot;startDir&quot;: &quot;C:\\work&quot; }, &quot;wsl:Ubuntu-24.04&quot;: { &quot;startDir&quot;: &quot;~&quot; } },   // 프로파일별 시작 경로, &quot;~&quot; = 홈
   &quot;openPlacement&quot;: &quot;RIGHT&quot;,                       // RIGHT | DOWN | NEW_TAB
   &quot;history&quot;: { &quot;maxEntries&quot;: 2000, &quot;exclude&quot;: [&quot;/tmp/**&quot;, &quot;**/node_modules/**&quot;] },   // 100~100000 · glob 원문
-  &quot;toolkit&quot;: { &quot;providers&quot;: [&quot;claude-code&quot;], &quot;importClaudeProjects&quot;: true },
+  &quot;toolkit&quot;: { &quot;providers&quot;: [&quot;claude-code&quot;], &quot;importClaudeProjects&quot;: true },   // providers 빈 배열 = 등록된 공급자 모두 · importClaudeProjects = FR-TK-09 대화 가져오기
   &quot;appearance&quot;: { &quot;theme&quot;: &quot;SYSTEM&quot;, &quot;animations&quot;: &quot;AUTO&quot;, &quot;cornerRadius&quot;: 8 },   // SYSTEM | DARK | LIGHT · AUTO | ON | OFF · cornerRadius 는 읽지 않음(테마 토큰)
   &quot;terminal&quot;: { &quot;font&quot;: &quot;D2Coding&quot;, &quot;size&quot;: 14, &quot;lineHeight&quot;: 1.2, &quot;scrollback&quot;: 10000 },   // size 8~32 · lineHeight 1.0~2.0 · scrollback 0~100000
   &quot;layout&quot;: { &quot;dividerHitPx&quot;: 6, &quot;minPane&quot;: { &quot;cols&quot;: 20, &quot;rows&quot;: 5 } },
@@ -625,7 +625,8 @@ public record CpuWindow(List&lt;Double&gt; recent) {                            
   &quot;keys&quot;: { &quot;prefix&quot;: null, &quot;bindings&quot;: { &quot;pane.splitRight&quot;: &quot;alt shift EQUALS&quot; } }   // prefix null · 빈 문자열 = prefix 모드 끔(M6 전에는 적어도 알림 후 무시) · bindings 는 바꿀 것만(동작 id · 규칙은 §8.2)
 }</code></pre>
 <ul>
-<li>위 값이 기본값이다(<code>keys.bindings</code> 의 기본은 비어 있고 예시는 재정의다). <code>toolkit</code> · <code>layout</code> 은 아직 읽지 않는다(모르는 키로 보존).</li>
+<li>위 값이 기본값이다(<code>keys.bindings</code> 의 기본은 비어 있고 예시는 재정의다). 단 <code>toolkit.providers</code> 의 기본은 빈 배열(등록된 공급자 모두)이다. <code>layout</code> 은 아직 읽지 않는다(모르는 키로 보존).</li>
+<li><code>toolkit</code>(#206): <code>providers</code> 원소는 공급자 id 형식(<code>[a-z0-9][a-z0-9-]{0,31}</code>)만 받고 틀린 원소는 그것만 빼고 경고한다(<code>toolkit.providers[i]</code>). 같은 id 는 처음 것만 남긴다. 아직 설치되지 않은 공급자 id(예 <code>codex</code>)는 경고하지 않는다. <code>importClaudeProjects</code> 가 true · false 가 아니면 기본값(true) + 경고.</li>
 <li>읽기(ADR-0009 · #182): 형식이 틀린 키는 그 키만 기본값 + 경고. 범위 밖 숫자는 가까운 경계로 고정 + <code>OutOfRange</code> 경고(0 이하 임계값은 기본값). 배열 · 객체 안의 틀린 항목은 그 항목만 뺀다. <code>theme</code> · <code>animations</code> · <code>monitor.items</code> 는 대소문자를 가리지 않는다.</li>
 <li>쓰기: 앱이 쓰는 키는 <code>schemaVersion</code> · <code>defaultProfile</code> · <code>profiles.&lt;id&gt;.startDir</code> 뿐이다. 나머지는 읽기만 한다(쓰면 주석이 사라진다).</li>
 <li>즉시 반영(FR-CFG-03): appData 폴더를 감시해 config.json 의 만들기 · 수정 · 이름 바꿔 넣기를 300ms 모아 다시 읽는다. 바뀌었으면 <code>SettingsChanged</code>, 같으면 이벤트 없음, 읽지 못하면 이전 설정을 그대로 쓰고 상태줄에 알린다. 시작할 때도 같은 길로 한 번 나간다.</li>

@@ -29,11 +29,12 @@ import tanager.application.port.out.OpenPlacement;
 import tanager.application.port.out.ProfileSettings;
 import tanager.application.port.out.TerminalConfig;
 import tanager.application.port.out.ThemeMode;
+import tanager.application.port.out.ToolkitConfig;
 import tanager.domain.session.ProfileId;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
-/** config.json 의 appearance · terminal · history · monitor · keys 읽기(#182, SDD §9.3, ADR-0009). */
+/** config.json 의 appearance · terminal · history · monitor · keys · toolkit 읽기(#182 · #206, SDD §9.3, ADR-0009). */
 class JsonConfigSectionsTest {
     @TempDir
     Path dir;
@@ -83,7 +84,8 @@ class JsonConfigSectionsTest {
                         new TerminalConfig("D2Coding", 14, 1.2, 10_000),
                         new HistoryConfig(2000, List.of("/tmp/**", "**/node_modules/**")),
                         new MonitorConfig(true, 2, EnumSet.allOf(MonitorItem.class), 0.90, 10, 0.85, 0.90),
-                        new KeyConfig(Optional.empty(), Map.of("pane.splitRight", "alt shift EQUALS"))));
+                        new KeyConfig(Optional.empty(), Map.of("pane.splitRight", "alt shift EQUALS")),
+                        new ToolkitConfig(List.of("claude-code"), true)));
     }
 
     @Test
@@ -356,6 +358,120 @@ class JsonConfigSectionsTest {
         JsonNode tree = JsonMapper.builder().build().readTree(Files.readString(file(), StandardCharsets.UTF_8));
         assertThat(tree.has("appearance")).isFalse();
         assertThat(tree.has("openPlacement")).isFalse();
+    }
+
+    // ---- toolkit (#206) ----
+
+    @Test
+    @DisplayName("toolkit 키가 없으면 도구함 기본값이고 경고가 없다")
+    void missingToolkitIsDefaults() throws IOException {
+        // when
+        LoadedConfig loaded = load("{ \"terminal\": { \"size\": 16 } }");
+
+        // then
+        assertThat(loaded.config().toolkit()).isEqualTo(ToolkitConfig.defaults());
+        assertThat(loaded.warnings()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("toolkit.providers 는 순서대로 읽고, 아직 없는 공급자 id(codex)도 경고하지 않는다")
+    void providersKeepOrderWithoutWarningForUnknownIds() throws IOException {
+        // when
+        LoadedConfig loaded = load(
+                "{ \"toolkit\": { \"providers\": [\"claude-code\", \"codex\"], \"importClaudeProjects\": false } }");
+
+        // then
+        assertThat(loaded.config().toolkit()).isEqualTo(new ToolkitConfig(List.of("claude-code", "codex"), false));
+        assertThat(loaded.warnings()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("toolkit.providers 의 틀린 원소는 그것만 빼고 원소마다 경고 한 줄을 낸다")
+    void badProviderElementsAreDropped() throws IOException {
+        // when
+        LoadedConfig loaded = load("{ \"toolkit\": { \"providers\": [\"Claude Code\", 3, \"claude-code\"] } }");
+
+        // then
+        assertThat(loaded.config().toolkit().providers()).containsExactly("claude-code");
+        assertThat(loaded.warnings())
+                .containsExactly(
+                        ignored("toolkit.providers[0]", IgnoredReason.INVALID_PROVIDER_ID),
+                        ignored("toolkit.providers[1]", IgnoredReason.NOT_NON_EMPTY_STRING));
+    }
+
+    @Test
+    @DisplayName("toolkit.providers 에 같은 id 가 두 번 있으면 처음 것만 남기고 경고하지 않는다")
+    void duplicateProvidersAreMerged() throws IOException {
+        // when
+        LoadedConfig loaded = load("{ \"toolkit\": { \"providers\": [\"codex\", \"claude-code\", \"codex\"] } }");
+
+        // then
+        assertThat(loaded.config().toolkit().providers()).containsExactly("codex", "claude-code");
+        assertThat(loaded.warnings()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("toolkit.providers 가 배열이 아니면 기본값이고 형식 경고를 낸다")
+    void providersNotArrayFallsBack() throws IOException {
+        // when
+        LoadedConfig loaded = load("{ \"toolkit\": { \"providers\": \"claude-code\" } }");
+
+        // then
+        assertThat(loaded.config().toolkit()).isEqualTo(ToolkitConfig.defaults());
+        assertThat(loaded.warnings()).containsExactly(ignored("toolkit.providers", IgnoredReason.NOT_ARRAY));
+    }
+
+    @Test
+    @DisplayName("toolkit.importClaudeProjects 가 true · false 가 아니면 기본값(true)이고 형식 경고를 낸다")
+    void importNotBooleanFallsBack() throws IOException {
+        // when
+        LoadedConfig loaded = load("{ \"toolkit\": { \"providers\": [\"codex\"], \"importClaudeProjects\": \"no\" } }");
+
+        // then
+        assertThat(loaded.config().toolkit()).isEqualTo(new ToolkitConfig(List.of("codex"), true));
+        assertThat(loaded.warnings())
+                .containsExactly(ignored("toolkit.importClaudeProjects", IgnoredReason.NOT_BOOLEAN));
+    }
+
+    @Test
+    @DisplayName("toolkit 이 객체가 아니면 기본값이고 형식 경고를 낸다")
+    void toolkitNotObjectFallsBack() throws IOException {
+        // when
+        LoadedConfig loaded = load("{ \"toolkit\": [] }");
+
+        // then
+        assertThat(loaded.config().toolkit()).isEqualTo(ToolkitConfig.defaults());
+        assertThat(loaded.warnings()).containsExactly(ignored("toolkit", IgnoredReason.NOT_OBJECT));
+    }
+
+    @Test
+    @DisplayName("앱이 기본 셸을 저장해도 파일의 toolkit 섹션 값은 그대로다(주석은 ADR-0009 대로 사라진다)")
+    void saveKeepsToolkitSection() throws IOException {
+        // given
+        write("""
+                {
+                  "schemaVersion": 1,
+                  // 도구함은 Claude 만, 대화는 가져오지 않는다
+                  "toolkit": { "providers": ["claude-code", "codex"], "importClaudeProjects": false, "extra": [1, 2] }
+                }
+                """);
+        JsonNode original = JsonMapper.builder()
+                .enable(tools.jackson.core.json.JsonReadFeature.ALLOW_JAVA_COMMENTS)
+                .build()
+                .readTree(Files.readString(file(), StandardCharsets.UTF_8))
+                .get("toolkit");
+        JsonConfigRepository repository = new JsonConfigRepository(file());
+        AppConfig before = repository.load().value().orElseThrow().config();
+
+        // when
+        var saved = repository.save(before.withDefaultProfile(new ProfileId("cmd")));
+
+        // then
+        assertThat(saved.isOk()).isTrue();
+        JsonNode tree = JsonMapper.builder().build().readTree(Files.readString(file(), StandardCharsets.UTF_8));
+        assertThat(tree.get("toolkit")).isEqualTo(original);
+        assertThat(repository.load().value().orElseThrow().config().toolkit())
+                .isEqualTo(new ToolkitConfig(List.of("claude-code", "codex"), false));
     }
 
     // ---- ensureFile ----

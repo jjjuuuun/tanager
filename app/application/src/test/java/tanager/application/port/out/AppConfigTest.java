@@ -71,6 +71,50 @@ class AppConfigTest {
         assertThat(defaults.monitor())
                 .isEqualTo(new MonitorConfig(true, 2, EnumSet.allOf(MonitorItem.class), 0.90, 10, 0.85, 0.90));
         assertThat(defaults.keys()).isEqualTo(new KeyConfig(Optional.empty(), Map.of()));
+        assertThat(defaults.toolkit()).isEqualTo(new ToolkitConfig(List.of(), true));
+    }
+
+    @Test
+    @DisplayName("도구함 기본값은 공급자 목록이 비어(등록된 공급자 모두) 있고 대화 가져오기가 켜져 있다")
+    void toolkitDefaultsAllProvidersAndImport() {
+        // when
+        ToolkitConfig defaults = ToolkitConfig.defaults();
+
+        // then
+        assertThat(defaults.providers()).isEmpty();
+        assertThat(defaults.importClaudeProjects()).isTrue();
+    }
+
+    @Test
+    @DisplayName("도구함 공급자 목록은 순서를 지키고 바꿀 수 없으며 중복을 거부한다")
+    void toolkitProvidersKeepOrderAndRejectDuplicates() {
+        // when
+        ToolkitConfig config = new ToolkitConfig(List.of("codex", "claude-code"), false);
+
+        // then
+        assertThat(config.providers()).containsExactly("codex", "claude-code");
+        assertThatThrownBy(() -> config.providers().add("x")).isInstanceOf(UnsupportedOperationException.class);
+        assertThatThrownBy(() -> new ToolkitConfig(List.of("claude-code", "claude-code"), true))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("짧은 생성자들은 도구함을 기본값으로 둔다")
+    void shortConstructorsUseToolkitDefaults() {
+        // when
+        AppConfig eight = new AppConfig(
+                Optional.empty(),
+                Map.of(),
+                OpenPlacement.DOWN,
+                AppearanceConfig.defaults(),
+                TerminalConfig.defaults(),
+                HistoryConfig.defaults(),
+                MonitorConfig.defaults(),
+                KeyConfig.defaults());
+
+        // then
+        assertThat(eight.toolkit()).isEqualTo(ToolkitConfig.defaults());
+        assertThat(new AppConfig(Optional.empty(), Map.of()).toolkit()).isEqualTo(ToolkitConfig.defaults());
     }
 
     @Test
@@ -156,7 +200,8 @@ class AppConfigTest {
                 TerminalConfig.defaults(),
                 HistoryConfig.defaults(),
                 MonitorConfig.defaults(),
-                KeyConfig.defaults());
+                KeyConfig.defaults(),
+                new ToolkitConfig(List.of("codex"), false));
         AppConfig saved = new AppConfig(
                 Optional.of(new ProfileId("cmd")),
                 Map.of(new ProfileId("cmd"), new ProfileSettings(Optional.of("C:\\a"))));
@@ -173,6 +218,8 @@ class AppConfigTest {
         assertThat(merged.profiles()).isEqualTo(saved.profiles());
         assertThat(merged.appearance()).isEqualTo(dark.appearance());
         assertThat(merged.openPlacement()).isEqualTo(OpenPlacement.DOWN);
+        assertThat(remembered.toolkit()).isEqualTo(dark.toolkit());
+        assertThat(merged.toolkit()).isEqualTo(dark.toolkit());
     }
 
     @Test
