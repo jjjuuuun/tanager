@@ -7,6 +7,7 @@ import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.lang.EvaluationResult;
 import java.util.List;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -213,5 +214,19 @@ class ArchitectureRulesSelfTest {
         assertThat(details).as("ui.theme 하위 패키지는 허용 범위가 아니다").anyMatch(d -> d.contains("NestedThemeColors"));
         assertThat(details).as("TerminalColor.index · 받은 색 읽기는 허용").noneMatch(d -> d.contains("UsesIndexedColor"));
         assertThat(details).as("ui.theme 자체는 허용").noneMatch(d -> d.contains("ThemeOwnsColors"));
+    }
+
+    @Test
+    @DisplayName("도구함 공급자 규칙은 toolkit 어댑터 밖의 구현을 잡고 안의 구현은 허용한다")
+    void toolkitProviderRuleCatchesImplementationsOutsideToolkitAdapters() {
+        // when
+        EvaluationResult result =
+                ArchitectureRules.toolkitProvidersLiveInToolkitAdapters(FIXTURE).evaluate(fixtures);
+
+        // then
+        assertThat(result.hasViolation()).isTrue();
+        assertThat(result.getFailureReport().getDetails())
+                .anyMatch(d -> d.contains("ProvidesToolkit"))
+                .noneMatch(d -> d.contains("LegitToolkit"));
     }
 }
