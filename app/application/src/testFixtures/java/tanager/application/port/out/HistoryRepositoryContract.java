@@ -4,13 +4,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import tanager.domain.history.Alias;
 import tanager.domain.history.HistoryPolicy;
+import tanager.domain.history.ImportOrigin;
 import tanager.domain.history.ShellEnvironment;
+import tanager.domain.history.VisitSource;
 import tanager.domain.history.VisitedDirectory;
 import tanager.domain.history.WorkHistory;
 import tanager.domain.history.WorkspacePath;
@@ -36,7 +40,7 @@ public abstract class HistoryRepositoryContract {
         return WorkspacePath.of(env, raw).value().orElseThrow();
     }
 
-    /** 별칭 · 고정 · 숨김 · 두 환경 · UNC · 한글 · 공백 · '#' 경로를 고루 담은 이력. */
+    /** 별칭 · 고정 · 숨김 · 두 환경 · UNC · 한글 · 공백 · '#' 경로 · 여러 출처(모르는 출처 포함) · 가져오기 워터마크를 고루 담은 이력. */
     protected static WorkHistory sample() {
         Instant t0 = Instant.parse("2026-11-20T09:12:03Z");
         Instant t1 = Instant.parse("2026-11-24T11:05:41Z");
@@ -51,12 +55,14 @@ public abstract class HistoryRepositoryContract {
                                 37,
                                 true,
                                 Optional.of(new Alias("내 프로젝트")),
-                                false),
+                                false,
+                                Set.of(VisitSource.SHELL, VisitSource.CLAUDE_CODE, new VisitSource("future-tool"))),
                         new VisitedDirectory(
                                 path(windows, "C:\\work\\infra"), t0, t0, 1, false, Optional.empty(), true),
                         new VisitedDirectory(
                                 path(windows, "\\\\srv\\share\\팀 폴더"), t0, t1, 5, false, Optional.empty(), false)),
-                HistoryPolicy.DEFAULT);
+                HistoryPolicy.DEFAULT,
+                Map.of(new ImportOrigin(VisitSource.CLAUDE_CODE, ubuntu), t1));
     }
 
     @Test

@@ -13,14 +13,14 @@ import java.time.Instant;
 import java.time.InstantSource;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.TreeSet;
 import tanager.application.port.out.HistoryLoadNotice;
 import tanager.application.port.out.HistoryRepository;
 import tanager.application.port.out.HistoryStoreError;
@@ -31,7 +31,9 @@ import tanager.application.port.out.WorkspaceLoadNotice;
 import tanager.application.port.out.WorkspaceRepository;
 import tanager.domain.history.Alias;
 import tanager.domain.history.HistoryPolicy;
+import tanager.domain.history.ImportOrigin;
 import tanager.domain.history.ShellEnvironment;
+import tanager.domain.history.VisitSource;
 import tanager.domain.history.VisitedDirectory;
 import tanager.domain.history.WorkHistory;
 import tanager.domain.history.WorkspacePath;
@@ -49,8 +51,9 @@ import tools.jackson.databind.node.ObjectNode;
  * WorkspaceRepository} 로 나눠 내보내지만 문서는 하나다 — 읽기 · 잠금 · 손상 판정 · .bak 복구 · 마이그레이션은 문서 단위로 한 번 하고, 어느 쪽
  * 저장이든 두 부분의 마지막 값을 한 번에 원자적으로 쓴다. 앱이 쓰는 파일이라 손상은 .bak → 옆으로 옮기기로 복구하고, 상위 버전 · 다른
  * 인스턴스(state.lock)면 읽기 전용으로 연다. .bak 으로 복구하면 손상 원본을 복사해 두고 state.json 을 .bak 내용으로 원자적으로 바꾼다 — 저장 없이
- * 끝나도 다음 실행이 이력을 잃지 않게. 저장할 때 load 때 읽은 모르는 최상위 키 · window 의 모르는 필드 · 항목별 sources 를 그대로 다시 쓴다(디스크를
- * 다시 읽지 않는다). .bak 은 인스턴스(실행)마다 첫 저장 직전에 한 번 만든다.
+ * 끝나도 다음 실행이 이력을 잃지 않게. 저장할 때 load 때 읽은 모르는 최상위 키 · window 의 모르는 필드를 그대로 다시 쓴다(디스크를 다시 읽지
+ * 않는다). 항목별 sources 와 가져오기 워터마크(history.importedUntil)는 도메인 값으로 읽고 쓴다. .bak 은 인스턴스(실행)마다 첫 저장 직전에 한 번
+ * 만든다.
  */
 public final class JsonStateRepository implements HistoryRepository, WorkspaceRepository, AutoCloseable {
     private static final System.Logger LOG = System.getLogger(JsonStateRepository.class.getName());
@@ -62,7 +65,7 @@ public final class JsonStateRepository implements HistoryRepository, WorkspaceRe
     private static final String KEY_WINDOW = "window";
     private static final String KEY_ENTRIES = "entries";
     private static final String KEY_SOURCES = "sources";
-    private static final String SOURCE_SHELL = "shell";
+    private static final String KEY_IMPORTED_UNTIL = "importedUntil";
 
     private static final DateTimeFormatter CORRUPT_SUFFIX =
             DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'").withZone(ZoneOffset.UTC);
@@ -87,7 +90,6 @@ public final class JsonStateRepository implements HistoryRepository, WorkspaceRe
     private Optional<FileLock> lock = Optional.empty();
     private Mode mode = new Mode.NotLoaded();
     private ObjectNode otherKeys = MAPPER.createObjectNode();
-    private Map<WorkspacePath, ArrayNode> sources = Map.of();
     private boolean backupTaken;
     // 문서의 두 부분: 마지막으로 읽었거나 저장에 성공한 값. 어느 쪽 저장이든 둘을 함께 쓴다
     private WorkHistory lastHistory;
@@ -247,8 +249,7 @@ public final class JsonStateRepository implements HistoryRepository, WorkspaceRe
         windowBase = root.map(r -> r.get(KEY_WINDOW))
                 .filter(ObjectNode.class::isInstance)
                 .map(w -> ((ObjectNode) w).deepCopy());
-        sources = contents.sources();
-        lastHistory = WorkHistory.restore(contents.entries(), policy);
+        lastHistory = WorkHistory.restore(contents.entries(), policy, contents.importedUntil());
         snapshot = workspace.snapshot();
         StoreAccess access = readOnly.isPresent() ? StoreAccess.READ_ONLY : StoreAccess.WRITABLE;
         return Result.ok(new Document(
@@ -539,7 +540,7 @@ public final class JsonStateRepository implements HistoryRepository, WorkspaceRe
             int skipped,
             int repaired,
             long version,
-            Map<WorkspacePath, ArrayNode> sources) {
+            Map<ImportOrigin, Instant> importedUntil) {
         static Contents empty() {
             return new Contents(List.of(), 0, 0, SCHEMA_VERSION, Map.of());
         }
@@ -556,7 +557,6 @@ public final class JsonStateRepository implements HistoryRepository, WorkspaceRe
             return new Contents(List.of(), 0, 0, version, Map.of());
         }
         List<VisitedDirectory> out = new ArrayList<>();
-        Map<WorkspacePath, ArrayNode> sources = new HashMap<>();
         int skipped = 0;
         int repaired = 0;
         for (JsonNode node : entries) {
@@ -570,23 +570,22 @@ public final class JsonStateRepository implements HistoryRepository, WorkspaceRe
             if (read.repaired()) {
                 repaired++;
             }
-            sources.merge(read.directory().path(), read.sources(), JsonStateRepository::union);
         }
-        return new Contents(out, skipped, repaired, version, Map.copyOf(sources));
+        return new Contents(out, skipped, repaired, version, ImportWatermarks.read(history.get(KEY_IMPORTED_UNTIL)));
     }
 
-    private record ReadEntry(VisitedDirectory directory, boolean repaired, ArrayNode sources) {}
+    private record ReadEntry(VisitedDirectory directory, boolean repaired) {}
 
     // 해석할 수 없는 값(경로 · 환경 · 시각 · 횟수 · 플래그)이 있으면 항목을 건너뛴다. 불변식 위반(처음 > 마지막, 고정이면서 숨김)과
-    // 틀린 별칭은 고쳐서 읽는다 — 값 하나 때문에 경로를 잃지 않게. 항목 안의 모르는 필드는 보존하지 않는다(ADR-0013).
+    // 틀린 별칭 · 출처는 고쳐서 읽는다 — 값 하나 때문에 경로를 잃지 않게. 항목 안의 모르는 필드는 보존하지 않는다(ADR-0013).
     private static Optional<ReadEntry> entry(JsonNode node) {
         if (!(node instanceof ObjectNode o)) {
             return Optional.empty();
         }
         Optional<ShellEnvironment> env = Environments.read(o.get("env"));
         Optional<String> rawPath = JsonValues.string(o.get("path"));
-        Optional<Instant> first = instant(o.get("firstVisited"));
-        Optional<Instant> last = instant(o.get("lastVisited"));
+        Optional<Instant> first = JsonValues.instant(o.get("firstVisited"));
+        Optional<Instant> last = JsonValues.instant(o.get("lastVisited"));
         JsonNode count = o.get("visitCount");
         JsonNode pinned = o.get("pinned");
         JsonNode hidden = o.get("hidden");
@@ -611,6 +610,7 @@ public final class JsonStateRepository implements HistoryRepository, WorkspaceRe
         Optional<Optional<Alias>> alias = alias(o.get("alias"));
         boolean firstAfterLast = first.get().isAfter(last.get());
         boolean pinnedAndHidden = pinned.booleanValue() && hidden.booleanValue();
+        Set<VisitSource> sources = sources(o.get(KEY_SOURCES));
         VisitedDirectory directory = new VisitedDirectory(
                 path.get(),
                 firstAfterLast ? last.get() : first.get(),
@@ -618,19 +618,22 @@ public final class JsonStateRepository implements HistoryRepository, WorkspaceRe
                 count.intValue(),
                 pinned.booleanValue(),
                 alias.orElseGet(Optional::empty),
-                hidden.booleanValue() && !pinnedAndHidden);
+                hidden.booleanValue() && !pinnedAndHidden,
+                sources.isEmpty() ? Set.of(VisitSource.SHELL) : sources);
         boolean repaired = firstAfterLast || pinnedAndHidden || alias.isEmpty();
-        // sources 가 없는 항목은 저장할 때 [shell] 이 된다. 합칠 때도 같게 봐야 shell 출처를 잃지 않는다.
-        ArrayNode entrySources = o.get(KEY_SOURCES) instanceof ArrayNode array ? array.deepCopy() : shellOnly();
-        return Optional.of(new ReadEntry(directory, repaired, entrySources));
+        return Optional.of(new ReadEntry(directory, repaired));
     }
 
-    private static Optional<Instant> instant(JsonNode node) {
-        try {
-            return JsonValues.string(node).map(Instant::parse);
-        } catch (DateTimeParseException e) {
-            return Optional.empty();
+    // 모르는 출처(다음 버전이 쓴 값)도 형식이 맞으면 담는다. 형식이 틀린 원소만 버린다. 쓸 원소가 없으면 호출부가 shell 로 본다 — 출처가
+    // 생기기 전의 항목은 모두 셸 방문이다.
+    private static Set<VisitSource> sources(JsonNode node) {
+        Set<VisitSource> out = new TreeSet<>(Comparator.comparing(VisitSource::id));
+        if (node instanceof ArrayNode array) {
+            for (JsonNode element : array) {
+                JsonValues.string(element).flatMap(VisitSource::parse).ifPresent(out::add);
+            }
         }
+        return out;
     }
 
     // 바깥 empty = 틀린 값(별칭만 버림), 안쪽 empty = 별칭 없음(null · 키 없음).
@@ -639,21 +642,6 @@ public final class JsonStateRepository implements HistoryRepository, WorkspaceRe
             return Optional.of(Optional.empty());
         }
         return JsonValues.string(node).flatMap(s -> Alias.of(s).value()).map(Optional::of);
-    }
-
-    // 대소문자만 다른 Windows 경로처럼 합쳐지는 항목은 sources 도 합친다(먼저 나온 순서 유지).
-    private static ArrayNode union(ArrayNode first, ArrayNode later) {
-        ArrayNode merged = first.deepCopy();
-        for (JsonNode source : later) {
-            boolean present = false;
-            for (JsonNode existing : merged) {
-                present = present || existing.equals(source);
-            }
-            if (!present) {
-                merged.add(source.deepCopy());
-            }
-        }
-        return merged;
     }
 
     // 이 앱이 해석하지 않는 최상위 키 — 저장할 때 그대로 다시 쓴다
@@ -684,11 +672,16 @@ public final class JsonStateRepository implements HistoryRepository, WorkspaceRe
     private ObjectNode document(WorkHistory history, Optional<WorkspaceSnapshot> workspace) {
         ObjectNode root = MAPPER.createObjectNode();
         root.put(KEY_SCHEMA_VERSION, SCHEMA_VERSION);
-        ArrayNode entries = root.putObject(KEY_HISTORY).putArray(KEY_ENTRIES);
+        ObjectNode historyNode = root.putObject(KEY_HISTORY);
+        ArrayNode entries = historyNode.putArray(KEY_ENTRIES);
         List<VisitedDirectory> sorted =
                 history.entries().values().stream().sorted(FILE_ORDER).toList();
         for (VisitedDirectory v : sorted) {
             entries.add(entryNode(v));
+        }
+        // 가져온 적 없으면 쓰지 않는다 — 없으면 빈 맵으로 읽으니 같고, 이전 버전이 쓴 파일 모양이 그대로다
+        if (!history.importedUntil().isEmpty()) {
+            historyNode.set(KEY_IMPORTED_UNTIL, ImportWatermarks.write(history.importedUntil()));
         }
         if (workspace.isPresent()) {
             root.set(KEY_WORKSPACE, WorkspaceJson.workspace(workspace.get().workspace()));
@@ -702,7 +695,7 @@ public final class JsonStateRepository implements HistoryRepository, WorkspaceRe
         return root;
     }
 
-    private ObjectNode entryNode(VisitedDirectory v) {
+    private static ObjectNode entryNode(VisitedDirectory v) {
         ObjectNode node = MAPPER.createObjectNode();
         Environments.write(node.putObject("env"), v.path().env());
         node.put("path", v.path().path());
@@ -712,12 +705,10 @@ public final class JsonStateRepository implements HistoryRepository, WorkspaceRe
         node.put("pinned", v.pinned());
         v.alias().ifPresentOrElse(a -> node.put("alias", a.value()), () -> node.putNull("alias"));
         node.put("hidden", v.hidden());
-        Optional<ArrayNode> known = Optional.ofNullable(sources.get(v.path()));
-        node.set(KEY_SOURCES, known.map(ArrayNode::deepCopy).orElseGet(JsonStateRepository::shellOnly));
+        ArrayNode sources = node.putArray(KEY_SOURCES);
+        for (VisitSource source : v.sources()) {
+            sources.add(source.id());
+        }
         return node;
-    }
-
-    private static ArrayNode shellOnly() {
-        return MAPPER.createArrayNode().add(SOURCE_SHELL);
     }
 }

@@ -178,7 +178,11 @@ class JsonStateWorkspaceTest {
         assertThat(workspace.notices()).containsExactly(new WorkspaceLoadNotice.Migrated(1, 2));
         JsonNode after = onDisk();
         assertThat(after.get("schemaVersion").longValue()).isEqualTo(2);
-        assertThat(after.get("history")).isEqualTo(original.get("history"));
+        // 출처는 id 순으로 쓴다(#207). 그 밖의 history 내용은 같다
+        JsonNode expectedHistory = original.get("history").deepCopy();
+        ((ObjectNode) expectedHistory.get("entries").get(1))
+                .set("sources", JSON.readTree("[\"claude-code\",\"shell\"]"));
+        assertThat(after.get("history")).isEqualTo(expectedHistory);
         assertThat(after.has("workspace")).isFalse();
         assertThat(Files.readString(dir.resolve("state.json.bak"), StandardCharsets.UTF_8))
                 .isEqualTo(fixture("v1-history-only.json"));
