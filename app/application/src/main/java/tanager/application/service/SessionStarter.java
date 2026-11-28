@@ -60,6 +60,7 @@ public final class SessionStarter implements StartSessionUseCase {
     private final RememberDefaultProfileUseCase memory;
     private final StateActor state;
     private final RecordVisitUseCase visits;
+    private final StartupCommands commands;
 
     public SessionStarter(
             ListProfilesUseCase profiles,
@@ -69,7 +70,8 @@ public final class SessionStarter implements StartSessionUseCase {
             PtyLauncher launcher,
             RememberDefaultProfileUseCase memory,
             StateActor state,
-            RecordVisitUseCase visits) {
+            RecordVisitUseCase visits,
+            StartupCommands commands) {
         this.profiles = Objects.requireNonNull(profiles, "profiles");
         this.config = Objects.requireNonNull(config, "config");
         this.platform = Objects.requireNonNull(platform, "platform");
@@ -78,6 +80,7 @@ public final class SessionStarter implements StartSessionUseCase {
         this.memory = Objects.requireNonNull(memory, "memory");
         this.state = Objects.requireNonNull(state, "state");
         this.visits = Objects.requireNonNull(visits, "visits");
+        this.commands = Objects.requireNonNull(commands, "commands");
     }
 
     @Override
@@ -101,7 +104,7 @@ public final class SessionStarter implements StartSessionUseCase {
         WorkingDir dir = request.dir().orElseGet(() -> configuredDir(profile, settings, notices));
         Result<StartedSession, StartFailure> started = TerminalSession.start(profile, dir)
                 .fold(
-                        starting -> launchTracked(request.pane(), starting, request.size(), notices),
+                        starting -> launchTracked(request.pane(), starting, request.size(), notices, true),
                         error -> Result.err(new StartFailure.Rejected(error)));
         if (request.rememberAsDefault() && started.isOk()) {
             return started.map(session -> remembered(session, profile));
@@ -126,7 +129,7 @@ public final class SessionStarter implements StartSessionUseCase {
         return latestOf(pane, exited)
                 .restart()
                 .fold(
-                        starting -> launchTracked(pane, starting, size, new ArrayList<>()),
+                        starting -> launchTracked(pane, starting, size, new ArrayList<>(), false),
                         error -> Result.err(new StartFailure.Rejected(error)));
     }
 
@@ -169,19 +172,25 @@ public final class SessionStarter implements StartSessionUseCase {
         });
     }
 
-    // 설치는 프로세스에서 한 번이다 — 처음이면 여기서 끝날 때까지 기다린다(start · restart 는 EDT 밖에서 불린다, ADR-0014)
+    // 설치는 프로세스에서 한 번이다 — 처음이면 여기서 끝날 때까지 기다린다(start · restart 는 EDT 밖에서 불린다, ADR-0014).
+    // 시작 명령(#216)은 창의 첫 셸(fresh)에만 단다 — 재시작한 셸에서 다시 실행하지 않는다
     private Result<StartedSession, StartFailure> launchTracked(
-            PaneId pane, TerminalSession starting, TerminalSize size, List<StartNotice> notices) {
+            PaneId pane, TerminalSession starting, TerminalSize size, List<StartNotice> notices, boolean fresh) {
         Integration installed = integration.await();
-        return launch(starting, size, installed, notices).map(launched -> tracked(pane, launched, installed, notices));
+        return launch(starting, size, installed, notices)
+                .map(launched -> tracked(pane, launched, installed, notices, fresh));
     }
 
-    /** 돌려주기 전에 (1) 창의 세션 등록 (2) cwd 추적 (3) 종료 등록 순으로 붙인다. */
-    private StartedSession tracked(PaneId pane, Launched launched, Integration integration, List<StartNotice> notices) {
+    /** 돌려주기 전에 (1) 창의 세션 등록 (2) 시작 명령 · cwd 추적 (3) 종료 등록 순으로 붙인다. */
+    private StartedSession tracked(
+            PaneId pane, Launched launched, Integration integration, List<StartNotice> notices, boolean fresh) {
         TerminalSession running = launched.running();
         TerminalStream stream = launched.stream();
         state.submit(current -> sessionsChanged(current, current.sessions().launched(pane, running)));
-        followCwd(pane, running, stream, integration, notices);
+        boolean reportsCwd =
+                running.profile().integration() != IntegrationMode.NONE && integration instanceof Integration.Installed;
+        RecordVisitUseCase recorder = fresh ? commands.launched(pane, running, stream, reportsCwd, visits) : visits;
+        followCwd(pane, running, stream, integration, notices, recorder);
         long pid = stream.pid();
         stream.onExit().thenAccept(code -> state.submit(current -> exited(current, pane, pid, code)));
         CompletionStage<TerminalSession> exited = stream.onExit().thenApply(code -> expect(running.exited(code)));
@@ -197,14 +206,15 @@ public final class SessionStarter implements StartSessionUseCase {
             TerminalSession running,
             TerminalStream stream,
             Integration integration,
-            List<StartNotice> notices) {
+            List<StartNotice> notices,
+            RecordVisitUseCase recorder) {
         IntegrationMode mode = running.profile().integration();
         if (mode == IntegrationMode.NONE) {
             return;
         }
         switch (integration) {
             case Integration.Installed _ ->
-                stream.subscribe(new CwdTracker(pane, running.profile().env(), mode, visits));
+                stream.subscribe(new CwdTracker(pane, running.profile().env(), mode, recorder));
             case Integration.Unavailable(var problem) -> {
                 notices.add(new StartNotice.IntegrationUnavailable(problem));
                 running.knownCwd().ifPresent(start -> visits.record(pane, start));

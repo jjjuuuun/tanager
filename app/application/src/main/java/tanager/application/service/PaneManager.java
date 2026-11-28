@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletionStage;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import tanager.application.port.in.AppEvent;
 import tanager.application.port.in.ClosePaneUseCase;
@@ -62,6 +63,8 @@ public final class PaneManager
                 SwapPaneUseCase,
                 MovePaneUseCase,
                 ManageTabUseCase {
+    private static final Consumer<PaneSpec> NOTHING = spec -> {};
+
     private final ListProfilesUseCase profiles;
     private final ConfigRepository config;
     private final PathTranslation paths;
@@ -84,7 +87,25 @@ public final class PaneManager
         Objects.requireNonNull(profile, "profile");
         Objects.requireNonNull(placement, "placement");
         AppConfig settings = settings();
-        return openWith(choose(path, profile, settings, profiles.list()), placement.orElse(settings.openPlacement()));
+        return openWith(
+                choose(path, profile, settings, profiles.list()), placement.orElse(settings.openPlacement()), NOTHING);
+    }
+
+    /**
+     * {@link #open} 을 그 환경의 기본 프로파일로 하되, 새 창이 생기는 상태 전이 안에서 — {@code LayoutChanged} 를 내기 전에 — {@code
+     * opened} 를 부른다. UI 는 그 이벤트를 받고서야 창의 셸을 띄우므로 그보다 먼저 시작 명령을 달 수 있다(#216). {@code opened} 는 액터
+     * 스레드에서 돈다 — 막지 않는다.
+     */
+    CompletionStage<Result<PaneSpec, OpenError>> open(
+            WorkspacePath path, Optional<OpenPlacement> placement, Consumer<PaneSpec> opened) {
+        Objects.requireNonNull(path, "path");
+        Objects.requireNonNull(placement, "placement");
+        Objects.requireNonNull(opened, "opened");
+        AppConfig settings = settings();
+        return openWith(
+                choose(path, Optional.empty(), settings, profiles.list()),
+                placement.orElse(settings.openPlacement()),
+                opened);
     }
 
     @Override
@@ -97,7 +118,7 @@ public final class PaneManager
                         env, settings.defaultProfile(), profiles.list())
                 .<Result<Choice, OpenError>>map(shell -> Result.ok(new Choice(shell, Optional.empty())))
                 .orElseGet(() -> Result.err(new OpenError.NoProfileForEnvironment(env)));
-        return openWith(chosen, placement.orElse(settings.openPlacement()));
+        return openWith(chosen, placement.orElse(settings.openPlacement()), NOTHING);
     }
 
     @Override
@@ -190,11 +211,19 @@ public final class PaneManager
     }
 
     private CompletionStage<Result<PaneSpec, OpenError>> openWith(
-            Result<Choice, OpenError> chosen, OpenPlacement placement) {
+            Result<Choice, OpenError> chosen, OpenPlacement placement, Consumer<PaneSpec> onOpened) {
         return state.submit(current -> chosen.fold(
-                choice -> opened(
-                        current,
-                        openIn(current.workspace(), placement, choice.shell().id(), choice.dir())),
+                choice -> {
+                    Transition<Result<PaneSpec, OpenError>> next = opened(
+                            current,
+                            openIn(
+                                    current.workspace(),
+                                    placement,
+                                    choice.shell().id(),
+                                    choice.dir()));
+                    next.reply().value().ifPresent(onOpened);
+                    return next;
+                },
                 error -> new Transition<>(current, List.of(), Result.<PaneSpec, OpenError>err(error))));
     }
 

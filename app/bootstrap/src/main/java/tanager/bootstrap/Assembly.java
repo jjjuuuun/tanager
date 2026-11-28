@@ -26,6 +26,7 @@ import tanager.application.port.in.QueryToolkitUseCase;
 import tanager.application.port.in.RecordEnvironmentsUseCase;
 import tanager.application.port.in.RecordWindowStateUseCase;
 import tanager.application.port.in.ResolvedAppearance;
+import tanager.application.port.in.ResumeConversationUseCase;
 import tanager.application.port.in.SettingsUseCase;
 import tanager.application.port.in.StartSessionUseCase;
 import tanager.application.port.in.WatchResourcesUseCase;
@@ -42,6 +43,7 @@ import tanager.application.port.out.UiDispatcher;
 import tanager.application.port.out.WorkspaceLoadNotice;
 import tanager.application.service.AppearanceWatcher;
 import tanager.application.service.ConversationImporter;
+import tanager.application.service.ConversationResumer;
 import tanager.application.service.DefaultProfileMemory;
 import tanager.application.service.EnvironmentRecorder;
 import tanager.application.service.HistoryManager;
@@ -54,6 +56,7 @@ import tanager.application.service.ProfileCatalog;
 import tanager.application.service.ResourceWatcher;
 import tanager.application.service.SessionStarter;
 import tanager.application.service.SettingsReloader;
+import tanager.application.service.StartupCommands;
 import tanager.application.service.ToolkitQueryService;
 import tanager.application.service.VisitRecorder;
 import tanager.application.service.WindowRecorder;
@@ -102,6 +105,7 @@ final class Assembly {
     private final MissingPathScanner missingPaths;
     private final ToolkitQueryService toolkit;
     private final ConversationImporter conversations;
+    private final ConversationResumer resumer;
     private volatile Subscription watchingSettings = () -> {};
 
     private Assembly(
@@ -122,7 +126,8 @@ final class Assembly {
             AppearanceWatcher appearance,
             MissingPathScanner missingPaths,
             ToolkitQueryService toolkit,
-            ConversationImporter conversations) {
+            ConversationImporter conversations,
+            ConversationResumer resumer) {
         this.profiles = profiles;
         this.sessions = sessions;
         this.state = state;
@@ -141,6 +146,7 @@ final class Assembly {
         this.missingPaths = missingPaths;
         this.toolkit = toolkit;
         this.conversations = conversations;
+        this.resumer = resumer;
     }
 
     /**
@@ -193,17 +199,32 @@ final class Assembly {
                 task -> Thread.ofVirtual().name("tanager-path-check").start(task),
                 InstantSource.system());
         // 셸 탐지 · 설정 · 불러오기보다 먼저 구독해야 첫 읽기 계기를 놓치지 않는다. 읽기는 가상 스레드(블로킹 파일 I/O, #215)
+        List<ConversationSource> conversationSources = loadAll(ConversationSource.class, "대화 공급자");
         ConversationImporter conversations = new ConversationImporter(
                 state,
-                loadAll(ConversationSource.class, "대화 공급자"),
+                conversationSources,
                 platform.hostFiles(),
                 task -> Thread.ofVirtual().name("tanager-conversations").start(task),
                 InstantSource.system());
         detectShells(catalog, new EnvironmentRecorder(state));
         VisitRecorder visits = new VisitRecorder(state, InstantSource.system());
+        // 새 창의 시작 명령(#216). 예약은 저장 타이머를 같이 쓰고(일이 짧다) 셸에 쓰기는 가상 스레드(블로킹될 수 있다)
+        StartupCommands startupCommands = new StartupCommands(
+                scheduler,
+                task -> Thread.ofVirtual().name("tanager-startup-command").start(task),
+                state);
         SessionStarter starter = new SessionStarter(
-                catalog, config, platform, integration, launcher, new DefaultProfileMemory(config), state, visits);
+                catalog,
+                config,
+                platform,
+                integration,
+                launcher,
+                new DefaultProfileMemory(config),
+                state,
+                visits,
+                startupCommands);
         PaneManager panes = new PaneManager(catalog, config, platform.paths(), state);
+        ConversationResumer resumer = new ConversationResumer(panes, conversationSources, startupCommands);
         SettingsReloader settings = new SettingsReloader(config, state);
         // 설정을 읽기 전에 구독해야 시작 때의 SettingsChanged 를 받는다. 예약은 전용 타이머, 재기는 주기마다 가상 스레드(SDD §6.6)
         ExecutorScheduler monitorScheduler = new ExecutorScheduler("tanager-monitor-timer");
@@ -247,7 +268,8 @@ final class Assembly {
                 appearance,
                 missingPaths,
                 toolkit,
-                conversations);
+                conversations,
+                resumer);
     }
 
     // 등록된 공급자 모두(도구함 ADR-0019 · 대화 ADR-0020). 만들지 못한 공급자는 빼고 로그만 남긴다 — 공급자 하나 때문에 앱이 뜨지 않으면 안 된다
@@ -355,6 +377,11 @@ final class Assembly {
     /** 이전 대화 가져오기 — 창 활성화 때 오래된 기록을 다시 읽는다(FR-TK-09, #215). */
     ImportConversationsUseCase conversations() {
         return conversations;
+    }
+
+    /** 이전 대화를 새 창에서 이어 하기(FR-TK-09, #216). 사이드바 대화 메뉴는 후속 UI 이슈. */
+    ResumeConversationUseCase resumeConversation() {
+        return resumer;
     }
 
     /** 메인 창의 자리 · 크기 · 최대화 · 사이드바 기록(FR-RES-03, #180). 저장은 작업 공간 저장기가 한다. */

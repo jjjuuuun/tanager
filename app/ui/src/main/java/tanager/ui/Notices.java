@@ -27,12 +27,13 @@ record Notices(List<String> messages) {
         return new Notices(next);
     }
 
-    /** 상태줄에 보일 이벤트의 문장. 저장소 알림(불러오기 복구 · 읽기 전용 · 저장 실패) · 설정 다시 읽기 알림 · 대화 가져오기 알림만 보인다. */
+    /** 상태줄에 보일 이벤트의 문장. 저장소 알림(불러오기 복구 · 읽기 전용 · 저장 실패) · 설정 다시 읽기 알림 · 대화 가져오기 알림 · 세션이 뜬 뒤의 알림(시작 명령 건너뜀)만 보인다. */
     static Optional<String> messageOf(AppEvent event) {
         return switch (event) {
             case AppEvent.StoreNotice(var problem) -> Optional.of(NoticeText.DEFAULT.of(problem));
             case AppEvent.SettingsNotice(var problem) -> Optional.of(NoticeText.DEFAULT.of(problem));
             case AppEvent.ImportNotice(var problem) -> Optional.of(NoticeText.DEFAULT.of(problem));
+            case AppEvent.SessionNotice(var _, var notice) -> Optional.of(NoticeText.DEFAULT.of(notice));
             case AppEvent.ConversationsChanged conversations -> Optional.empty();
             case AppEvent.SettingsChanged changed -> Optional.empty();
             case AppEvent.HistoryChanged changed -> Optional.empty();

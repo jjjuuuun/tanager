@@ -167,6 +167,17 @@ public sealed interface AppEvent {
         }
     }
 
+    /**
+     * 창 {@code pane} 의 세션이 뜬 뒤에 알릴 일이 생겼다(예: 시작 명령을 건너뜀, #216). 띄울 때 정해지는 알림은 {@link StartedSession#notices()}
+     * 로 온다. 상태줄 알림 한 줄.
+     */
+    record SessionNotice(PaneId pane, StartNotice notice) implements AppEvent {
+        public SessionNotice {
+            Objects.requireNonNull(pane, "pane");
+            Objects.requireNonNull(notice, "notice");
+        }
+    }
+
     /** 창 배치 · 포커스가 바뀌었다(#88). UI 는 이 값대로 창을 만들고 지운다. */
     record LayoutChanged(Workspace workspace) implements AppEvent {
         public LayoutChanged {

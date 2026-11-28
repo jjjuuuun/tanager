@@ -14,6 +14,7 @@ import tanager.application.port.in.StartNotice;
 import tanager.application.port.in.StartRequest;
 import tanager.application.port.in.StartedSession;
 import tanager.application.port.out.FakePlatformModule;
+import tanager.application.port.out.FakeScheduler;
 import tanager.application.port.out.FakeShellIntegration;
 import tanager.application.port.out.InMemoryConfigRepository;
 import tanager.application.port.out.Integration;
@@ -77,7 +78,8 @@ class SessionStarterTrackingTest {
                 launcher,
                 new DefaultProfileMemory(config),
                 actor,
-                new VisitRecorder(actor, FakeClock.atEpoch()));
+                new VisitRecorder(actor, FakeClock.atEpoch()),
+                new StartupCommands(new FakeScheduler(), Runnable::run, actor));
     }
 
     private static ShellProfile profile(String id, ShellKind kind, ShellEnvironment env, IntegrationMode mode) {

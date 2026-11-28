@@ -2,6 +2,7 @@ package tanager.application.port.in;
 
 import java.util.Objects;
 import tanager.domain.history.ShellEnvironment;
+import tanager.domain.history.VisitSource;
 import tanager.domain.history.WorkspacePath;
 import tanager.domain.session.ProfileId;
 import tanager.domain.shared.PaneId;
@@ -35,6 +36,13 @@ public sealed interface OpenError {
     record UnknownPane(PaneId pane) implements OpenError {
         public UnknownPane {
             Objects.requireNonNull(pane, "pane");
+        }
+    }
+
+    /** 그 출처의 대화 공급자가 등록돼 있지 않아 이어 할 명령을 모른다(#216). */
+    record UnknownSource(VisitSource source) implements OpenError {
+        public UnknownSource {
+            Objects.requireNonNull(source, "source");
         }
     }
 }

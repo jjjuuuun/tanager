@@ -15,6 +15,7 @@ import tanager.application.port.in.StartedSession;
 import tanager.application.port.out.FakeDirectoryProbe;
 import tanager.application.port.out.FakePlatformModule;
 import tanager.application.port.out.FakePlatformModule.LaunchRequest;
+import tanager.application.port.out.FakeScheduler;
 import tanager.application.port.out.InMemoryConfigRepository;
 import tanager.application.port.out.LaunchError;
 import tanager.application.port.out.ScriptedPtyLauncher;
@@ -53,6 +54,8 @@ class SessionStarterRestoreTest {
             new FakePlatformModule(List.of(BASH, POWERSHELL)).withDirectories(probe);
     private final InMemoryConfigRepository config = new InMemoryConfigRepository();
     private final ScriptedPtyLauncher launcher = new ScriptedPtyLauncher();
+    private final StateActor state =
+            new StateActor(AppState.initial(WorkHistory.empty(HistoryPolicy.DEFAULT)), Runnable::run);
     private final SessionStarter starter = new SessionStarter(
             new ProfileCatalog(platform),
             config,
@@ -60,8 +63,9 @@ class SessionStarterRestoreTest {
             new IntegrationStatus(platform),
             launcher,
             new DefaultProfileMemory(config),
-            new StateActor(AppState.initial(WorkHistory.empty(HistoryPolicy.DEFAULT)), Runnable::run),
-            new RecordingVisits());
+            state,
+            new RecordingVisits(),
+            new StartupCommands(new FakeScheduler(), Runnable::run, state));
 
     private static ShellProfile profile(String id, ShellKind kind, ShellEnvironment env) {
         return new ShellProfile(

@@ -22,6 +22,7 @@ import tanager.application.port.out.ConfigError;
 import tanager.application.port.out.ConfigWarning;
 import tanager.application.port.out.FakePlatformModule;
 import tanager.application.port.out.FakePlatformModule.LaunchRequest;
+import tanager.application.port.out.FakeScheduler;
 import tanager.application.port.out.FakeShellIntegration;
 import tanager.application.port.out.InMemoryConfigRepository;
 import tanager.application.port.out.Integration;
@@ -75,7 +76,8 @@ class SessionStarterTest {
                 launcher,
                 new DefaultProfileMemory(config),
                 state,
-                new RecordingVisits());
+                new RecordingVisits(),
+                new StartupCommands(new FakeScheduler(), Runnable::run, state));
     }
 
     private static ShellProfile profile(String id, ShellKind kind, ShellEnvironment env) {
