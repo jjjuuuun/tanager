@@ -5,6 +5,7 @@ import java.awt.Container;
 import java.awt.Dimension;
 import java.awt.LayoutManager;
 import java.util.Objects;
+import java.util.function.Supplier;
 import javax.swing.JComponent;
 import javax.swing.JPanel;
 import tanager.domain.workspace.PanelState;
@@ -32,12 +33,12 @@ final class SidebarSlot {
     private boolean shown;
 
     /** 보이는 채로, 사이드바의 지금 선호 너비로. */
-    SidebarSlot(JComponent sidebar, Motion motion) {
+    SidebarSlot(JComponent sidebar, Supplier<Motion> motion) {
         this(sidebar, motion, new PanelState(true, sidebar.getPreferredSize().width));
     }
 
     /** 저장된 표시 여부 · 폭으로(#180). 접혀 있으면 전환 없이 숨긴 채 시작한다. */
-    SidebarSlot(JComponent sidebar, Motion motion, PanelState state) {
+    SidebarSlot(JComponent sidebar, Supplier<Motion> motion, PanelState state) {
         this.sidebar = Objects.requireNonNull(sidebar, "sidebar");
         Objects.requireNonNull(state, "state");
         this.width = Math.clamp(state.width(), MIN_WIDTH, MAX_WIDTH);

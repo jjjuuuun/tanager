@@ -167,7 +167,7 @@ class PaneLifecycleLeakTest {
 
     private PaneController newPane(String id) {
         return onEdt(() -> new PaneController(
-                new PaneId(id), ui, background, sessions, profiles, settings, INSTANT, new SilentHost()));
+                new PaneId(id), ui, background, sessions, profiles, settings, () -> INSTANT, new SilentHost()));
     }
 
     private void start(PaneController pane) {

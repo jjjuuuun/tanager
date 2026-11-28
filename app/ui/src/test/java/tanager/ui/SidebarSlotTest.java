@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.awt.Dimension;
 import java.awt.Rectangle;
 import java.time.Duration;
+import java.util.concurrent.atomic.AtomicReference;
 import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
 import org.junit.jupiter.api.DisplayName;
@@ -16,6 +17,7 @@ import tanager.ui.motion.Motion;
 class SidebarSlotTest {
     private static final int WIDTH = 240;
     private static final Motion OFF = new Motion(Duration.ofMillis(180), false);
+    private static final Motion ON = new Motion(Duration.ofMillis(180), true);
 
     private static JPanel sidebar() {
         JPanel sidebar = new JPanel();
@@ -33,7 +35,7 @@ class SidebarSlotTest {
         onEdt(() -> {
             // given
             JPanel sidebar = sidebar();
-            SidebarSlot slot = new SidebarSlot(sidebar, OFF);
+            SidebarSlot slot = new SidebarSlot(sidebar, () -> OFF);
 
             // when
             slot.component().setSize(WIDTH, 100);
@@ -52,7 +54,7 @@ class SidebarSlotTest {
         onEdt(() -> {
             // given
             JPanel sidebar = sidebar();
-            SidebarSlot slot = new SidebarSlot(sidebar, OFF);
+            SidebarSlot slot = new SidebarSlot(sidebar, () -> OFF);
             slot.component().setSize(WIDTH, 100);
 
             // when
@@ -69,7 +71,7 @@ class SidebarSlotTest {
     void hideInstantly() throws Exception {
         onEdt(() -> {
             // given
-            SidebarSlot slot = new SidebarSlot(sidebar(), OFF);
+            SidebarSlot slot = new SidebarSlot(sidebar(), () -> OFF);
 
             // when
             slot.hide();
@@ -86,7 +88,7 @@ class SidebarSlotTest {
         onEdt(() -> {
             // given
             JPanel sidebar = sidebar();
-            SidebarSlot slot = new SidebarSlot(sidebar, OFF);
+            SidebarSlot slot = new SidebarSlot(sidebar, () -> OFF);
             slot.hide();
 
             // when
@@ -109,7 +111,7 @@ class SidebarSlotTest {
             JPanel sidebar = sidebar();
 
             // when
-            SidebarSlot slot = new SidebarSlot(sidebar, OFF, new PanelState(false, 300));
+            SidebarSlot slot = new SidebarSlot(sidebar, () -> OFF, new PanelState(false, 300));
 
             // then
             assertThat(slot.shown()).isFalse();
@@ -124,7 +126,7 @@ class SidebarSlotTest {
         onEdt(() -> {
             // given
             JPanel sidebar = sidebar();
-            SidebarSlot slot = new SidebarSlot(sidebar, OFF, new PanelState(false, 300));
+            SidebarSlot slot = new SidebarSlot(sidebar, () -> OFF, new PanelState(false, 300));
 
             // when
             slot.show();
@@ -143,7 +145,7 @@ class SidebarSlotTest {
     void savedWidthBecomesPreferredWidth() throws Exception {
         onEdt(() -> {
             // when
-            SidebarSlot slot = new SidebarSlot(sidebar(), OFF, new PanelState(true, 236));
+            SidebarSlot slot = new SidebarSlot(sidebar(), () -> OFF, new PanelState(true, 236));
 
             // then
             assertThat(slot.component().getPreferredSize().width).isEqualTo(236);
@@ -156,8 +158,8 @@ class SidebarSlotTest {
     void absurdWidthIsClamped() throws Exception {
         onEdt(() -> {
             // when
-            SidebarSlot narrow = new SidebarSlot(sidebar(), OFF, new PanelState(true, 0));
-            SidebarSlot wide = new SidebarSlot(sidebar(), OFF, new PanelState(true, 5000));
+            SidebarSlot narrow = new SidebarSlot(sidebar(), () -> OFF, new PanelState(true, 0));
+            SidebarSlot wide = new SidebarSlot(sidebar(), () -> OFF, new PanelState(true, 5000));
 
             // then
             assertThat(narrow.state().width()).isEqualTo(SidebarSlot.MIN_WIDTH);
@@ -170,13 +172,30 @@ class SidebarSlotTest {
     void toggle() throws Exception {
         onEdt(() -> {
             // given
-            SidebarSlot slot = new SidebarSlot(sidebar(), OFF);
+            SidebarSlot slot = new SidebarSlot(sidebar(), () -> OFF);
 
             // when / then
             slot.toggle();
             assertThat(slot.shown()).isFalse();
             slot.toggle();
             assertThat(slot.shown()).isTrue();
+        });
+    }
+
+    @Test
+    @DisplayName("켜짐으로 시작해 실행 중 애니메이션을 끄면 다음 숨기기는 전환 없이 바로 자리를 숨긴다(#249)")
+    void turnedOffWhileRunningHidesInstantly() throws Exception {
+        onEdt(() -> {
+            // given
+            AtomicReference<Motion> live = new AtomicReference<>(ON);
+            SidebarSlot slot = new SidebarSlot(sidebar(), live::get);
+
+            // when
+            live.set(OFF);
+            slot.hide();
+
+            // then
+            assertThat(slot.component().isVisible()).isFalse();
         });
     }
 }

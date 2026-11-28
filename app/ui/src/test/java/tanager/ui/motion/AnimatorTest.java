@@ -6,6 +6,8 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -17,6 +19,10 @@ class AnimatorTest {
     private final List<Double> applied = new ArrayList<>();
 
     private Animator animator(Motion motion, double initial) {
+        return animator(() -> motion, initial);
+    }
+
+    private Animator animator(Supplier<Motion> motion, double initial) {
         return new Animator(motion, ticker, ticker::nanoTime, initial, applied::add);
     }
 
@@ -180,5 +186,82 @@ class AnimatorTest {
         assertThat(animator.value()).isEqualTo(0.0);
         assertThat(animator.running()).isFalse();
         assertThat(ticker.running()).isFalse();
+    }
+
+    @Test
+    @DisplayName("켜짐으로 시작해 실행 중 꺼지면 다음 전환은 전환 없이 바로 끝난다(#249)")
+    void turnedOffWhileRunningAppliesNextInstantly() {
+        // given
+        AtomicReference<Motion> live = new AtomicReference<>(ON);
+        Animator animator = animator(live::get, 0);
+        animator.animateTo(1);
+        ticker.advance(250);
+        AtomicInteger finished = new AtomicInteger();
+
+        // when
+        live.set(OFF);
+        animator.animateTo(0, finished::incrementAndGet);
+
+        // then
+        assertThat(applied).last().isEqualTo(0.0);
+        assertThat(finished).hasValue(1);
+        assertThat(animator.running()).isFalse();
+        assertThat(ticker.starts()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("꺼짐으로 시작해 실행 중 켜지면 다음 전환부터 그 전환 시간으로 움직인다(#249)")
+    void turnedOnWhileRunningAnimatesNext() {
+        // given
+        AtomicReference<Motion> live = new AtomicReference<>(OFF);
+        Animator animator = animator(live::get, 0);
+        animator.animateTo(1);
+        AtomicInteger finished = new AtomicInteger();
+
+        // when
+        live.set(new Motion(Duration.ofMillis(180), true));
+        animator.animateTo(0, finished::incrementAndGet);
+        ticker.advance(90);
+
+        // then — 180ms 의 절반에 ease-out 값만큼 와 있다
+        assertThat(animator.running()).isTrue();
+        assertThat(animator.value()).isEqualTo(1 - Easing.easeOut(0.5));
+        assertThat(finished).hasValue(0);
+
+        // when
+        ticker.advance(90);
+
+        // then
+        assertThat(animator.value()).isEqualTo(0.0);
+        assertThat(finished).hasValue(1);
+        assertThat(animator.running()).isFalse();
+    }
+
+    @Test
+    @DisplayName("전환 중에 설정이 바뀌어도 진행 중인 전환은 시작할 때의 값으로 끝까지 간다 — 깜빡임 없음(#249)")
+    void changeDuringTransitionKeepsRunningOne() {
+        // given
+        AtomicReference<Motion> live = new AtomicReference<>(ON);
+        Animator animator = animator(live::get, 0);
+        AtomicInteger finished = new AtomicInteger();
+        animator.animateTo(1, finished::incrementAndGet);
+        ticker.advance(100);
+
+        // when — 꺼지고 시간도 달라진다
+        live.set(new Motion(Duration.ofMillis(400), false));
+        ticker.advance(50);
+
+        // then — 끝 값으로 뛰지 않고 처음 200ms 기준으로 간다
+        assertThat(animator.running()).isTrue();
+        assertThat(animator.value()).isEqualTo(Easing.easeOut(150 / 200.0));
+
+        // when — 같은 목표로 다시 불러도 이어서 간다
+        animator.animateTo(1, finished::incrementAndGet);
+        ticker.advance(50);
+
+        // then
+        assertThat(animator.value()).isEqualTo(1.0);
+        assertThat(finished).hasValue(1);
+        assertThat(animator.running()).isFalse();
     }
 }
