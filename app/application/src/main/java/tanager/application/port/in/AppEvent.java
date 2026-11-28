@@ -1,6 +1,8 @@
 package tanager.application.port.in;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import tanager.application.port.out.AppConfig;
@@ -9,6 +11,8 @@ import tanager.application.port.out.ConfigWarning;
 import tanager.application.port.out.HistoryLoadNotice;
 import tanager.application.port.out.HistoryStoreError;
 import tanager.application.port.out.WorkspaceLoadNotice;
+import tanager.domain.history.ImportOrigin;
+import tanager.domain.history.PastConversation;
 import tanager.domain.history.ShellEnvironment;
 import tanager.domain.history.WorkHistory;
 import tanager.domain.history.WorkspacePath;
@@ -106,6 +110,59 @@ public sealed interface AppEvent {
             @Override
             public String describe() {
                 return error.describe();
+            }
+        }
+    }
+
+    /**
+     * 가져온 이전 대화 목록이 바뀌었다(FR-TK-09, #215). origin 별 새 목록 전체를 싣는다 — 사이드바가 다시 투영한다. 저장하지 않는다.
+     */
+    record ConversationsChanged(Map<ImportOrigin, List<PastConversation>> conversations) implements AppEvent {
+        public ConversationsChanged {
+            Map<ImportOrigin, List<PastConversation>> copy = new HashMap<>();
+            for (var e : conversations.entrySet()) {
+                copy.put(e.getKey(), List.copyOf(e.getValue()));
+            }
+            conversations = Map.copyOf(copy);
+        }
+    }
+
+    /** 대화 가져오기에 사용자에게 알릴 일이 생겼다 — 그 origin 은 이번 실행 동안 가져오지 않는다. 상태줄 알림 한 줄. */
+    record ImportNotice(ImportProblem problem) implements AppEvent {
+        public ImportNotice {
+            Objects.requireNonNull(problem, "problem");
+        }
+    }
+
+    /** 대화 가져오기 알림의 내용. 화면 문장은 UI 가 만든다(#137). */
+    sealed interface ImportProblem {
+        /** 가져오지 못한 (출처, 환경). */
+        ImportOrigin origin();
+
+        /** 개발자용 설명(로그). 경로 · 내용은 넣지 않는다. */
+        String describe();
+
+        /** 기록 파일은 있는데 형식을 알아보지 못했다(ADR-0020). */
+        record UnknownFormat(ImportOrigin origin) implements ImportProblem {
+            public UnknownFormat {
+                Objects.requireNonNull(origin, "origin");
+            }
+
+            @Override
+            public String describe() {
+                return origin.source().id() + " 대화 기록 형식을 알아보지 못했다: " + origin.env();
+            }
+        }
+
+        /** 기록 폴더 · 파일을 읽을 수 없다. */
+        record Unreadable(ImportOrigin origin) implements ImportProblem {
+            public Unreadable {
+                Objects.requireNonNull(origin, "origin");
+            }
+
+            @Override
+            public String describe() {
+                return origin.source().id() + " 대화 기록을 읽을 수 없다: " + origin.env();
             }
         }
     }

@@ -45,6 +45,7 @@ import javax.swing.JPopupMenu;
 import javax.swing.SwingUtilities;
 import javax.swing.border.EmptyBorder;
 import tanager.application.port.in.CheckMissingPathsUseCase;
+import tanager.application.port.in.ImportConversationsUseCase;
 import tanager.application.port.in.ListProfilesUseCase;
 import tanager.application.port.in.ManageHistoryUseCase;
 import tanager.application.port.in.OpenPaneUseCase;
@@ -164,6 +165,7 @@ final class MainWindow {
             SettingsUseCase settingsFile,
             WatchResourcesUseCase resources,
             CheckMissingPathsUseCase missingPaths,
+            ImportConversationsUseCase conversations,
             Runnable onShutdown,
             TerminalSettings settings,
             Motion motion,
@@ -175,6 +177,7 @@ final class MainWindow {
         this.onShutdown = Objects.requireNonNull(onShutdown, "onShutdown");
         this.settingsFile = Objects.requireNonNull(settingsFile, "settingsFile");
         Objects.requireNonNull(missingPaths, "missingPaths");
+        Objects.requireNonNull(conversations, "conversations");
         this.sessions = Objects.requireNonNull(sessions, "sessions");
         this.profiles = Objects.requireNonNull(profiles, "profiles");
         this.commands = Objects.requireNonNull(commands, "commands");
@@ -216,10 +219,11 @@ final class MainWindow {
                 closeRequested();
             }
 
-            // 다른 창에서 폴더를 만들거나 지우고 돌아왔을 수 있다 — 오래된 확인만 백그라운드로 다시 한다(#186)
+            // 다른 창에서 폴더를 만들거나 지우거나 Claude 와 대화하고 돌아왔을 수 있다 — 오래된 확인 · 읽기만 백그라운드로 다시 한다(#186 · #215)
             @Override
             public void windowActivated(WindowEvent e) {
                 missingPaths.windowActivated();
+                conversations.refresh();
             }
         });
         // 최소 크기를 먼저 정해야 저장된 자리가 그보다 작을 때 늘려 놓는다

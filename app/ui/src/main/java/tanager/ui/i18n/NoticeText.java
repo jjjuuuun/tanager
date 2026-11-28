@@ -15,6 +15,7 @@ import tanager.application.port.out.WorkspaceLoadNotice;
 import tanager.domain.history.Alias;
 import tanager.domain.history.AliasProblem;
 import tanager.domain.history.ShellEnvironment;
+import tanager.domain.history.VisitSource;
 
 /**
  * 하위 계층이 넘긴 구조화 값을 화면 문장으로 바꾼다(#137, ADR-0017). 하위 계층의 {@code describe()} 는 로그용이라 화면에 쓰지 않는다. 모든
@@ -192,6 +193,29 @@ public final class NoticeText {
             case TOO_LONG -> t(Msg.ALIAS_TOO_LONG, Alias.MAX_CODE_POINTS);
             case INVISIBLE_CHARACTER -> t(Msg.ALIAS_INVISIBLE);
             case NO_VISIBLE_CHARACTER -> t(Msg.ALIAS_NO_VISIBLE);
+        };
+    }
+
+    /** 대화 가져오기를 이번 실행 동안 끈 이유(#215). */
+    public String of(AppEvent.ImportProblem problem) {
+        String tool = toolName(problem.origin().source());
+        String env = environment(problem.origin().env());
+        return switch (problem) {
+            case AppEvent.ImportProblem.UnknownFormat _ -> t(Msg.CONVERSATIONS_UNKNOWN_FORMAT, tool, env);
+            case AppEvent.ImportProblem.Unreadable _ -> t(Msg.CONVERSATIONS_UNREADABLE, tool, env);
+        };
+    }
+
+    // 제품 이름이라 번역하지 않는다. 모르는 출처는 id 그대로
+    private static String toolName(VisitSource source) {
+        return source.equals(VisitSource.CLAUDE_CODE) ? "Claude Code" : source.id();
+    }
+
+    // 사이드바 환경 노드와 같은 표기
+    private static String environment(ShellEnvironment env) {
+        return switch (env) {
+            case ShellEnvironment.Wsl(String distro) -> "WSL · " + distro;
+            case ShellEnvironment.Windows _ -> "Windows";
         };
     }
 

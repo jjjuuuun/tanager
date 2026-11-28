@@ -56,6 +56,7 @@ public final class TanagerApp {
                         events,
                         assembly.resources(),
                         assembly.missingPaths(),
+                        assembly.conversations(),
                         assembly.appearance(),
                         // state.json 은 조립 때 이미 읽었다 — 처음 그리는 배치가 복원한 작업 공간이다(#179)
                         assembly.state().snapshot().workspace(),
