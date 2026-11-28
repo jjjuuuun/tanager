@@ -9,6 +9,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 import tanager.application.platform.PlatformSelectionError;
@@ -130,7 +131,9 @@ public final class SwingUi {
                 return;
             }
             TerminalSettings terminal = new TerminalSettings(fonts, JediTermColors.of(startTheme));
-            Motion motion = Motion.fromTheme(appearance.current().animations());
+            // 전환을 시작할 때마다 지금 값을 읽는다 — 실행 중 바뀐 OS · 설정을 다시 시작하지 않고 따른다(#249)
+            Supplier<Motion> motion =
+                    () -> Motion.fromTheme(appearance.current().animations());
             Executor background =
                     task -> Thread.ofVirtual().name("tanager-session-start").start(task);
             MainWindow window = new MainWindow(

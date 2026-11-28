@@ -72,8 +72,8 @@ class PaneControllerTest {
             previous = UIManager.getLookAndFeel();
             UIManager.setLookAndFeel(new SoftDarkLaf());
             TerminalSettings settings = new TerminalSettings(TerminalFontSet.fallback(), JediTermColors.current());
-            controller =
-                    new PaneController(new PaneId("p1"), ui, background, sessions, profiles, settings, INSTANT, host);
+            controller = new PaneController(
+                    new PaneId("p1"), ui, background, sessions, profiles, settings, () -> INSTANT, host);
             return null;
         });
     }
@@ -250,6 +250,39 @@ class PaneControllerTest {
 
         // then
         assertThat(host.focusGained.get()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("켜짐으로 시작해 실행 중 애니메이션을 끄면 다음 포커스 이동의 테두리는 전환 없이 바로 바뀐다(#249)")
+    void focusBorderFollowsLiveMotion() {
+        // given
+        AtomicReference<Motion> live = new AtomicReference<>(new Motion(Duration.ofMillis(180), true));
+        PaneController pane = onEdt(() -> new PaneController(
+                new PaneId("p2"),
+                ui,
+                background,
+                sessions,
+                profiles,
+                new TerminalSettings(TerminalFontSet.fallback(), JediTermColors.current()),
+                live::get,
+                host));
+
+        try {
+            // when
+            live.set(INSTANT);
+            onEdt(() -> {
+                pane.focusChanged(true);
+                return null;
+            });
+
+            // then
+            assertThat(onEdt(pane::focusEmphasis)).isEqualTo(1.0);
+        } finally {
+            onEdt(() -> {
+                pane.shutdown();
+                return null;
+            });
+        }
     }
 
     @Test

@@ -28,6 +28,7 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
+import java.util.function.Supplier;
 import javax.swing.AbstractAction;
 import javax.swing.JButton;
 import javax.swing.JComponent;
@@ -156,7 +157,10 @@ public final class PaneController {
     // 진행 중인 기동이 내놓을 스트림. 기동 중에 앱이 끝나도 그 스트림을 닫고 종료를 기다리려고 들고 있다
     private CompletableFuture<Optional<TerminalStream>> launching = CompletableFuture.completedFuture(Optional.empty());
 
-    /** @param id 이 창의 식별자. 트리의 세션 번호 · cwd 추적이 이 창에 매인다 */
+    /**
+     * @param id 이 창의 식별자. 트리의 세션 번호 · cwd 추적이 이 창에 매인다
+     * @param motion 포커스 테두리 전환을 시작할 때마다 지금 설정을 읽는다(#249)
+     */
     public PaneController(
             PaneId id,
             Executor ui,
@@ -164,7 +168,7 @@ public final class PaneController {
             StartSessionUseCase sessions,
             ListProfilesUseCase profiles,
             TerminalSettings settings,
-            Motion motion,
+            Supplier<Motion> motion,
             Host host) {
         this.id = Objects.requireNonNull(id, "id");
         this.ui = Objects.requireNonNull(ui, "ui");
@@ -668,6 +672,11 @@ public final class PaneController {
                 action.run();
             }
         });
+    }
+
+    /** 포커스 테두리가 지금 얼마나 강조됐는가(0..1). 테스트용. */
+    double focusEmphasis() {
+        return focusBorder.value();
     }
 
     private void updateFocus() {

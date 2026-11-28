@@ -29,6 +29,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
@@ -152,7 +153,7 @@ final class MainWindow {
     private final SettingsUseCase settingsFile;
     private final PaneCommands commands;
     private final TerminalSettings settings;
-    private final Motion motion;
+    private final Supplier<Motion> motion;
     private final Executor ui = SwingUtilities::invokeLater;
     private final Executor background;
     private final Measurement measurement;
@@ -171,7 +172,7 @@ final class MainWindow {
             ImportConversationsUseCase conversations,
             Runnable onShutdown,
             TerminalSettings settings,
-            Motion motion,
+            Supplier<Motion> motion,
             Executor background,
             Workspace initial,
             RecordWindowStateUseCase windowState,
