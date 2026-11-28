@@ -69,21 +69,27 @@ class InputLatencyProbeTest {
     }
 
     @Test
-    @DisplayName("짝은 FIFO 다 — 출력 조각 하나가 가장 오래된 키 하나의 짝이 된다")
-    void output_pairsOldestKeyFirst() {
-        // given
+    @DisplayName("출력 조각은 그보다 먼저 보낸 키를 모두 답한다 — 출력이 없는 키(빈 줄의 Esc 등)가 뒤 표본을 밀지 않는다")
+    void output_answersEveryEarlierKey() {
+        // given — 첫 키는 셸이 아무것도 내지 않는다
         probe.keyTyped();
-        advance(2);
+        advance(100);
         probe.keyTyped();
-        advance(3);
+        advance(1);
         probe.output();
-        advance(5);
+        advance(9);
+        probe.painted();
+        advance(90);
+        probe.keyTyped();
+        advance(1);
+        probe.output();
+        advance(9);
 
         // when
         probe.painted();
 
-        // then — 둘째 키는 아직 출력이 없다
-        assertThat(probe.report()).contains("input-latency pane=p1 n=1 p50=10ms p95=10ms p99=10ms max=10ms");
+        // then — 첫 키만 한 번 길게(110ms) 잡히고 뒤 키들은 제 에코로 잰다
+        assertThat(probe.report()).contains("input-latency pane=p1 n=3 p50=10ms p95=110ms p99=110ms max=110ms");
     }
 
     @Test
