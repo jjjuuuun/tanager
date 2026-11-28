@@ -119,6 +119,10 @@ jobs:
       # app-image → 고지(LICENSE · THIRD-PARTY-NOTICES · D2Coding OFL)와 글꼴 검사(ADR-0010) → MSI
       - run: ./gradlew :bootstrap:jpackageImage :bootstrap:verifyAppImage :bootstrap:jpackageInstaller
         shell: pwsh
+      # 시작 시간 · AOT 캐시(#221): MSI 를 풀어 두 번 띄워 2번째에 캐시를 쓰는지 본다. 캐시 없음 · 데스크톱 없음은 경고만
+      - name: AOT 캐시 확인(MSI 를 푼 이미지)
+        shell: pwsh
+        run: ./.github/scripts/check-startup-cache.ps1
       # release 와 같은 배포 파일 모으기 스크립트를 PR 에서 미리 돌려 본다(#22)
       - name: 배포 파일 모으기 확인(release 와 같은 스크립트)
         shell: pwsh
