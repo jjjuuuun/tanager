@@ -3,8 +3,12 @@ package tanager.adapter.toolkit.claude;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static tanager.adapter.toolkit.claude.ClaudeFixture.path;
+import static tanager.adapter.toolkit.claude.Scans.item;
+import static tanager.adapter.toolkit.claude.Scans.names;
+import static tanager.adapter.toolkit.claude.Scans.ok;
+import static tanager.adapter.toolkit.claude.Scans.plain;
+import static tanager.adapter.toolkit.claude.Scans.source;
 
-import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -27,8 +31,6 @@ import tanager.application.port.out.ToolkitScan;
 import tanager.domain.history.ShellEnvironment;
 import tanager.domain.history.WorkspacePath;
 import tanager.domain.shared.Result;
-import tanager.domain.toolkit.Attribute;
-import tanager.domain.toolkit.AttributeValue;
 import tanager.domain.toolkit.ProviderId;
 import tanager.domain.toolkit.SourceRef;
 import tanager.domain.toolkit.ToolkitItem;
@@ -64,37 +66,8 @@ class ClaudeToolkitProviderTest {
         return new ToolkitQuery(PROJECT, Optional.of(HOME), fixture.hostFunction());
     }
 
-    private static ToolkitScan ok(Result<ToolkitScan, ToolkitError> result) {
-        assertThat(result.error()).isEmpty();
-        return result.value().orElseThrow();
-    }
-
     private ToolkitScan scan() {
         return ok(new ClaudeToolkitProvider().scan(query()));
-    }
-
-    private static ToolkitItem item(ToolkitScan scan, ToolkitKind kind, ToolkitScope scope, String name) {
-        List<ToolkitItem> found = scan.items().stream()
-                .filter(i -> i.kind() == kind && i.scope() == scope && i.name().equals(name))
-                .toList();
-        assertThat(found).as("%s %s %s", kind, scope, name).hasSize(1);
-        return found.getFirst();
-    }
-
-    private static List<String> names(ToolkitScan scan, ToolkitKind kind, ToolkitScope scope) {
-        return scan.items().stream()
-                .filter(i -> i.kind() == kind && i.scope() == scope)
-                .map(ToolkitItem::name)
-                .sorted()
-                .toList();
-    }
-
-    private static SourceRef source(WorkspacePath base, String relative) {
-        return new SourceRef(path(base.env(), base.path() + "/" + relative));
-    }
-
-    private static Attribute plain(String key, String value) {
-        return new Attribute(key, new AttributeValue.Plain(value));
     }
 
     @Test
@@ -456,34 +429,6 @@ class ClaudeToolkitProviderTest {
             return true;
         } catch (IOException | UnsupportedOperationException e) {
             return false;
-        }
-    }
-
-    /** 밑 스트림에서 실제로 읽힌 바이트를 센다. */
-    private static final class CountingStream extends FilterInputStream {
-        private final AtomicLong count;
-
-        CountingStream(InputStream in, AtomicLong count) {
-            super(in);
-            this.count = count;
-        }
-
-        @Override
-        public int read() throws IOException {
-            int b = super.read();
-            if (b >= 0) {
-                count.incrementAndGet();
-            }
-            return b;
-        }
-
-        @Override
-        public int read(byte[] buffer, int off, int len) throws IOException {
-            int n = super.read(buffer, off, len);
-            if (n > 0) {
-                count.addAndGet(n);
-            }
-            return n;
         }
     }
 }
