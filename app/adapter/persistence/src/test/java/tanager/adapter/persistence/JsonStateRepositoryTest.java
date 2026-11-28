@@ -18,6 +18,7 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Stream;
 import net.jqwik.api.Arbitraries;
 import net.jqwik.api.Arbitrary;
@@ -40,6 +41,7 @@ import tanager.application.port.out.StoreAccess;
 import tanager.domain.history.Alias;
 import tanager.domain.history.HistoryPolicy;
 import tanager.domain.history.ShellEnvironment;
+import tanager.domain.history.VisitSource;
 import tanager.domain.history.VisitedDirectory;
 import tanager.domain.history.WorkHistory;
 import tanager.domain.history.WorkspacePath;
@@ -181,7 +183,8 @@ class JsonStateRepositoryTest {
                         37,
                         true,
                         Optional.of(new Alias("Tanager")),
-                        false));
+                        false,
+                        Set.of(VisitSource.SHELL, VisitSource.CLAUDE_CODE)));
         assertThat(result.history().find(path(WINDOWS, "C:\\work\\infra")))
                 .contains(new VisitedDirectory(
                         path(WINDOWS, "C:\\work\\infra"),
@@ -995,7 +998,7 @@ class JsonStateRepositoryTest {
     // ---- 쓰기 ----
 
     @Test
-    @DisplayName("읽은 항목의 sources 는 저장해도 그대로이고 새 항목은 [shell] 이다")
+    @DisplayName("읽은 항목의 sources 는 저장해도 같은 집합(id 순)이고 새 항목은 [shell] 이다")
     void sourcesSurviveRoundTrip() throws IOException {
         // given
         write(file(), fixture("v1-history.json"));
@@ -1008,14 +1011,14 @@ class JsonStateRepositoryTest {
         // then
         JsonNode after = JSON.readTree(Files.readAllBytes(file()));
         assertThat(entryAt(after, "/mnt/c/Users/user/Desktop/Tanager").get("sources"))
-                .isEqualTo(JSON.readTree("[\"shell\",\"claude-code\"]"));
+                .isEqualTo(JSON.readTree("[\"claude-code\",\"shell\"]"));
         assertThat(entryAt(after, "C:\\work\\infra").get("sources")).isEqualTo(JSON.readTree("[\"shell\"]"));
         assertThat(entryAt(after, "C:\\work\\new").get("sources")).isEqualTo(JSON.readTree("[\"shell\"]"));
     }
 
     @Test
-    @DisplayName("대소문자만 다른 항목의 sources 는 먼저 나온 순서대로 겹치지 않게 합쳐 저장한다")
-    void caseOnlyDuplicatesUnionSourcesInFirstSeenOrder() throws IOException {
+    @DisplayName("대소문자만 다른 항목의 sources 는 겹치지 않게 합쳐 id 순으로 저장한다")
+    void caseOnlyDuplicatesUnionSourcesInIdOrder() throws IOException {
         // given
         write(
                 file(),
@@ -1032,7 +1035,7 @@ class JsonStateRepositoryTest {
         JsonNode entries =
                 JSON.readTree(Files.readAllBytes(file())).get("history").get("entries");
         assertThat(entries).hasSize(1);
-        assertThat(entries.get(0).get("sources")).isEqualTo(JSON.readTree("[\"shell\",\"claude-code\",\"x\"]"));
+        assertThat(entries.get(0).get("sources")).isEqualTo(JSON.readTree("[\"claude-code\",\"shell\",\"x\"]"));
     }
 
     static Stream<Arguments> mergedSourcesWithMissingSide() {
@@ -1041,7 +1044,7 @@ class JsonStateRepositoryTest {
                         "앞 항목에 sources 없음",
                         Optional.empty(),
                         Optional.of("[\"claude-code\"]"),
-                        "[\"shell\",\"claude-code\"]"),
+                        "[\"claude-code\",\"shell\"]"),
                 Arguments.of(
                         "뒤 항목에 sources 없음",
                         Optional.of("[\"claude-code\"]"),
