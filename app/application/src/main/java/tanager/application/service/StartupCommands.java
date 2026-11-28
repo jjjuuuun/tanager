@@ -71,6 +71,11 @@ public final class StartupCommands {
                 new Pending(Objects.requireNonNull(folder, "folder"), Objects.requireNonNull(line, "line")));
     }
 
+    /** 아직 셸에 달지 않은 시작 명령 수(테스트용, #223). */
+    synchronized int pendingCount() {
+        return pending.size();
+    }
+
     private synchronized Optional<Pending> take(PaneId pane) {
         return Optional.ofNullable(pending.remove(pane));
     }
