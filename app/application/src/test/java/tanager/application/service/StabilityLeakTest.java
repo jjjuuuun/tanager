@@ -11,6 +11,7 @@ import java.util.Set;
 import java.util.concurrent.CompletionStage;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import tanager.application.port.in.StartFailure;
 import tanager.application.port.in.StartRequest;
 import tanager.application.port.in.StartedSession;
 import tanager.application.port.out.AppConfig;
@@ -120,13 +121,16 @@ class StabilityLeakTest {
         return all;
     }
 
-    /** UI 가 하듯 창의 명세대로 셸을 띄우고 읽기를 시작한 뒤 셸이 첫 프롬프트에서 경로를 알린다. */
+    /** UI 가 하듯 창의 명세대로 첫 셸을 띄운다(읽기는 시작하지 않는다). */
+    private Result<StartedSession, StartFailure> startFromSpec(PaneSpec spec) {
+        return starter.start(
+                new StartRequest(spec.pane(), spec.profile(), false, spec.dir().map(WorkingDir.At::new), SIZE));
+    }
+
+    /** 창의 명세대로 셸을 띄우고 읽기를 시작한 뒤 셸이 첫 프롬프트에서 경로를 알린다. */
     private ScriptedTerminalStream startAndReport(PaneId pane) {
-        PaneSpec spec = workspace().spec(pane).orElseThrow();
-        StartedSession session = starter.start(
-                        new StartRequest(pane, spec.profile(), false, spec.dir().map(WorkingDir.At::new), SIZE))
-                .value()
-                .orElseThrow();
+        StartedSession session =
+                startFromSpec(workspace().spec(pane).orElseThrow()).value().orElseThrow();
         session.stream().start();
         ScriptedTerminalStream stream = (ScriptedTerminalStream) session.stream();
         stream.emit("\u001b]7;file://PC/home/me\u0007$ ");
@@ -206,10 +210,7 @@ class StabilityLeakTest {
         // given — 이어 하기 창은 첫 보고를 기다리는 예약을 단다. 보고 전에 셸이 끝나면 그 예약을 거둬야 한다
         int listeners = state.listenerCount();
         PaneSpec spec = ok(resumer.resume(CONVERSATION, Optional.empty()));
-        StartedSession session = starter.start(new StartRequest(
-                        spec.pane(), spec.profile(), false, spec.dir().map(WorkingDir.At::new), SIZE))
-                .value()
-                .orElseThrow();
+        StartedSession session = startFromSpec(spec).value().orElseThrow();
         session.stream().start();
         assertThat(scheduler.pendingCount()).isEqualTo(1);
 
@@ -241,14 +242,7 @@ class StabilityLeakTest {
         // when
         for (int round = 0; round < RESTARTS; round++) {
             PaneSpec spec = ok(resumer.resume(CONVERSATION, Optional.empty()));
-            assertThat(starter.start(new StartRequest(
-                                    spec.pane(),
-                                    spec.profile(),
-                                    false,
-                                    spec.dir().map(WorkingDir.At::new),
-                                    SIZE))
-                            .isOk())
-                    .isFalse();
+            assertThat(startFromSpec(spec).isOk()).isFalse();
             ok(panes.close(spec.pane()));
         }
 
