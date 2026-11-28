@@ -1,0 +1,24 @@
+{
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@mcp/github"],
+      "env": { "GITHUB_TOKEN": "S3CR3T-FAKE-1" }
+    },
+    "api": {
+      "type": "http",
+      "url": "https://user:S3CR3T-FAKE-2@api.example.com:8443/v1?token=S3CR3T-FAKE-3",
+      "headers": { "Authorization": "Bearer S3CR3T-FAKE-4" }
+    },
+    "keyed": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["server.js", "--api-key", "S3CR3T-FAKE-5", "--port", "3000"]
+    },
+    "db": {
+      "command": "project-db",
+      "args": ["--url", "postgres://app:S3CR3T-FAKE-13@db.example.com/app"],
+      "env": { "DB_URL": "postgres://app:S3CR3T-FAKE-13@db.example.com/app" }
+    }
+  }
+}

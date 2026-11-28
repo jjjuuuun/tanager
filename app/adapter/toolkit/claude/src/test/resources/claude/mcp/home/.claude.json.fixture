@@ -1,0 +1,34 @@
+{
+  "numStartups": 12,
+  "oauthAccount": {
+    "emailAddress": "fake.person@example.invalid",
+    "accountUuid": "00000000-0000-4000-8000-00000000abcd"
+  },
+  "mcpServers": {
+    "db": {
+      "command": "user-db",
+      "env": { "DB_PASSWORD": "S3CR3T-FAKE-7" }
+    },
+    "notes": {
+      "type": "sse",
+      "url": "https://notes.example.com/sse?api_key=S3CR3T-FAKE-14"
+    }
+  },
+  "projects": {
+    "/home/dev/app": {
+      "allowedTools": [],
+      "history": [{ "display": "synthetic prompt S3CR3T-FAKE-8" }],
+      "mcpServers": {
+        "db": {
+          "command": "local-db",
+          "args": ["--password", "S3CR3T-FAKE-9"]
+        }
+      }
+    },
+    "/home/dev/other": {
+      "mcpServers": {
+        "other": { "command": "other", "env": { "OTHER_KEY": "S3CR3T-FAKE-10" } }
+      }
+    }
+  }
+}

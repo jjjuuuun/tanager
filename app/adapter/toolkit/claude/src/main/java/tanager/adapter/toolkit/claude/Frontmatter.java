@@ -35,7 +35,7 @@ record Frontmatter(Map<String, String> values) {
     }
 
     /** 스트림을 읽고 닫는다. 첫 줄이 {@code ---} 가 아니면 빈 값. */
-    static Result<Frontmatter, FrontmatterError> read(InputStream raw) throws IOException {
+    static Result<Frontmatter, FormatError> read(InputStream raw) throws IOException {
         List<String> lines = new ArrayList<>();
         boolean closed = false;
         try (BufferedReader reader = new BufferedReader(
@@ -53,7 +53,7 @@ record Frontmatter(Map<String, String> values) {
             }
         }
         if (!closed) {
-            return Result.err(new FrontmatterError(OptionalInt.of(1)));
+            return Result.err(new FormatError(OptionalInt.of(1)));
         }
         return parse(String.join("\n", lines));
     }
@@ -89,7 +89,7 @@ record Frontmatter(Map<String, String> values) {
         return text.isEmpty() ? Optional.empty() : Optional.of(text);
     }
 
-    private static Result<Frontmatter, FrontmatterError> parse(String yaml) {
+    private static Result<Frontmatter, FormatError> parse(String yaml) {
         if (yaml.isBlank()) {
             return Result.ok(new Frontmatter(Map.of()));
         }
@@ -97,13 +97,13 @@ record Frontmatter(Map<String, String> values) {
         try {
             root = YAML.readTree(yaml);
         } catch (JacksonException e) {
-            return Result.err(new FrontmatterError(lineOf(e.getLocation())));
+            return Result.err(new FormatError(lineOf(e.getLocation())));
         }
         if (root == null || root.isMissingNode() || root.isNull()) {
             return Result.ok(new Frontmatter(Map.of()));
         }
         if (!root.isObject()) {
-            return Result.err(new FrontmatterError(OptionalInt.empty()));
+            return Result.err(new FormatError(OptionalInt.empty()));
         }
         Map<String, String> values = new LinkedHashMap<>();
         for (Map.Entry<String, JsonNode> field : root.properties()) {
