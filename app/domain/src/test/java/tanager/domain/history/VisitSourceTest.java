@@ -42,4 +42,13 @@ class VisitSourceTest {
         // when / then
         assertThatThrownBy(() -> new VisitSource(raw)).isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    @DisplayName("parse 는 형식이 맞으면 출처를, 틀리면 empty 를 돌려준다 — 저장 파일의 틀린 원소만 버리려고")
+    void parse() {
+        // given / when / then
+        assertThat(VisitSource.parse("future-tool")).contains(new VisitSource("future-tool"));
+        assertThat(VisitSource.parse("Bad Value")).isEmpty();
+        assertThat(VisitSource.parse("")).isEmpty();
+    }
 }
