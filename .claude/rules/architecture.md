@@ -20,13 +20,15 @@ app/bootstrap        ← 조립 루트(composition root). 유일하게 모든 �
 - 새 OS 지원 = `app/platform/<os>` 모듈 추가 + `META-INF/services` 등록. 다른 모듈은 바꾸지 않는다.
 - 새 AI 도구 지원(Codex 등) = `app/adapter/toolkit/<도구>` 모듈 추가 + `ToolkitProvider` 등록. 같은 원칙.
 - toolkit 어댑터는 사용자 설정 파일을 **절대 쓰지 않는다**. 비밀값(MCP `env`, 헤더, 토큰)은 읽는 즉시 마스킹하고 도메인으로 넘기지 않는다.
+- 네트워크 통신 금지(NFR-06): 제품 코드는 `java.net.http` · `javax.net` · 소켓 · `URLConnection` · 소켓 채널과 `URL.openConnection`/`openStream` 을 쓰지 않는다. `java.net.URI` 는 허용(ArchUnit `noNetworkAccess`).
+- toolkit 어댑터 쓰기 금지(FR-TK-07): `tanager.adapter.toolkit..` 은 `Files` 의 쓰기 · 생성 · 삭제 · 이동 · 복사 · 속성 변경, `FileOutputStream` · `FileWriter` · `RandomAccessFile` · `FileChannel` 을 쓰지 않는다(ArchUnit `toolkitAdaptersDoNotWriteFiles`).
 
 ## 바운디드 컨텍스트 (domain 패키지)
 - `history` — 작업 경로 이력(핵심 도메인). 애그리거트 `WorkHistory`, 값 객체 `WorkspacePath`, `ShellEnvironment`
 - `layout` — 분할 레이아웃. 불변 트리 `LayoutNode = Split | Leaf`, 순수 함수 연산
 - `session` — 터미널 세션·셸 프로파일. 상태 `Starting → Running → Exited`
 - `workspace` — 탭·창 스냅샷(복원 단위)
-- `toolkit` — 경로별로 쓸 수 있는 AI 에이전트 구성(스킬·서브에이전트·메모리·MCP·훅·권한)의 **읽기 전용** 카탈로그. 공급자 SPI(`ToolkitProvider`)로 Claude Code 외 도구도 추가 가능
+- `toolkit` — 경로별로 쓸 수 있는 AI 에이전트 구성(스킬·서브에이전트·메모리·MCP·훅·권한)의 **읽기 전용** 카탈로그. 공급자 SPI(`ToolkitProvider` · `ConversationSource`)는 application `port.out` 에 있고 구현은 `adapter.toolkit` 에만 — Claude Code 외 도구도 추가 가능. domain 중 `history` · `shared` 만 안다
 - `monitor` — CPU·메모리·디스크 표본과 임계값 판정(저장하지 않는 일시 상태, StateActor 를 거치지 않는다)
 - `shared` — `Result`, ID 타입, 도메인 이벤트
 

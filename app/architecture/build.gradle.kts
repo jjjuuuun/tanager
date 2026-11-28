@@ -10,6 +10,8 @@ dependencies {
     // OS 판별 금지 규칙의 위반 픽스처(FlatLaf SystemInfo)를 컴파일하려고
     testImplementation(libs.flatlaf)
     testImplementation(libs.jna)
+    // 도구함 쓰기 금지 규칙의 위반 픽스처(Jackson writeValue(Path))를 컴파일하려고
+    testImplementation(libs.jackson.databind)
     testImplementation(project(":domain"))
     testImplementation(project(":application"))
     testImplementation(project(":adapter:pty"))

@@ -229,4 +229,150 @@ class ArchitectureRulesSelfTest {
                 .anyMatch(d -> d.contains("ProvidesToolkit"))
                 .noneMatch(d -> d.contains("LegitToolkit"));
     }
+
+    @Test
+    @DisplayName("대화 기록 공급자 규칙은 toolkit 어댑터 밖의 구현을 잡고 안의 구현은 허용한다")
+    void conversationSourceRuleCatchesImplementationsOutsideToolkitAdapters() {
+        // when
+        EvaluationResult result = ArchitectureRules.conversationSourcesLiveInToolkitAdapters(FIXTURE)
+                .evaluate(fixtures);
+
+        // then
+        assertThat(result.hasViolation()).isTrue();
+        assertThat(result.getFailureReport().getDetails())
+                .anyMatch(d -> d.contains("RogueProvider"))
+                .noneMatch(d -> d.contains("LegitConversations"));
+    }
+
+    @Test
+    @DisplayName("네트워크 금지 규칙은 HttpClient 를 쓰는 클래스를 잡는다")
+    void networkRuleCatchesHttpClient() {
+        // when
+        EvaluationResult result = ArchitectureRules.noNetworkAccess(FIXTURE).evaluate(fixtures);
+
+        // then
+        assertThat(result.hasViolation()).isTrue();
+        assertThat(result.getFailureReport().getDetails())
+                .anyMatch(d -> d.contains("CallsHome") && d.contains("java.net.http.HttpClient"));
+    }
+
+    @Test
+    @DisplayName("네트워크 금지 규칙은 소켓 · URL 연결 · TLS · 소켓 채널을 호출과 메서드 참조 모두 잡는다")
+    void networkRuleCatchesSocketsUrlConnectionsTlsAndChannels() {
+        // when
+        List<String> details = ArchitectureRules.noNetworkAccess(FIXTURE)
+                .evaluate(fixtures)
+                .getFailureReport()
+                .getDetails();
+
+        // then
+        assertThat(details).as("new Socket").anyMatch(d -> d.contains("socket()") && d.contains("java.net.Socket"));
+        assertThat(details)
+                .as("new ServerSocket")
+                .anyMatch(d -> d.contains("server()") && d.contains("java.net.ServerSocket"));
+        assertThat(details)
+                .as("new DatagramSocket")
+                .anyMatch(d -> d.contains("datagram()") && d.contains("java.net.DatagramSocket"));
+        assertThat(details)
+                .as("URL.openConnection")
+                .anyMatch(d -> d.contains("connection(") && d.contains("java.net.URL.openConnection"));
+        assertThat(details)
+                .as("URL.openStream")
+                .anyMatch(d -> d.contains("stream(") && d.contains("java.net.URL.openStream"));
+        assertThat(details)
+                .as("URL::openStream")
+                .anyMatch(d -> d.contains("streamRef()") && d.contains("java.net.URL.openStream"));
+        assertThat(details).as("javax.net.ssl").anyMatch(d -> d.contains("tls()") && d.contains("javax.net.ssl"));
+        assertThat(details)
+                .as("SocketChannel")
+                .anyMatch(d -> d.contains("channel()") && d.contains("java.nio.channels.SocketChannel"));
+    }
+
+    @Test
+    @DisplayName("네트워크 금지 규칙은 file:// URI 해석만 하는 클래스를 허용한다")
+    void networkRuleAllowsFileUriParsing() {
+        // when
+        List<String> details = ArchitectureRules.noNetworkAccess(FIXTURE)
+                .evaluate(fixtures)
+                .getFailureReport()
+                .getDetails();
+
+        // then
+        assertThat(details).noneMatch(d -> d.contains("ParsesFileUri"));
+    }
+
+    @Test
+    @DisplayName("도구함 쓰기 금지 규칙은 toolkit 어댑터의 Files.writeString 을 잡는다")
+    void toolkitWriteRuleCatchesWriteString() {
+        // when
+        EvaluationResult result =
+                ArchitectureRules.toolkitAdaptersDoNotWriteFiles(FIXTURE).evaluate(fixtures);
+
+        // then
+        assertThat(result.hasViolation()).isTrue();
+        assertThat(result.getFailureReport().getDetails())
+                .anyMatch(d -> d.contains("WritesSettings") && d.contains("java.nio.file.Files.writeString"));
+    }
+
+    @Test
+    @DisplayName("도구함 쓰기 금지 규칙은 삭제 · 이동 · 디렉터리 생성 · 쓰기 스트림 · 파일 채널 · Jackson 쓰기를 잡는다")
+    void toolkitWriteRuleCatchesOtherWritePaths() {
+        // when
+        List<String> details = ArchitectureRules.toolkitAdaptersDoNotWriteFiles(FIXTURE)
+                .evaluate(fixtures)
+                .getFailureReport()
+                .getDetails();
+
+        // then
+        assertThat(details)
+                .as("Files::delete")
+                .anyMatch(d -> d.contains("deleteRef()") && d.contains("java.nio.file.Files.delete"));
+        assertThat(details).as("Files.move").anyMatch(d -> d.contains("move(") && d.contains("Files.move"));
+        assertThat(details)
+                .as("Files.createDirectories")
+                .anyMatch(d -> d.contains("mkdirs(") && d.contains("Files.createDirectories"));
+        assertThat(details)
+                .as("FileOutputStream")
+                .anyMatch(d -> d.contains("outputStream(") && d.contains("java.io.FileOutputStream"));
+        assertThat(details)
+                .as("FileChannel")
+                .anyMatch(d -> d.contains("channel(") && d.contains("java.nio.channels.FileChannel"));
+        assertThat(details)
+                .as("File.mkdirs")
+                .anyMatch(d -> d.contains("legacyMkdirs(") && d.contains("java.io.File.mkdirs"));
+        assertThat(details)
+                .as("new PrintWriter(파일 이름)")
+                .anyMatch(d -> d.contains("printer(") && d.contains("java.io.PrintWriter.<init>"));
+        assertThat(details)
+                .as("Jackson writeValue(Path)")
+                .anyMatch(d -> d.contains("jackson(") && d.contains("writeValue"));
+    }
+
+    @Test
+    @DisplayName("도구함 쓰기 금지 규칙은 읽기 · 메모리 안 쓰기와 toolkit 밖 어댑터의 쓰기를 허용한다")
+    void toolkitWriteRuleAllowsReadsAndOtherAdapters() {
+        // when
+        List<String> details = ArchitectureRules.toolkitAdaptersDoNotWriteFiles(FIXTURE)
+                .evaluate(fixtures)
+                .getFailureReport()
+                .getDetails();
+
+        // then
+        assertThat(details).as("읽기 전용 접근").noneMatch(d -> d.contains("ReadsSettings"));
+        assertThat(details).as("저장소 어댑터의 쓰기").noneMatch(d -> d.contains("WritesState"));
+    }
+
+    @Test
+    @DisplayName("도구함 컨텍스트 규칙은 domain.toolkit 이 layout 을 아는 것을 잡고 history · shared 는 허용한다")
+    void toolkitContextRuleCatchesLayoutButAllowsHistoryAndShared() {
+        // when
+        EvaluationResult result = ArchitectureRules.domainToolkitKnowsOnlyHistoryAndShared(FIXTURE)
+                .evaluate(fixtures);
+
+        // then
+        assertThat(result.hasViolation()).isTrue();
+        assertThat(result.getFailureReport().getDetails())
+                .anyMatch(d -> d.contains("KnowsLayout") && d.contains("domain.layout.Pane"))
+                .noneMatch(d -> d.contains("KnowsHistory"));
+    }
 }
