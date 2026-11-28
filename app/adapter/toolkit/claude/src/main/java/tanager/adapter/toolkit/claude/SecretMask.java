@@ -71,6 +71,7 @@ final class SecretMask {
         boolean hideNext = false;
         Optional<String> closingQuote = Optional.empty();
         for (String word : words) {
+            Optional<SecretHeader> header = secretHeader(word);
             if (closingQuote.isPresent()) {
                 String quote = closingQuote.get();
                 if (word.endsWith(quote)) {
@@ -94,9 +95,9 @@ final class SecretMask {
                 } else {
                     out.add(word.substring(0, equals + 1) + hideValue(word.substring(equals + 1)));
                 }
-            } else if (secretHeader(word).isPresent()) {
+            } else if (header.isPresent()) {
                 out.add(word);
-                closingQuote = secretHeader(word).get();
+                closingQuote = header.get().closingQuote();
                 hideNext = closingQuote.isEmpty();
             } else if (isAuthScheme(word)) {
                 out.add(word);
@@ -149,11 +150,11 @@ final class SecretMask {
         return word.equalsIgnoreCase("bearer") || word.equalsIgnoreCase("basic");
     }
 
-    /**
-     * 비밀 이름의 헤더 머리({@code X-Api-Key:} · {@code "Authorization:} · {@code --header="Authorization:})면 그 값을 닫을 따옴표(없으면
-     * empty)를 담아 돌려준다. 헤더 머리가 아니면 empty.
-     */
-    private static Optional<Optional<String>> secretHeader(String word) {
+    /** 비밀 이름의 헤더 머리. {@code closingQuote} — 값이 따옴표 안에 있으면 그 닫는 따옴표. */
+    private record SecretHeader(Optional<String> closingQuote) {}
+
+    /** {@code X-Api-Key:} · {@code "Authorization:} · {@code --header="Authorization:} 처럼 비밀 이름의 헤더 머리인가. */
+    private static Optional<SecretHeader> secretHeader(String word) {
         String head = word.substring(word.lastIndexOf('=') + 1);
         Optional<String> quote = Optional.empty();
         if (head.startsWith("\"") || head.startsWith("'")) {
@@ -163,7 +164,7 @@ final class SecretMask {
         if (!HEADER_NAME.matcher(head).matches() || !isSecretName(head)) {
             return Optional.empty();
         }
-        return Optional.of(quote);
+        return Optional.of(new SecretHeader(quote));
     }
 
     private static String hideValue(String value) {
