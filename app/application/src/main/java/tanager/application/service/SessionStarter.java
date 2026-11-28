@@ -45,7 +45,8 @@ import tanager.domain.shared.Result;
  * 한다. 설정은 사용자가 기억을 켜고 고른 셸이 떴을 때만 저장한다.
  *
  * <p>띄운 셸은 돌려주기 전에 창의 세션으로 등록하고 cwd 추적을 붙인다(FR-SES-03 · FR-HIS-01, ADR-0015). 받은 쪽이 {@code
- * stream.start()} 하기 전이라 첫 바이트의 보고도 놓치지 않는다.
+ * stream.start()} 하기 전이라 첫 바이트의 보고도 놓치지 않는다. 창에 시작 명령(#216)이 달려 있으면 그 창의 첫 셸에 함께 단다
+ * ({@link StartupCommands}).
  */
 public final class SessionStarter implements StartSessionUseCase {
     private static final String HOME_SHORTHAND = "~";

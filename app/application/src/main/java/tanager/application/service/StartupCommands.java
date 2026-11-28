@@ -87,17 +87,18 @@ public final class StartupCommands {
         if (taken.isEmpty()) {
             return visits;
         }
-        Armed armed = new Armed(pane, taken.get(), stream);
+        Pending command = taken.get();
+        Armed armed = new Armed(pane, command, stream);
         stream.onExit().thenAccept(code -> armed.exited());
         if (!tracked) {
-            if (running.knownCwd().filter(taken.get().folder()::equals).isPresent()) {
-                armed.after(UNTRACKED_DELAY, armed::fire);
+            if (running.knownCwd().filter(command.folder()::equals).isPresent()) {
+                armed.after(UNTRACKED_DELAY, armed::run);
             } else {
-                armed.skip();
+                armed.skip(Reason.PATH_MISMATCH);
             }
             return visits;
         }
-        armed.after(FIRST_REPORT_TIMEOUT, armed::timedOut);
+        armed.after(FIRST_REPORT_TIMEOUT, () -> armed.skip(Reason.TIMED_OUT));
         return (reporting, cwd) -> {
             armed.reported(cwd);
             visits.record(reporting, cwd);
@@ -134,32 +135,27 @@ public final class StartupCommands {
             return true;
         }
 
+        /** 셸이 처음 알린 경로가 요청한 폴더면 쓰고, 아니면 버린다. */
         void reported(WorkspacePath cwd) {
+            if (cwd.equals(command.folder())) {
+                run();
+            } else {
+                skip(Reason.PATH_MISMATCH);
+            }
+        }
+
+        void run() {
             if (!decide()) {
                 return;
             }
-            if (cwd.equals(command.folder())) {
-                write();
-            } else {
-                notice(Reason.PATH_MISMATCH);
-            }
+            byte[] bytes = (command.line().text() + ENTER).getBytes(StandardCharsets.UTF_8);
+            io.execute(() -> stream.write(bytes));
         }
 
-        void fire() {
+        void skip(Reason reason) {
             if (decide()) {
-                write();
-            }
-        }
-
-        void skip() {
-            if (decide()) {
-                notice(Reason.PATH_MISMATCH);
-            }
-        }
-
-        void timedOut() {
-            if (decide()) {
-                notice(Reason.TIMED_OUT);
+                AppEvent event = skipped(reason);
+                state.submit(current -> new Transition<>(current, List.of(event), true));
             }
         }
 
@@ -168,20 +164,14 @@ public final class StartupCommands {
             if (!decide()) {
                 return;
             }
-            StartNotice notice = new StartNotice.StartupCommandSkipped(command.line(), Reason.SHELL_EXITED);
+            AppEvent event = skipped(Reason.SHELL_EXITED);
             state.submit(current -> current.workspace().spec(pane).isPresent()
-                    ? new Transition<>(current, List.of(new AppEvent.SessionNotice(pane, notice)), true)
+                    ? new Transition<>(current, List.of(event), true)
                     : new Transition<>(current, List.of(), false));
         }
 
-        private void write() {
-            byte[] bytes = (command.line().text() + ENTER).getBytes(StandardCharsets.UTF_8);
-            io.execute(() -> stream.write(bytes));
-        }
-
-        private void notice(Reason reason) {
-            StartNotice notice = new StartNotice.StartupCommandSkipped(command.line(), reason);
-            state.submit(current -> new Transition<>(current, List.of(new AppEvent.SessionNotice(pane, notice)), true));
+        private AppEvent skipped(Reason reason) {
+            return new AppEvent.SessionNotice(pane, new StartNotice.StartupCommandSkipped(command.line(), reason));
         }
     }
 }
