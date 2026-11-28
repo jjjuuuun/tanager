@@ -19,6 +19,9 @@ import tanager.application.port.out.HistoryStoreError;
 import tanager.application.port.out.Integration;
 import tanager.application.port.out.LaunchError;
 import tanager.domain.history.AliasProblem;
+import tanager.domain.history.ImportOrigin;
+import tanager.domain.history.ShellEnvironment;
+import tanager.domain.history.VisitSource;
 import tanager.domain.session.ProfileId;
 
 /** 하위 계층의 구조화 값 → 화면 문장(#137). 영어 화면에 한국어가 섞이지 않고, 한국어 화면은 전과 같다. */
@@ -176,5 +179,28 @@ class NoticeTextTest {
         for (var problem : List.of(window, workspace, dropped, migrated)) {
             assertNoHangul(EN.of(problem));
         }
+    }
+
+    @Test
+    @DisplayName("대화 가져오기 알림: 도구 이름 · 환경을 넣어 영어 · 한국어로 쓴다(#215)")
+    void importProblems() {
+        // given
+        var winOrigin = new ImportOrigin(VisitSource.CLAUDE_CODE, new ShellEnvironment.Windows());
+        var ubuntuOrigin = new ImportOrigin(VisitSource.CLAUDE_CODE, new ShellEnvironment.Wsl("Ubuntu"));
+        var unknown = new AppEvent.ImportProblem.UnknownFormat(winOrigin);
+        var unreadable = new AppEvent.ImportProblem.Unreadable(ubuntuOrigin);
+
+        // when / then
+        assertThat(EN.of(unknown))
+                .isEqualTo("Could not recognize the Claude Code conversation history format in Windows"
+                        + " — not importing it until restart");
+        assertThat(KO.of(unknown)).isEqualTo("Windows 의 Claude Code 대화 기록 형식을 알아보지 못해 이번 실행 동안 가져오지 않는다");
+        assertThat(EN.of(unreadable))
+                .isEqualTo("Could not read the Claude Code conversation history in WSL · Ubuntu"
+                        + " — not importing it until restart");
+        assertThat(KO.of(unreadable)).isEqualTo("WSL · Ubuntu 의 Claude Code 대화 기록을 읽지 못해 이번 실행 동안 가져오지 않는다");
+        assertThat(EN.of(new AppEvent.ImportProblem.Unreadable(
+                        new ImportOrigin(new VisitSource("codex"), new ShellEnvironment.Windows()))))
+                .contains("codex");
     }
 }

@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -12,14 +13,18 @@ import tanager.application.port.in.AppEvent;
 import tanager.application.state.AppState;
 import tanager.application.state.HistoryStore;
 import tanager.application.state.StateActor;
+import tanager.domain.history.ConversationId;
 import tanager.domain.history.DirectoryTree;
 import tanager.domain.history.EnvironmentNode;
 import tanager.domain.history.HistoryError;
 import tanager.domain.history.HistoryPolicy;
 import tanager.domain.history.HistoryTree;
+import tanager.domain.history.ImportOrigin;
+import tanager.domain.history.PastConversation;
 import tanager.domain.history.ShellEnvironment;
 import tanager.domain.history.TreeNode;
 import tanager.domain.history.TreeQuery;
+import tanager.domain.history.VisitSource;
 import tanager.domain.history.VisitedDirectory;
 import tanager.domain.history.WorkHistory;
 import tanager.domain.history.WorkspacePath;
@@ -96,6 +101,26 @@ class HistoryTreeUseCasesTest {
         TreeNode.Folder gone =
                 (TreeNode.Folder) tree.environments().getFirst().children().getFirst();
         assertThat(gone.missing()).isTrue();
+    }
+
+    @Test
+    @DisplayName("트리 조회는 가져온 대화를 넘겨 그 폴더 아래에 대화 노드가 생긴다(#215)")
+    void treeShowsImportedConversations() {
+        // given
+        WorkspacePath work = win("C:\\work");
+        PastConversation talk =
+                new PastConversation(VisitSource.CLAUDE_CODE, new ConversationId("c1"), work, Optional.of("요약"), T0);
+        WorkHistory history = history(work);
+        StateActor state = actor(AppState.initial(history)
+                .withConversations(Map.of(new ImportOrigin(VisitSource.CLAUDE_CODE, WIN), List.of(talk))));
+
+        // when
+        HistoryTree tree = new HistoryTreeQuery(state).tree("", false);
+
+        // then
+        TreeNode.Folder folder =
+                (TreeNode.Folder) tree.environments().getFirst().children().getFirst();
+        assertThat(folder.children()).contains(new TreeNode.Conversation(talk));
     }
 
     @Test

@@ -141,6 +141,8 @@ public enum Msg {
     CONFIG_OUT_OF_RANGE("config.outOfRange"),
     CONFIG_NEWER_VERSION("config.newerVersion"),
     SETTINGS_KEPT_PREVIOUS("settings.keptPrevious"),
+    CONVERSATIONS_UNKNOWN_FORMAT("conversations.unknownFormat"),
+    CONVERSATIONS_UNREADABLE("conversations.unreadable"),
     LAUNCH_EXECUTABLE_NOT_FOUND("launch.executableNotFound"),
     LAUNCH_DIRECTORY_NOT_FOUND("launch.directoryNotFound"),
     LAUNCH_START_FAILED("launch.startFailed"),

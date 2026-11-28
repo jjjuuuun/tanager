@@ -18,6 +18,7 @@ import tanager.adapter.persistence.JsonStateRepository;
 import tanager.adapter.persistence.WatchServiceConfigWatch;
 import tanager.application.port.in.ApplyThemeUseCase;
 import tanager.application.port.in.CheckMissingPathsUseCase;
+import tanager.application.port.in.ImportConversationsUseCase;
 import tanager.application.port.in.ListProfilesUseCase;
 import tanager.application.port.in.ManageHistoryUseCase;
 import tanager.application.port.in.QueryHistoryTreeUseCase;
@@ -28,6 +29,7 @@ import tanager.application.port.in.ResolvedAppearance;
 import tanager.application.port.in.SettingsUseCase;
 import tanager.application.port.in.StartSessionUseCase;
 import tanager.application.port.in.WatchResourcesUseCase;
+import tanager.application.port.out.ConversationSource;
 import tanager.application.port.out.HistoryStoreError;
 import tanager.application.port.out.Integration;
 import tanager.application.port.out.LoadedHistory;
@@ -39,6 +41,7 @@ import tanager.application.port.out.ToolkitProvider;
 import tanager.application.port.out.UiDispatcher;
 import tanager.application.port.out.WorkspaceLoadNotice;
 import tanager.application.service.AppearanceWatcher;
+import tanager.application.service.ConversationImporter;
 import tanager.application.service.DefaultProfileMemory;
 import tanager.application.service.EnvironmentRecorder;
 import tanager.application.service.HistoryManager;
@@ -98,6 +101,7 @@ final class Assembly {
     private final AppearanceWatcher appearance;
     private final MissingPathScanner missingPaths;
     private final ToolkitQueryService toolkit;
+    private final ConversationImporter conversations;
     private volatile Subscription watchingSettings = () -> {};
 
     private Assembly(
@@ -117,7 +121,8 @@ final class Assembly {
             ExecutorScheduler monitorScheduler,
             AppearanceWatcher appearance,
             MissingPathScanner missingPaths,
-            ToolkitQueryService toolkit) {
+            ToolkitQueryService toolkit,
+            ConversationImporter conversations) {
         this.profiles = profiles;
         this.sessions = sessions;
         this.state = state;
@@ -135,6 +140,7 @@ final class Assembly {
         this.appearance = appearance;
         this.missingPaths = missingPaths;
         this.toolkit = toolkit;
+        this.conversations = conversations;
     }
 
     /**
@@ -186,6 +192,13 @@ final class Assembly {
                 platform.directories(),
                 task -> Thread.ofVirtual().name("tanager-path-check").start(task),
                 InstantSource.system());
+        // 셸 탐지 · 설정 · 불러오기보다 먼저 구독해야 첫 읽기 계기를 놓치지 않는다. 읽기는 가상 스레드(블로킹 파일 I/O, #215)
+        ConversationImporter conversations = new ConversationImporter(
+                state,
+                loadAll(ConversationSource.class, "대화 공급자"),
+                platform.hostFiles(),
+                task -> Thread.ofVirtual().name("tanager-conversations").start(task),
+                InstantSource.system());
         detectShells(catalog, new EnvironmentRecorder(state));
         VisitRecorder visits = new VisitRecorder(state, InstantSource.system());
         SessionStarter starter = new SessionStarter(
@@ -211,7 +224,7 @@ final class Assembly {
                 ui);
         // 도구함은 상태가 아니다 — 액터를 거치지 않고 가상 스레드에서 읽는다. 시간 제한 예약은 저장 타이머를 같이 쓴다(일이 짧다)
         ToolkitQueryService toolkit = new ToolkitQueryService(
-                toolkitProviders(),
+                loadAll(ToolkitProvider.class, "도구함 공급자"),
                 platform.hostFiles(),
                 () -> settings.current().toolkit(),
                 task -> Thread.ofVirtual().name("tanager-toolkit").start(task),
@@ -233,13 +246,14 @@ final class Assembly {
                 monitorScheduler,
                 appearance,
                 missingPaths,
-                toolkit);
+                toolkit,
+                conversations);
     }
 
-    // 등록된 도구함 공급자 모두(ADR-0019). 만들지 못한 공급자는 빼고 로그만 남긴다 — 공급자 하나 때문에 앱이 뜨지 않으면 안 된다
-    private static List<ToolkitProvider> toolkitProviders() {
-        List<ToolkitProvider> found = new ArrayList<>();
-        var providers = ServiceLoader.load(ToolkitProvider.class).iterator();
+    // 등록된 공급자 모두(도구함 ADR-0019 · 대화 ADR-0020). 만들지 못한 공급자는 빼고 로그만 남긴다 — 공급자 하나 때문에 앱이 뜨지 않으면 안 된다
+    private static <T> List<T> loadAll(Class<T> type, String what) {
+        List<T> found = new ArrayList<>();
+        var providers = ServiceLoader.load(type).iterator();
         // 잘못된 등록이 같은 오류를 되풀이해도 끝나게 횟수를 둔다
         for (int failures = 0; failures < MAX_PROVIDER_FAILURES; ) {
             try {
@@ -249,10 +263,10 @@ final class Assembly {
                 found.add(providers.next());
             } catch (ServiceConfigurationError e) {
                 failures++;
-                LOG.log(System.Logger.Level.ERROR, "도구함 공급자를 만들지 못해 뺀다", e);
+                LOG.log(System.Logger.Level.ERROR, what + "를 만들지 못해 뺀다", e);
             }
         }
-        LOG.log(System.Logger.Level.INFO, "도구함 공급자 {0}개", found.size());
+        LOG.log(System.Logger.Level.INFO, "{0} {1}개", what, found.size());
         return List.copyOf(found);
     }
 
@@ -336,6 +350,11 @@ final class Assembly {
     /** 고른 폴더 · 세션의 도구함(FR-TK-01, #209). 패널은 후속 UI 이슈. */
     QueryToolkitUseCase toolkit() {
         return toolkit;
+    }
+
+    /** 이전 대화 가져오기 — 창 활성화 때 오래된 기록을 다시 읽는다(FR-TK-09, #215). */
+    ImportConversationsUseCase conversations() {
+        return conversations;
     }
 
     /** 메인 창의 자리 · 크기 · 최대화 · 사이드바 기록(FR-RES-03, #180). 저장은 작업 공간 저장기가 한다. */

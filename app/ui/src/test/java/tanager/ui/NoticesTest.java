@@ -75,4 +75,19 @@ class NoticesTest {
         // when / then
         assertThat(Notices.messageOf(changed)).isEmpty();
     }
+
+    @Test
+    @DisplayName("대화 가져오기 알림은 상태줄 문장이 되고, 대화 목록이 바뀐 이벤트는 보이지 않는다(#215)")
+    void importNoticeBecomesStatusMessage() {
+        // given
+        var origin = new tanager.domain.history.ImportOrigin(
+                tanager.domain.history.VisitSource.CLAUDE_CODE, new tanager.domain.history.ShellEnvironment.Windows());
+        AppEvent notice = new AppEvent.ImportNotice(new AppEvent.ImportProblem.UnknownFormat(origin));
+        AppEvent changed = new AppEvent.ConversationsChanged(java.util.Map.of());
+
+        // when / then
+        assertThat(Notices.messageOf(notice))
+                .hasValueSatisfying(text -> assertThat(text).contains("Claude Code"));
+        assertThat(Notices.messageOf(changed)).isEmpty();
+    }
 }
