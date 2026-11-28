@@ -20,7 +20,8 @@ public interface ConversationSource {
     boolean supports(ShellEnvironment env);
 
     /**
-     * 그 환경의 홈(호스트 경로 — WSL 이면 {@code \\wsl.localhost\<배포판>\home\<user>})에서 대화 기록을 읽는다. 블로킹이고 예외를 던지지
+     * 그 환경의 홈(호스트 경로 — WSL 이면 {@code \\wsl.localhost\<배포판>\home\<user>}. 부르는 쪽이 {@link HostFiles#home} 을
+     * {@link HostFiles#hostPath} 로 바꿔 넘긴다)에서 대화 기록을 읽는다. 블로킹이고 예외를 던지지
      * 않는다 — {@code StateActor} · EDT 에서 부르지 않는다. 파일 하나가 틀리면 건너뛰고 셀 뿐이다. 기록 폴더 형식 자체를 모르면 err — 부르는
      * 쪽이 기능을 끈다.
      */
