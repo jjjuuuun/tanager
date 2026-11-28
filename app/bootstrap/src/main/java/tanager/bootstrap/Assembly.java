@@ -13,6 +13,7 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 import tanager.adapter.persistence.JsonConfigRepository;
 import tanager.adapter.persistence.JsonStateRepository;
 import tanager.adapter.persistence.WatchServiceConfigWatch;
@@ -160,6 +161,16 @@ final class Assembly {
      * @param ui 리소스 표시(#187) · 테마 변경 알림(#184)을 UI 스레드로 넘긴다
      */
     static Assembly assemble(PlatformModule platform, PtyLauncher launcher, UiDispatcher ui) {
+        return assemble(platform, launcher, ui, phase -> {});
+    }
+
+    /**
+     * {@link #assemble(PlatformModule, PtyLauncher, UiDispatcher)} 에 시작 시간 기록을 더한다(#221).
+     *
+     * @param startup state.json 읽기 끝({@link StartupPhase#STATE}) · 셸 탐지 끝({@link StartupPhase#SHELLS})을 그 일을 한 스레드에서 받는다
+     */
+    static Assembly assemble(
+            PlatformModule platform, PtyLauncher launcher, UiDispatcher ui, Consumer<StartupPhase> startup) {
         ProfileCatalog catalog = new ProfileCatalog(platform);
         IntegrationStatus integration = new IntegrationStatus(platform);
         warmShellIntegration(integration);
@@ -168,8 +179,8 @@ final class Assembly {
         JsonConfigRepository config = new JsonConfigRepository(configFile);
         JsonStateRepository history =
                 new JsonStateRepository(appData.resolve(STATE_FILE), HistoryPolicy.DEFAULT, InstantSource.system());
-        CompletableFuture<StoredState> reading = readState(history);
-        warmShells(catalog);
+        CompletableFuture<StoredState> reading = readState(history, startup);
+        warmShells(catalog, startup);
         StoredState stored = reading.join();
         WorkspaceRestorer restorer = new WorkspaceRestorer();
         Workspace planned = restorer.plan(stored.snapshot());
@@ -293,10 +304,11 @@ final class Assembly {
     }
 
     // 상태를 만들기 전에 시작한다 — state.json 을 기다리는 동안에도 탐지가 돈다(탐지는 한 번뿐이고 뒤의 호출은 그 결과를 기다린다)
-    private static void warmShells(ProfileCatalog catalog) {
+    private static void warmShells(ProfileCatalog catalog, Consumer<StartupPhase> startup) {
         Thread.ofVirtual().name("tanager-shell-warm").start(() -> {
             try {
                 catalog.list();
+                startup.accept(StartupPhase.SHELLS);
             } catch (RuntimeException e) {
                 LOG.log(System.Logger.Level.ERROR, "셸 탐지 실패", e);
             }
@@ -469,11 +481,13 @@ final class Assembly {
             Command<Boolean> history, Optional<WorkspaceSnapshot> snapshot, List<WorkspaceLoadNotice> notices) {}
 
     // 블로킹 I/O 라 가상 스레드에서. 문서는 한 번만 읽는다 — 작업 공간 · 이력 두 부분을 차례로 꺼낸다(ADR-0013 개정 #178)
-    private static CompletableFuture<StoredState> readState(JsonStateRepository store) {
+    private static CompletableFuture<StoredState> readState(JsonStateRepository store, Consumer<StartupPhase> startup) {
         CompletableFuture<StoredState> read = new CompletableFuture<>();
         Thread.ofVirtual().name("tanager-state-load").start(() -> {
             try {
-                read.complete(readStateNow(store));
+                StoredState stored = readStateNow(store);
+                startup.accept(StartupPhase.STATE);
+                read.complete(stored);
             } catch (Throwable e) {
                 read.completeExceptionally(e);
             }

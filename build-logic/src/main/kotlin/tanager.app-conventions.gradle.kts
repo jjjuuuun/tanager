@@ -1,4 +1,8 @@
 // 실행 모듈(app/bootstrap): application 실행 + jpackage app-image(jlink 로 필요한 모듈만)
+import java.nio.file.Files
+import java.security.MessageDigest
+import java.util.HexFormat
+import java.util.concurrent.TimeUnit
 import java.util.zip.ZipFile
 
 plugins {
@@ -54,6 +58,86 @@ val computeRuntimeModules = tasks.register("computeRuntimeModules") {
     }
 }
 
+// 시작 시간(NFR-02, #221): JDK 25 AOT 캐시(JEP 483 · 514 · 515). jpackageImage 가 앱을 훈련 실행(--startup-training)으로
+// 한 번 띄워 app/tanager.aot 를 만든다. 첫 창을 띄워야 해서 Windows 에서만 한다 — 실패하면 경고만 하고 캐시 없는 이미지를 남긴다.
+// 끄기: -PstartupTraining=false
+val startupTraining = providers.gradleProperty("startupTraining").map { it.toBoolean() }.orElse(true)
+val aotCacheName = "tanager.aot"
+val aotStampsName = "tanager.aot.stamps"
+val trainingTimeoutSeconds = 180L
+// jpackage 기본 jlink 옵션에서 --strip-native-commands 만 뺀다 — 훈련 실행의 JVM 이 runtime/bin/java 로 캐시를 조립한다
+val trainingJlinkOptions = "--strip-debug --no-man-pages --no-header-files"
+
+fun trainsStartup() = System.getProperty("os.name").startsWith("Windows") && startupTraining.get()
+
+/**
+ * 훈련 실행으로 AOT 캐시를 만들고, 만들었으면 실행 옵션(app/Tanager.cfg)에 캐시와 jar 기록 경로를 넣는다. cfg 에 -XX:AOTCache 가
+ * 있으면 훈련 실행이 뜨지 않는다(JVM 이 AOTCacheOutput 과 같이 받지 않는다) — 그래서 jpackage --java-options 가 아니라 훈련 뒤에 넣는다.
+ */
+fun trainStartupCache(image: File, work: File) {
+    val app = File(image, "app")
+    val cache = File(app, aotCacheName)
+    val log = File(work, "startup-training.log")
+    // 사용자의 %APPDATA%\Tanager 를 건드리지 않는다. 기억한 셸(cmd — 모든 Windows 에 있다)이 있어야 셸 선택 화면 없이 첫 셸을 띄운다
+    val appData = File(work, "appdata").apply { deleteRecursively() }
+    File(appData, "Tanager").mkdirs()
+    File(appData, "Tanager/config.json").writeText("{ \"schemaVersion\": 1, \"defaultProfile\": \"cmd\" }\n")
+    val builder = ProcessBuilder(File(image, "Tanager.exe").path, "--startup-training")
+        .redirectErrorStream(true)
+        .redirectOutput(log)
+    builder.environment().apply {
+        put("APPDATA", appData.path)
+        put("JAVA_TOOL_OPTIONS", "-XX:AOTCacheOutput=${cache.path}")
+        remove("_JAVA_OPTIONS")
+        remove("JDK_JAVA_OPTIONS")
+    }
+    val process = builder.start()
+    val finished = process.waitFor(trainingTimeoutSeconds, TimeUnit.SECONDS)
+    if (!finished) {
+        // Tanager.exe 는 같은 이름의 자식이 창을 갖고, 그 아래에 셸이 있다 — 자손까지 끝낸다
+        process.toHandle().descendants().forEach { it.destroyForcibly() }
+        process.destroyForcibly().waitFor(10, TimeUnit.SECONDS)
+    }
+    // 로그는 콘솔 코드 페이지(한국어 Windows 는 MS949)다 — 찾는 줄은 ASCII 라 바이트 그대로 읽는다
+    val startupLine = log.takeIf { it.isFile }?.readLines(Charsets.ISO_8859_1).orEmpty().firstOrNull { "startup:" in it }
+    startupLine?.let { logger.lifecycle("훈련 실행 ${it.substring(it.indexOf("startup:"))}") }
+    val created = finished && process.exitValue() == 0 && cache.isFile && cache.length() > 0
+    if (!created) {
+        listOf(cache, File(app, "$aotCacheName.config")).forEach { it.delete() }
+        val why = if (finished) "종료 코드 ${process.exitValue()}" else "${trainingTimeoutSeconds}초 안에 끝나지 않음"
+        val message = "AOT 캐시를 만들지 못해 캐시 없이 둔다($why, 로그: $log)"
+        logger.warn(message)
+        if (System.getenv("GITHUB_ACTIONS") == "true") println("::warning title=AOT 캐시 없음::$message")
+        return
+    }
+    writeClasspathStamps(app)
+    addJavaOptions(
+        File(app, "Tanager.cfg"),
+        listOf("-XX:AOTCache=\$APPDIR/$aotCacheName", "-Dtanager.aot.stamps=\$APPDIR/$aotStampsName"),
+    )
+    logger.lifecycle("AOT 캐시: ${cache.relativeTo(image)} (${cache.length() / (1024 * 1024)} MB)")
+}
+
+// 앱(ClasspathStamps)이 설치가 밀어 놓은 jar 수정 시각을 되돌릴 때 쓰는 기록: <sha256> <크기> <수정 시각 ISO-8601> <이름>.
+// JVM 은 jar 수정 시각이 캐시를 만들 때와 다르면 캐시를 버리는데, MSI · zip 은 시각을 현지 시간 2초 단위로 담는다
+fun writeClasspathStamps(app: File) {
+    val jars = app.listFiles { f -> f.isFile && f.name.endsWith(".jar") }.orEmpty().sortedBy { it.name }
+    val lines = jars.map { jar ->
+        val sha256 = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(jar.readBytes()))
+        "$sha256 ${jar.length()} ${Files.getLastModifiedTime(jar.toPath()).toInstant()} ${jar.name}"
+    }
+    File(app, aotStampsName).writeText(lines.joinToString("\n", postfix = "\n"), Charsets.UTF_8)
+}
+
+// jpackage 가 쓴 cfg 의 [JavaOptions] 바로 아래에 넣는다. 줄바꿈은 파일 것을 따른다
+fun addJavaOptions(cfg: File, options: List<String>) {
+    val text = cfg.readText(Charsets.UTF_8)
+    val newline = if ("\r\n" in text) "\r\n" else "\n"
+    val header = "[JavaOptions]$newline"
+    check(header in text) { "$cfg 에 [JavaOptions] 가 없다" }
+    cfg.writeText(text.replaceFirst(header, header + options.joinToString("") { "java-options=$it$newline" }), Charsets.UTF_8)
+}
+
 // app-image 에 함께 넣을 고지: Tanager LICENSE(MIT) + 루트 THIRD-PARTY-NOTICES.md
 // + 루트 licenses/(제3자 라이선스 전문 · NOTICE, #67) + D2Coding OFL(원본은 ui 리소스 하나, ADR-0010)
 val appContentDir = layout.buildDirectory.dir("jpackage-content")
@@ -89,7 +173,9 @@ val jpackageImage = tasks.register<Exec>("jpackageImage") {
     inputs.dir(installLib)
     inputs.file(modulesFile)
     inputs.dir(appContentDir)
+    inputs.property("startupTraining", startupTraining)
     outputs.dir(imageDir)
+    val trainingDir = layout.buildDirectory.dir("jpackage-training")
     doFirst {
         delete(imageDir.get())
         val args = mutableListOf(
@@ -102,7 +188,18 @@ val jpackageImage = tasks.register<Exec>("jpackageImage") {
             "--app-content", appContent.joinToString(",") { appContentDir.get().file(it).asFile.path },
         )
         jvmFlags.forEach { args += listOf("--java-options", it) }
+        if (trainsStartup()) args += listOf("--jlink-options", trainingJlinkOptions)
         commandLine(args)
+    }
+    doLast {
+        if (!trainsStartup()) return@doLast
+        val image = imageDir.get().asFile
+        try {
+            trainStartupCache(image, trainingDir.get().asFile.apply { mkdirs() })
+        } finally {
+            // 캐시 조립에만 썼다 — jpackage 기본(--strip-native-commands)과 같은 이미지로 되돌린다
+            File(image, "runtime/bin").listFiles { f -> f.name.endsWith(".exe") }.orEmpty().forEach { it.delete() }
+        }
     }
 }
 
