@@ -30,8 +30,6 @@ import tanager.application.state.ConversationsUnavailable;
 import tanager.application.state.HistoryStore;
 import tanager.application.state.StateActor;
 import tanager.domain.history.ImportOrigin;
-import tanager.domain.history.SessionLeaf;
-import tanager.domain.history.SessionStatus;
 import tanager.domain.history.ShellEnvironment;
 import tanager.domain.history.VisitSource;
 import tanager.domain.history.WorkspacePath;
@@ -152,7 +150,7 @@ public final class ConversationImporter implements ImportConversationsUseCase {
                     if (source.supports(env)
                             && !failed.contains(origin)
                             && !inFlight.contains(origin)
-                            && due(readAt.get(origin), staleAfter, now)) {
+                            && BackgroundChecks.due(Optional.ofNullable(readAt.get(origin)), staleAfter, now)) {
                         inFlight.add(origin);
                         readAt.put(origin, now);
                         due.add(new Read(source, origin, now));
@@ -173,18 +171,8 @@ public final class ConversationImporter implements ImportConversationsUseCase {
                 envs.add(env);
             }
         }
-        for (SessionLeaf s : current.sessions().leaves()) {
-            if (s.env() instanceof ShellEnvironment.Wsl
-                    && s.status() instanceof SessionStatus.Running
-                    && !envs.contains(s.env())) {
-                envs.add(s.env());
-            }
-        }
+        envs.addAll(BackgroundChecks.awakeDistros(current.sessions().leaves()));
         return envs;
-    }
-
-    private static boolean due(Instant read, Optional<Duration> staleAfter, Instant now) {
-        return read == null || staleAfter.map(d -> !read.plus(d).isAfter(now)).orElse(false);
     }
 
     private record Read(ConversationSource source, ImportOrigin origin, Instant at) {}

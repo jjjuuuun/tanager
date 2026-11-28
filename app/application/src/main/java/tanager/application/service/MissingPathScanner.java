@@ -20,8 +20,6 @@ import tanager.application.port.out.DirectoryProbe;
 import tanager.application.state.AppState;
 import tanager.application.state.MissingPathChecked;
 import tanager.application.state.StateActor;
-import tanager.domain.history.SessionLeaf;
-import tanager.domain.history.SessionStatus;
 import tanager.domain.history.ShellEnvironment;
 import tanager.domain.history.WorkspacePath;
 
@@ -89,13 +87,16 @@ public final class MissingPathScanner implements CheckMissingPathsUseCase {
     // 확인한 적 없는 항목, staleAfter 가 있으면 그만큼 지난 항목도 맡긴다
     private void scan(Optional<Duration> staleAfter) {
         AppState current = state.snapshot();
-        Set<ShellEnvironment> awake = awakeDistros(current.sessions().leaves());
+        Set<ShellEnvironment> awake =
+                BackgroundChecks.awakeDistros(current.sessions().leaves());
         Instant now = clock.instant();
         List<WorkspacePath> due = new ArrayList<>();
         synchronized (monitor) {
             checkedAt.keySet().retainAll(current.history().entries().keySet());
             for (WorkspacePath path : current.history().entries().keySet()) {
-                if (watched(path, awake) && !inFlight.contains(path) && due(checkedAt.get(path), staleAfter, now)) {
+                if (watched(path, awake)
+                        && !inFlight.contains(path)
+                        && BackgroundChecks.due(Optional.ofNullable(checkedAt.get(path)), staleAfter, now)) {
                     inFlight.add(path);
                     due.add(path);
                 }
@@ -112,22 +113,6 @@ public final class MissingPathScanner implements CheckMissingPathsUseCase {
             case ShellEnvironment.Windows _ -> true;
             case ShellEnvironment.Wsl wsl -> awake.contains(wsl);
         };
-    }
-
-    // 확인한 적 없으면 늘, staleAfter 가 있으면 그만큼 지났을 때도
-    private static boolean due(Instant checked, Optional<Duration> staleAfter, Instant now) {
-        return checked == null
-                || staleAfter.map(d -> !checked.plus(d).isAfter(now)).orElse(false);
-    }
-
-    private static Set<ShellEnvironment> awakeDistros(List<SessionLeaf> sessions) {
-        Set<ShellEnvironment> awake = new HashSet<>();
-        for (SessionLeaf s : sessions) {
-            if (s.env() instanceof ShellEnvironment.Wsl && s.status() instanceof SessionStatus.Running) {
-                awake.add(s.env());
-            }
-        }
-        return awake;
     }
 
     // I/O 스레드. 슬롯이 빌 때까지 기다린다(가상 스레드라 싸다)
