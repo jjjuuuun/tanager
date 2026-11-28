@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "bad": {
+      "command": "x", "env": { "TOKEN": "S3CR3T-FAKE-6" ,, }
+    }
+  }
+}

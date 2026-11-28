@@ -38,18 +38,28 @@ public final class ClaudeToolkitProvider implements ToolkitProvider {
      *       https://code.claude.com/docs/en/skills
      *   <li>서브에이전트 — managed(1) &gt; 프로젝트(3) &gt; 사용자(4): https://code.claude.com/docs/en/sub-agents
      *   <li>메모리 · 규칙 — 모두 합쳐 적용되므로 표에 넣지 않는다(가리지 않는다): https://code.claude.com/docs/en/memory
+     *   <li>MCP 서버 — "1. Local scope 2. Project scope 3. User scope", 같은 이름이면 위의 정의 하나만 쓴다:
+     *       https://code.claude.com/docs/en/mcp#scope-hierarchy-and-precedence. 관리형 {@code managed-mcp.json} 은 배포되면 그
+     *       서버만 쓰므로(exclusive control) 맨 앞: https://code.claude.com/docs/en/managed-mcp
      * </ul>
      */
     static final ScopePrecedence PRECEDENCE = new ScopePrecedence(Map.of(
             ToolkitKind.SKILL, List.of(ToolkitScope.MANAGED, ToolkitScope.USER, ToolkitScope.PROJECT),
             ToolkitKind.COMMAND, List.of(ToolkitScope.MANAGED, ToolkitScope.USER, ToolkitScope.PROJECT),
-            ToolkitKind.SUBAGENT, List.of(ToolkitScope.MANAGED, ToolkitScope.PROJECT, ToolkitScope.USER)));
+            ToolkitKind.SUBAGENT, List.of(ToolkitScope.MANAGED, ToolkitScope.PROJECT, ToolkitScope.USER),
+            ToolkitKind.MCP_SERVER,
+                    List.of(ToolkitScope.MANAGED, ToolkitScope.LOCAL, ToolkitScope.PROJECT, ToolkitScope.USER)));
 
     private static final System.Logger LOG = System.getLogger(ClaudeToolkitProvider.class.getName());
 
-    /** 종류마다의 읽기. MCP · 훅 · 권한은 여기에 한 줄씩 더한다. */
-    private static final List<ClaudeReader> READERS =
-            List.of(new SkillReader(), new CommandReader(), new AgentReader(), new MemoryReader(), new RuleReader());
+    /** 종류마다의 읽기. 훅 · 권한은 여기에 한 줄씩 더한다. */
+    private static final List<ClaudeReader> READERS = List.of(
+            new SkillReader(),
+            new CommandReader(),
+            new AgentReader(),
+            new MemoryReader(),
+            new RuleReader(),
+            new McpReader());
 
     private final FileOpener opener;
 

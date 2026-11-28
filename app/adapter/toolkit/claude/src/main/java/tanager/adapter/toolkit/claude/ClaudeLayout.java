@@ -55,6 +55,11 @@ record ClaudeLayout(WorkspacePath project, Optional<WorkspacePath> home, Functio
         return List.copyOf(roots);
     }
 
+    /** 그 환경의 홈 자신({@code ~/.claude.json} 자리). 모르거나 앱이 열 수 없으면 empty. */
+    Optional<Location> userHome() {
+        return home.flatMap(this::locate);
+    }
+
     /** 고른 폴더 자신. */
     Optional<Location> base() {
         return locate(project);

@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "db": {
+      "type": "stdio",
+      "command": "/usr/local/bin/corp-db",
+      "env": { "CORP_TOKEN": "S3CR3T-FAKE-11" }
+    },
+    "corp": {
+      "type": "http",
+      "url": "https://mcp.corp.example.com/mcp",
+      "headersHelper": "echo '{\"Authorization\": \"Bearer S3CR3T-FAKE-12\"}'"
+    }
+  }
+}
