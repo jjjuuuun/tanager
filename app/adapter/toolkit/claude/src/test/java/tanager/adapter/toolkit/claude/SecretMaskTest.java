@@ -166,6 +166,57 @@ class SecretMaskTest {
     }
 
     @Test
+    @DisplayName("비밀 플래그 다음의 따옴표 친 여러 낱말 값은 닫는 따옴표까지 하나로 가린다")
+    void quotedFlagValue() {
+        // when
+        String doubleQuoted =
+                SecretMask.commandLine("deploy --token \"S3CR3T-FAKE-1 S3CR3T-PART-1 x\" --port 3000", List.of());
+        String singleQuoted = SecretMask.commandLine("deploy --token 'S3CR3T-FAKE-2 S3CR3T-PART-2' up", List.of());
+        String equals =
+                SecretMask.commandLine("deploy --password=\"S3CR3T-FAKE-3 S3CR3T-PART-3\" --mode=fast", List.of());
+
+        // then
+        assertThat(doubleQuoted).isEqualTo("deploy --token \"" + M + "\" --port 3000");
+        assertThat(singleQuoted).isEqualTo("deploy --token '" + M + "' up");
+        assertThat(equals).isEqualTo("deploy --password=\"" + M + "\" --mode=fast");
+    }
+
+    @Test
+    @DisplayName("비밀 이름의 NAME=\"여러 낱말\" · NAME='여러 낱말' 은 닫는 따옴표까지 가리고 다른 NAME=값 은 둔다")
+    void quotedAssignment() {
+        // when
+        String doubleQuoted =
+                SecretMask.commandLine("API_KEY=\"S3CR3T-FAKE-4 S3CR3T-PART-4\" LOG_LEVEL=\"debug x\" node", List.of());
+        String singleQuoted = SecretMask.commandLine("SECRET='S3CR3T-FAKE-5 S3CR3T-PART-5 z' ./run.sh", List.of());
+
+        // then
+        assertThat(doubleQuoted).isEqualTo("API_KEY=\"" + M + "\" LOG_LEVEL=\"debug x\" node");
+        assertThat(singleQuoted).isEqualTo("SECRET='" + M + "' ./run.sh");
+    }
+
+    @Test
+    @DisplayName("비밀 플래그 · NAME= 의 따옴표가 닫히지 않으면 끝까지 가린다")
+    void unclosedQuotedValue() {
+        // when
+        String flag = SecretMask.commandLine("deploy --token \"S3CR3T-FAKE-6 S3CR3T-PART-6 more", List.of());
+        String assignment = SecretMask.commandLine("API_TOKEN='S3CR3T-FAKE-7 S3CR3T-PART-7", List.of());
+
+        // then
+        assertThat(flag).isEqualTo("deploy --token \"" + M);
+        assertThat(assignment).isEqualTo("API_TOKEN='" + M);
+    }
+
+    @Test
+    @DisplayName("따옴표 친 ${VAR} 참조 하나는 이름이라 그대로 둔다")
+    void quotedReference() {
+        // when
+        String line = SecretMask.commandLine("deploy --token \"${API_TOKEN}\" API_KEY='${KEY}'", List.of());
+
+        // then
+        assertThat(line).isEqualTo("deploy --token \"${API_TOKEN}\" API_KEY='${KEY}'");
+    }
+
+    @Test
     @DisplayName("닫는 따옴표가 없는 비밀 헤더는 끝까지 가린다")
     void unclosedSecretHeader() {
         // when

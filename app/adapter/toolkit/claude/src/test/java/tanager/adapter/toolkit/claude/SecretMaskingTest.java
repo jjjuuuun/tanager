@@ -48,9 +48,16 @@ class SecretMaskingTest {
     private static final WorkspacePath MANAGED = path(WSL, "/etc/claude-code");
 
     /** 픽스처에 심은 비밀 표식 수(1 … N). */
-    private static final int SECRETS = 30;
+    private static final int SECRETS = 33;
+
+    /**
+     * 따옴표 친 여러 낱말 비밀 값({@code --token "S3CR3T-FAKE-31 S3CR3T-PART-31"})의 둘째 낱말 표식 수. 첫 낱말만 가리면 이 조각이 새어
+     * 나간다.
+     */
+    private static final int PARTS = 3;
 
     private static final Pattern SECRET = Pattern.compile("S3CR3T-FAKE-\\d+");
+    private static final Pattern PART = Pattern.compile("S3CR3T-PART-\\d+");
     private static final List<String> ACCOUNT = List.of("fake.person@example.invalid", "00000000abcd");
 
     @TempDir
@@ -69,7 +76,8 @@ class SecretMaskingTest {
                 .copy("settings/project", tmp.resolve("project"), PROJECT)
                 .copy("settings/managed", tmp.resolve("managed"), MANAGED)
                 .copy("settings/broken", tmp.resolve("broken-settings"), BROKEN_SETTINGS);
-        assertThat(plantedSecrets(tmp)).as("픽스처가 비밀 표식을 모두 담고 있어야 시험이 뜻이 있다").hasSize(SECRETS);
+        assertThat(planted(tmp, SECRET)).as("픽스처가 비밀 표식을 모두 담고 있어야 시험이 뜻이 있다").hasSize(SECRETS);
+        assertThat(planted(tmp, PART)).as("여러 낱말 비밀 값의 조각 표식").hasSize(PARTS);
         ClaudeToolkitProvider provider = new ClaudeToolkitProvider();
 
         // when
@@ -89,6 +97,7 @@ class SecretMaskingTest {
         List<String> logTexts = logs.stream().map(SecretMaskingTest::text).toList();
         for (String text : Stream.concat(outputs.stream(), logTexts.stream()).toList()) {
             assertThat(SECRET.matcher(text).find()).as("비밀 표식이 새어 나감: %s", text).isFalse();
+            assertThat(PART.matcher(text).find()).as("비밀 값 조각이 새어 나감: %s", text).isFalse();
             for (String account : ACCOUNT) {
                 assertThat(text).doesNotContain(account);
             }
@@ -116,11 +125,11 @@ class SecretMaskingTest {
         return texts;
     }
 
-    private static List<String> plantedSecrets(Path root) throws IOException {
+    private static List<String> planted(Path root, Pattern marker) throws IOException {
         List<String> found = new ArrayList<>();
         try (Stream<Path> files = Files.walk(root)) {
             for (Path file : files.filter(Files::isRegularFile).toList()) {
-                Matcher matcher = SECRET.matcher(Files.readString(file, StandardCharsets.UTF_8));
+                Matcher matcher = marker.matcher(Files.readString(file, StandardCharsets.UTF_8));
                 while (matcher.find()) {
                     if (!found.contains(matcher.group())) {
                         found.add(matcher.group());

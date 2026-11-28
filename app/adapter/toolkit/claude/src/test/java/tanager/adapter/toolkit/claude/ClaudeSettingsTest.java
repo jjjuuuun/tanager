@@ -270,6 +270,21 @@ class ClaudeSettingsTest {
     }
 
     @Test
+    @DisplayName("훅 명령의 따옴표 친 여러 낱말 비밀 값(플래그 · NAME=)은 조각 없이 가린다")
+    void quotedMultiWordSecrets() {
+        // when
+        ToolkitScan scan = scan();
+
+        // then
+        assertThat(named(scan, HOOK, ToolkitScope.LOCAL, "PreCompact"))
+                .extracting(i -> i.attributes().get(1))
+                .containsExactly(
+                        plain("command", "deploy.sh --token \"" + M + "\" up"),
+                        plain("command", "deploy.sh --password='" + M + "' up"),
+                        plain("command", "DB_PASSWORD=\"" + M + "\" ./migrate.sh"));
+    }
+
+    @Test
     @DisplayName("같은 규칙이 PROJECT · USER 에 있어도 가리지 않는다 — 권한 · 훅은 합쳐 적용된다")
     void notShadowed() {
         // when
