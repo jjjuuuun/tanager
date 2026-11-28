@@ -6,6 +6,7 @@ import java.lang.management.ThreadMXBean;
 import java.time.Duration;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicReference;
@@ -102,22 +103,24 @@ final class CollectionMeter {
     }
 
     private void measured(Runnable task) {
-        if (threadCpu.isEmpty()) {
-            try {
-                task.run();
-            } finally {
-                load.updateAndGet(CollectionLoad::collectedWithoutCpu);
-            }
-            return;
-        }
-        LongSupplier cpu = threadCpu.get();
-        long before = cpu.getAsLong();
+        OptionalLong before = cpuNow();
         try {
             task.run();
         } finally {
-            long used = cpu.getAsLong() - before;
-            load.updateAndGet(current -> current.collected(used));
+            OptionalLong after = cpuNow();
+            load.updateAndGet(current -> before.isPresent() && after.isPresent()
+                    ? current.collected(after.getAsLong() - before.getAsLong())
+                    : current.collectedWithoutCpu());
         }
+    }
+
+    // 이 스레드의 CPU 시간. 잴 수 없으면(미지원 · 이 스레드는 -1) 비어 있다
+    private OptionalLong cpuNow() {
+        if (threadCpu.isEmpty()) {
+            return OptionalLong.empty();
+        }
+        long value = threadCpu.get().getAsLong();
+        return value < 0 ? OptionalLong.empty() : OptionalLong.of(value);
     }
 
     private void scheduleReport() {

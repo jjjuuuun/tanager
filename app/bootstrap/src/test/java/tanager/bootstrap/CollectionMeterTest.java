@@ -89,6 +89,23 @@ class CollectionMeterTest {
                         "resource-load window=60s tasks=1 cpuCore=unavailable cpuAll=unavailable wslCalls=0 wslMinGap=-");
     }
 
+    @Test
+    @DisplayName("스레드 CPU 시간이 -1(이 스레드는 잴 수 없음)이면 그 일은 측정 불가로 센다")
+    void io_negativeCpuReading_countsAsUnavailable() {
+        // given
+        CollectionMeter meter = meter(Optional.of(() -> -1));
+
+        // when
+        meter.io().execute(() -> {});
+        nanos.set(millis(60_000));
+        scheduler.advance(CollectionMeter.REPORT_EVERY);
+
+        // then
+        assertThat(log)
+                .containsExactly(
+                        "resource-load window=60s tasks=1 cpuCore=unavailable cpuAll=unavailable wslCalls=0 wslMinGap=-");
+    }
+
     private CollectionMeter meter(Optional<LongSupplier> threadCpu) {
         return CollectionMeter.start(nanos::get, threadCpu, 8, direct, scheduler, log::add);
     }
