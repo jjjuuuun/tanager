@@ -71,6 +71,8 @@ public sealed interface ConfigWarning {
         /** 이름(키)이 비어 있다. */
         EMPTY_NAME,
         /** 절대 경로 glob 이 아니다(이력 제외 규칙, #186). */
-        INVALID_GLOB
+        INVALID_GLOB,
+        /** 공급자 id 형식({@code [a-z0-9][a-z0-9-]{0,31}})이 아니다(도구함 공급자 목록, #206). */
+        INVALID_PROVIDER_ID
     }
 }

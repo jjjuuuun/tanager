@@ -113,6 +113,7 @@ public final class NoticeText {
             case NOT_STRING -> t(Msg.CONFIG_IGNORED_NOT_STRING);
             case EMPTY_NAME -> t(Msg.CONFIG_IGNORED_EMPTY_NAME);
             case INVALID_GLOB -> t(Msg.CONFIG_IGNORED_INVALID_GLOB);
+            case INVALID_PROVIDER_ID -> t(Msg.CONFIG_IGNORED_INVALID_PROVIDER_ID);
         };
     }
 

@@ -77,7 +77,8 @@ public abstract class ConfigRepositoryContract {
                 new TerminalConfig("Consolas", 20, 1.5, 500),
                 new HistoryConfig(300, List.of("/x/**")),
                 new MonitorConfig(false, 5, java.util.Set.of(MonitorItem.CPU), 0.5, 3, 0.5, 0.5),
-                new KeyConfig(Optional.of("ctrl B"), Map.of("pane.splitRight", "alt R")));
+                new KeyConfig(Optional.of("ctrl B"), Map.of("pane.splitRight", "alt R")),
+                new ToolkitConfig(List.of("codex", "claude-code"), false));
     }
 
     @Test
@@ -92,6 +93,33 @@ public abstract class ConfigRepositoryContract {
         // then
         assertThat(saved.value()).contains(withEveryOtherSection(sample()));
         assertThat(repository.load().value()).contains(new LoadedConfig(sample(), List.of()));
+    }
+
+    @Test
+    @DisplayName("빈 저장소의 도구함 설정은 기본값(등록된 공급자 모두 · 대화 가져오기 켬)이다")
+    public void emptyStoreHasToolkitDefaults() {
+        // when
+        AppConfig loaded = repository().load().value().orElseThrow().config();
+
+        // then
+        assertThat(loaded.toolkit()).isEqualTo(ToolkitConfig.defaults());
+    }
+
+    @Test
+    @DisplayName("save 는 도구함 설정을 쓰지 않는다 — 넘긴 값과 달라도 저장소의 값이 그대로다(#206)")
+    public void saveDoesNotWriteToolkit() {
+        // given
+        ConfigRepository repository = repository();
+        AppConfig withToolkit = withEveryOtherSection(sample());
+
+        // when
+        repository.save(withToolkit);
+        repository.save(withToolkit.withDefaultProfile(new ProfileId("cmd")));
+
+        // then
+        AppConfig loaded = repository.load().value().orElseThrow().config();
+        assertThat(loaded.defaultProfile()).contains(new ProfileId("cmd"));
+        assertThat(loaded.toolkit()).isEqualTo(ToolkitConfig.defaults());
     }
 
     @Test

@@ -4,6 +4,7 @@ import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -19,13 +20,15 @@ import tanager.application.port.out.MonitorConfig;
 import tanager.application.port.out.MonitorItem;
 import tanager.application.port.out.TerminalConfig;
 import tanager.application.port.out.ThemeMode;
+import tanager.application.port.out.ToolkitConfig;
 import tanager.domain.history.PathPattern;
+import tanager.domain.toolkit.ProviderId;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.node.ArrayNode;
 import tools.jackson.databind.node.ObjectNode;
 
 /**
- * config.json 의 appearance · terminal · history · monitor · keys 를 읽는다(SDD §9.3, ADR-0009). 키마다 따로 판단한다 — 형식이 틀린 키는
+ * config.json 의 appearance · terminal · history · monitor · keys · toolkit 을 읽는다(SDD §9.3, ADR-0009). 키마다 따로 판단한다 — 형식이 틀린 키는
  * 그 키만 기본값으로 두고, 범위 밖 숫자는 경계로 고정하며, 배열 · 객체 안의 틀린 항목은 그 항목만 뺀다. 경고는 만들 때 받은 목록에 쌓는다.
  * 읽기 한 번에 하나씩 만든다.
  */
@@ -127,6 +130,16 @@ final class ConfigSections {
         KeyConfig defaults = KeyConfig.defaults();
         return section(node, "keys")
                 .map(s -> new KeyConfig(prefix(s.get("prefix")), bindings(s.get("bindings"))))
+                .orElse(defaults);
+    }
+
+    ToolkitConfig toolkit(JsonNode node) {
+        ToolkitConfig defaults = ToolkitConfig.defaults();
+        return section(node, "toolkit")
+                .map(s -> new ToolkitConfig(
+                        providers(s.get("providers")).orElse(defaults.providers()),
+                        bool(s.get("importClaudeProjects"), "toolkit.importClaudeProjects")
+                                .orElse(defaults.importClaudeProjects())))
                 .orElse(defaults);
     }
 
@@ -270,6 +283,31 @@ final class ConfigSections {
             }
             return items;
         });
+    }
+
+    // 형식만 본다 — 아직 설치되지 않은 공급자 id 는 틀린 값이 아니다. 같은 id 는 처음 것만 남긴다
+    private Optional<List<String>> providers(JsonNode node) {
+        String key = "toolkit.providers";
+        return array(node, key).map(array -> {
+            Set<String> providers = new LinkedHashSet<>();
+            for (int i = 0; i < array.size(); i++) {
+                String element = key + "[" + i + "]";
+                nonBlankString(array.get(i), element)
+                        .filter(raw -> isProviderId(raw, element))
+                        .ifPresent(providers::add);
+            }
+            return List.copyOf(providers);
+        });
+    }
+
+    private boolean isProviderId(String raw, String key) {
+        try {
+            new ProviderId(raw);
+            return true;
+        } catch (IllegalArgumentException e) {
+            ignore(key, IgnoredReason.INVALID_PROVIDER_ID);
+            return false;
+        }
     }
 
     private Optional<ArrayNode> array(JsonNode node, String key) {

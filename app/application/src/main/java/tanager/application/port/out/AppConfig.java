@@ -16,6 +16,7 @@ import tanager.domain.session.ProfileId;
  * @param history 이력 한도 · 제외 경로
  * @param monitor 리소스 표시
  * @param keys prefix 키 · 바꾼 바인딩
+ * @param toolkit 도구함 공급자 · 대화 가져오기
  */
 public record AppConfig(
         Optional<ProfileId> defaultProfile,
@@ -25,7 +26,8 @@ public record AppConfig(
         TerminalConfig terminal,
         HistoryConfig history,
         MonitorConfig monitor,
-        KeyConfig keys) {
+        KeyConfig keys,
+        ToolkitConfig toolkit) {
     private static final AppConfig DEFAULTS = new AppConfig(Optional.empty(), Map.of());
 
     public AppConfig {
@@ -37,6 +39,29 @@ public record AppConfig(
         Objects.requireNonNull(history, "history");
         Objects.requireNonNull(monitor, "monitor");
         Objects.requireNonNull(keys, "keys");
+        Objects.requireNonNull(toolkit, "toolkit");
+    }
+
+    /** 도구함은 기본값인 설정. */
+    public AppConfig(
+            Optional<ProfileId> defaultProfile,
+            Map<ProfileId, ProfileSettings> profiles,
+            OpenPlacement openPlacement,
+            AppearanceConfig appearance,
+            TerminalConfig terminal,
+            HistoryConfig history,
+            MonitorConfig monitor,
+            KeyConfig keys) {
+        this(
+                defaultProfile,
+                profiles,
+                openPlacement,
+                appearance,
+                terminal,
+                history,
+                monitor,
+                keys,
+                ToolkitConfig.defaults());
     }
 
     /** 프로파일 밖의 항목은 모두 기본값인 설정. */
@@ -70,12 +95,21 @@ public record AppConfig(
 
     /** 기본 프로파일만 바꾼 새 설정. */
     public AppConfig withDefaultProfile(ProfileId id) {
-        return new AppConfig(Optional.of(id), profiles, openPlacement, appearance, terminal, history, monitor, keys);
+        return new AppConfig(
+                Optional.of(id), profiles, openPlacement, appearance, terminal, history, monitor, keys, toolkit);
     }
 
     /** 저장소가 쓰는 항목(기본 프로파일 · 프로파일별 설정)만 {@code saved} 의 값으로 바꾼 새 설정(ADR-0009). */
     public AppConfig withSavedKeysOf(AppConfig saved) {
         return new AppConfig(
-                saved.defaultProfile, saved.profiles, openPlacement, appearance, terminal, history, monitor, keys);
+                saved.defaultProfile,
+                saved.profiles,
+                openPlacement,
+                appearance,
+                terminal,
+                history,
+                monitor,
+                keys,
+                toolkit);
     }
 }

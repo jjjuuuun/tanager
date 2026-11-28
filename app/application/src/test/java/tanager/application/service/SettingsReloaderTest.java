@@ -15,6 +15,7 @@ import tanager.application.port.out.LoadedConfig;
 import tanager.application.port.out.ManualConfigWatch;
 import tanager.application.port.out.Subscription;
 import tanager.application.port.out.TerminalConfig;
+import tanager.application.port.out.ToolkitConfig;
 import tanager.application.state.AppState;
 import tanager.application.state.ManualExecutor;
 import tanager.application.state.StateActor;
@@ -99,6 +100,35 @@ class SettingsReloaderTest {
         // then
         assertThat(settingsEvents()).containsExactly(new AppEvent.SettingsChanged(withSize(16)));
         assertThat(reloader.current().terminal().size()).isEqualTo(16);
+    }
+
+    @Test
+    @DisplayName("실행 중 toolkit.importClaudeProjects 를 false 로 저장하면 SettingsChanged(false) 가 한 번 나간다(#206)")
+    void changedToolkitAnnouncesNewConfig() {
+        // given
+        fileHas(AppConfig.defaults());
+        reloader.start(watch);
+        executor.runAll();
+        events.clear();
+        AppConfig base = AppConfig.defaults();
+        AppConfig importOff = new AppConfig(
+                base.defaultProfile(),
+                base.profiles(),
+                base.openPlacement(),
+                base.appearance(),
+                base.terminal(),
+                base.history(),
+                base.monitor(),
+                base.keys(),
+                new ToolkitConfig(List.of(), false));
+
+        // when
+        fileHas(importOff);
+        saved();
+
+        // then
+        assertThat(settingsEvents()).containsExactly(new AppEvent.SettingsChanged(importOff));
+        assertThat(reloader.current().toolkit().importClaudeProjects()).isFalse();
     }
 
     @Test
