@@ -481,7 +481,7 @@ public record CpuWindow(List&lt;Double&gt; recent) {                            
 </ul></div>
 </div>
 <h3>8.2 키 바인딩 (기본값, Windows)</h3>
-<p>macOS 에서는 <kbd>Ctrl</kbd> 자리가 <kbd>Cmd</kbd> 로 바뀐다(<code>PlatformModule.defaultKeymap()</code>). prefix 모드는 기본 꺼짐이며 켜면 <kbd>Ctrl</kbd>+<kbd>B</kbd> 뒤에 tmux 와 같은 키를 쓴다(M6, #193 — 그 전에는 <code>keys.prefix</code> 를 적어도 알림만 하고 무시한다).</p>
+<p>macOS 에서는 <kbd>Ctrl</kbd> 자리가 <kbd>Cmd</kbd> 로 바뀐다(<code>PlatformModule.defaultKeymap()</code>). prefix 모드는 기본 꺼짐이며 <code>keys.prefix</code>(예 <code>"ctrl B"</code>)를 적으면 켜진다(M6, #193). prefix 를 누르면 1.5초 동안 다음 키 하나를 아래 prefix 열로 해석하고 상태줄에 <code>PREFIX</code> 를 보인다. 화살표 · <kbd>Ctrl</kbd>+화살표는 누른 키로, <kbd>%</kbd> · <kbd>"</kbd> · <kbd>{</kbd> 같은 글자 키는 자판마다 키 코드가 달라 그 키가 만든 글자로 판정한다. 열에 없는 키 · <kbd>Esc</kbd> · 시간 초과는 취소이고 그 키는 셸로 가지 않는다(시간 초과 뒤에 누른 키는 간다). prefix 를 두 번 누르면 두 번째는 그대로 셸로 간다(tmux 관례, <kbd>Ctrl</kbd>+<kbd>B</kbd> → 0x02). prefix 키는 재정의와 같은 예약 키 규칙을 따르고 기본 · 재정의 키와 겹치면 알리고 prefix 모드를 끈다. 탭 · 명령 팔레트 열(<kbd>c</kbd> <kbd>n</kbd> <kbd>p</kbd> <kbd>0…9</kbd> · <kbd>:</kbd>)은 그 기능(#181 등)이 들어올 때 더한다.</p>
 <div class="tbl-wrap"><table>
 <tr><th>동작</th><th>기본 키</th><th>prefix 모드 (Ctrl+B 다음)</th></tr>
 <tr><td>오른쪽으로 분할</td><td><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>=</kbd></td><td><kbd>%</kbd></td></tr>
@@ -637,7 +637,7 @@ public record CpuWindow(List&lt;Double&gt; recent) {                            
   &quot;layout&quot;: { &quot;dividerHitPx&quot;: 6, &quot;minPane&quot;: { &quot;cols&quot;: 20, &quot;rows&quot;: 5 } },
   &quot;monitor&quot;: { &quot;enabled&quot;: true, &quot;intervalSec&quot;: 2, &quot;items&quot;: [&quot;CPU&quot;, &quot;MEMORY&quot;, &quot;DISK&quot;, &quot;WSL&quot;],
                &quot;thresholds&quot;: { &quot;cpu&quot;: 0.90, &quot;cpuSustainSec&quot;: 10, &quot;memory&quot;: 0.85, &quot;disk&quot;: 0.90 } },   // intervalSec 1~10 · 임계값 0 초과 1 이하 · cpuSustainSec ≥ 1
-  &quot;keys&quot;: { &quot;prefix&quot;: null, &quot;bindings&quot;: { &quot;pane.splitRight&quot;: &quot;alt shift EQUALS&quot; } }   // prefix null · 빈 문자열 = prefix 모드 끔(M6 전에는 적어도 알림 후 무시) · bindings 는 바꿀 것만(동작 id · 규칙은 §8.2)
+  &quot;keys&quot;: { &quot;prefix&quot;: null, &quot;bindings&quot;: { &quot;pane.splitRight&quot;: &quot;alt shift EQUALS&quot; } }   // prefix null · 빈 문자열 = prefix 모드 끔(#193 — 쓸 수 없는 키면 알리고 끔) · bindings 는 바꿀 것만(동작 id · 규칙은 §8.2)
 }</code></pre>
 <ul>
 <li>위 값이 기본값이다(<code>keys.bindings</code> 의 기본은 비어 있고 예시는 재정의다). 단 <code>toolkit.providers</code> 의 기본은 빈 배열(등록된 공급자 모두)이다. <code>layout</code> 은 아직 읽지 않는다(모르는 키로 보존).</li>

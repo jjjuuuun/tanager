@@ -25,7 +25,11 @@ class KeyProblemTextTest {
                 .isEqualTo("pane.zoom 이 Alt+← 를 가져가 pane.focusLeft 에는 키가 없다");
         assertThat(KeyProblemText.of(new KeyProblem.AltGraph("pane.zoom", "Ctrl+Alt+Z")))
                 .isEqualTo("키 설정 pane.zoom 의 Ctrl+Alt+Z 는 AltGr 로 치는 글자와 겹칠 수 있다");
-        assertThat(KeyProblemText.of(new KeyProblem.PrefixNotSupported("ctrl B")))
-                .isEqualTo("prefix 모드(keys.prefix = ctrl B)는 아직 지원하지 않아 무시했다");
+        assertThat(KeyProblemText.of(new KeyProblem.PrefixUnparseable("ctrl bogus")))
+                .isEqualTo("prefix 키 ctrl bogus 를 읽지 못해 prefix 모드를 껐다");
+        assertThat(KeyProblemText.of(new KeyProblem.PrefixReserved("Ctrl+C")))
+                .isEqualTo("prefix 키 Ctrl+C 는 셸 · 터미널이 쓰는 키라 prefix 모드를 껐다");
+        assertThat(KeyProblemText.of(new KeyProblem.PrefixConflict("Ctrl+Shift+E", "sidebar.toggle")))
+                .isEqualTo("prefix 키 Ctrl+Shift+E 를 sidebar.toggle 이 이미 써서 prefix 모드를 껐다");
     }
 }

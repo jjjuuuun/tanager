@@ -15,6 +15,7 @@ import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.time.InstantSource;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -73,6 +74,7 @@ import tanager.ui.keys.KeyAction;
 import tanager.ui.keys.KeyHelp;
 import tanager.ui.keys.KeyProblem;
 import tanager.ui.keys.KeyProblemText;
+import tanager.ui.keys.KeyRoute;
 import tanager.ui.keys.Keymap;
 import tanager.ui.keys.LayoutAction;
 import tanager.ui.keys.LiveKeymap;
@@ -84,6 +86,7 @@ import tanager.ui.motion.Motion;
 import tanager.ui.pane.PaneController;
 import tanager.ui.sidebar.SidebarPanel;
 import tanager.ui.sidebar.SidebarSessions;
+import tanager.ui.status.PrefixIndicator;
 import tanager.ui.status.ResourceStatus;
 import tanager.ui.terminal.TerminalSettings;
 import tanager.ui.theme.ColorToken;
@@ -124,6 +127,11 @@ final class MainWindow {
     private Optional<Subscription> resourceFeed = Optional.empty();
     // 지금 쓰는 키 표. 설정이 바뀌면 다시 시작하지 않고 바꾼다(#183)
     private final LiveKeymap keys = new LiveKeymap();
+    // prefix 모드 중에만 상태줄 왼쪽에 보인다(FR-LAY-08, #193)
+    private final PrefixIndicator prefixIndicator = new PrefixIndicator();
+    // 터미널보다 먼저 보는 키의 판정: prefix 모드 → 키 표(#148 · #183 · #193)
+    private final ShortcutKeys shortcutKeys =
+            new ShortcutKeys(keys.current(), InstantSource.system(), Coalescer.Timer.swing(), prefixIndicator::show);
     private Notices notices = new Notices(List.of());
     // 창 ID → 컨트롤러(트리의 창 순서). 작업 공간(StateActor)의 사본만 들고, 바꾸는 일은 유스케이스로 한다(#89)
     private final Map<PaneId, PaneController> panes = new LinkedHashMap<>();
@@ -145,8 +153,6 @@ final class MainWindow {
     private final Executor ui = SwingUtilities::invokeLater;
     private final Executor background;
     private boolean closing;
-    // 가로챈 키가 만드는 글자(KEY_TYPED)도 터미널에 보내지 않는다 — Alt+Shift+= 의 '+' 가 셸로 새지 않게. 다음 키를 떼면 풀린다
-    private boolean swallowTyped;
 
     MainWindow(
             StartSessionUseCase sessions,
@@ -293,6 +299,7 @@ final class MainWindow {
         }
         List<KeyProblem> problems = keys.apply(config);
         Keymap keymap = keys.current();
+        shortcutKeys.keymap(keymap);
         for (PaneController pane : panes.values()) {
             pane.keysChanged(keymap);
         }
@@ -332,32 +339,27 @@ final class MainWindow {
         exit();
     }
 
-    // 이 창의 키만 본다(대화 상자 · 다른 창 제외). 레이아웃 키(#148)와 사이드바 키를 터미널보다 먼저 가로챈다
+    // 이 창의 키만 본다(대화 상자 · 다른 창 제외). prefix 모드(#193) · 레이아웃 키(#148) · 사이드바 키를 터미널보다 먼저 가로챈다
     private boolean shortcut(KeyEvent event) {
         if (closing || SwingUtilities.getWindowAncestor(event.getComponent()) != frame) {
             return false;
         }
-        return switch (event.getID()) {
-            case KeyEvent.KEY_PRESSED -> {
-                swallowTyped = pressed(event);
-                yield swallowTyped;
-            }
-            case KeyEvent.KEY_TYPED -> swallowTyped;
-            default -> {
-                swallowTyped = false;
-                yield false;
-            }
-        };
-    }
-
-    private boolean pressed(KeyEvent event) {
         // 머리줄을 끄는 중의 Esc 는 끌기만 취소한다 — 셸에 가지 않는다(#151)
-        if (event.getKeyCode() == KeyEvent.VK_ESCAPE && event.getModifiersEx() == 0 && layout.cancelDrag()) {
+        if (event.getID() == KeyEvent.KEY_PRESSED
+                && event.getKeyCode() == KeyEvent.VK_ESCAPE
+                && event.getModifiersEx() == 0
+                && layout.cancelDrag()) {
+            shortcutKeys.consumedPress();
             return true;
         }
-        Optional<KeyAction> action = keys.current().actionFor(event.getKeyCode(), event.getModifiersEx());
-        action.ifPresent(this::run);
-        return action.isPresent();
+        return switch (shortcutKeys.route(event)) {
+            case KeyRoute.Pass pass -> false;
+            case KeyRoute.Swallow swallow -> true;
+            case KeyRoute.Run(KeyAction action) -> {
+                run(action);
+                yield true;
+            }
+        };
     }
 
     // Ctrl+Shift+E: 사이드바 보이기 · 숨기기(밀어 넣고 빼는 전환, FR-UI-04), Ctrl+Shift+F: 사이드바 검색, Ctrl+,: 설정 열기(SDD §8.2 기본값)
@@ -726,6 +728,7 @@ final class MainWindow {
         right.setOpaque(false);
         right.add(statusRight);
         right.add(resourceStatus.component());
+        bar.add(prefixIndicator.component(), BorderLayout.WEST);
         bar.add(statusLeft, BorderLayout.CENTER);
         bar.add(right, BorderLayout.EAST);
         resourceStatus.installMenu(bar);

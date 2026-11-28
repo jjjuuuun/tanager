@@ -16,7 +16,9 @@ public final class KeyProblemText {
                 Msg.KEYS_CONFLICT.text(key, String.join(", ", actions));
             case KeyProblem.Unbound(String action, String key, String by) -> Msg.KEYS_UNBOUND.text(action, key, by);
             case KeyProblem.AltGraph(String action, String key) -> Msg.KEYS_ALT_GRAPH.text(action, key);
-            case KeyProblem.PrefixNotSupported(String raw) -> Msg.KEYS_PREFIX_NOT_SUPPORTED.text(raw);
+            case KeyProblem.PrefixUnparseable(String raw) -> Msg.KEYS_PREFIX_UNPARSEABLE.text(raw);
+            case KeyProblem.PrefixReserved(String key) -> Msg.KEYS_PREFIX_RESERVED.text(key);
+            case KeyProblem.PrefixConflict(String key, String action) -> Msg.KEYS_PREFIX_CONFLICT.text(key, action);
         };
     }
 }

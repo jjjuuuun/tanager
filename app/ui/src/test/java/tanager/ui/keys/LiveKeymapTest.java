@@ -21,6 +21,10 @@ class LiveKeymapTest {
     private static final int ALT_SHIFT = ALT_DOWN_MASK | SHIFT_DOWN_MASK;
 
     private static AppConfig configWith(Map<String, String> bindings) {
+        return configWith(Optional.empty(), bindings);
+    }
+
+    private static AppConfig configWith(Optional<String> prefix, Map<String, String> bindings) {
         AppConfig base = AppConfig.defaults();
         return new AppConfig(
                 base.defaultProfile(),
@@ -30,7 +34,7 @@ class LiveKeymapTest {
                 base.terminal(),
                 base.history(),
                 base.monitor(),
-                new KeyConfig(Optional.empty(), bindings));
+                new KeyConfig(prefix, bindings));
     }
 
     @Test
@@ -75,5 +79,21 @@ class LiveKeymapTest {
         assertThat(keys.current().actionFor(KeyEvent.VK_D, CTRL_SHIFT)).isEmpty();
         assertThat(keys.current().actionFor(KeyEvent.VK_EQUALS, ALT_SHIFT))
                 .contains(new LayoutAction.Split(Orientation.ROW));
+    }
+
+    @Test
+    @DisplayName("실행 중 keys.prefix 를 지운 설정이 오면 다시 시작하지 않고 prefix 모드가 꺼진다(#193)")
+    void removingPrefixTurnsPrefixModeOff() {
+        // given
+        LiveKeymap keys = new LiveKeymap();
+        keys.apply(configWith(Optional.of("ctrl B"), Map.of()));
+        assertThat(keys.current().prefix()).contains(new Key(KeyEvent.VK_B, CTRL_DOWN_MASK));
+
+        // when
+        List<KeyProblem> problems = keys.apply(configWith(Map.of()));
+
+        // then
+        assertThat(problems).isEmpty();
+        assertThat(keys.current().prefix()).isEmpty();
     }
 }
