@@ -276,7 +276,7 @@ class ClaudeProjectsImporterTest {
         byte[] head = (assistant("/home/dev/alpha") + "\n").getBytes(StandardCharsets.UTF_8);
         byte[] filler = (toolResult("/home/dev/alpha", "x".repeat(4000)) + "\n").getBytes(StandardCharsets.UTF_8);
         List<CountingStream> opened = new ArrayList<>();
-        TranscriptOpener opener = f -> {
+        FileOpener opener = f -> {
             assertThat(f).isEqualTo(file);
             CountingStream stream = new CountingStream(head, filler, 10L * 1024 * 1024);
             opened.add(stream);
@@ -340,10 +340,10 @@ class ClaudeProjectsImporterTest {
         // given
         Path broken = home.conversation("-home-dev-alpha", ID_1 + ".jsonl", T1, user("/home/dev/alpha", "x"));
         home.conversation("-home-dev-alpha", ID_2 + ".jsonl", T2, user("/home/dev/alpha", "y"));
-        TranscriptOpener failAll = f -> {
+        FileOpener failAll = f -> {
             throw new IOException("synthetic");
         };
-        TranscriptOpener failOne = f -> {
+        FileOpener failOne = f -> {
             if (f.equals(broken)) {
                 throw new IOException("synthetic");
             }

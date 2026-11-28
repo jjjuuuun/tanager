@@ -413,8 +413,8 @@ public record CpuWindow(List&lt;Double&gt; recent) {                            
 <p>세션의 작업 경로가 <code>~/work/my-app</code> 이라면 (Claude Code 공급자 기준):</p>
 <div class="tbl-wrap"><table>
 <tr><th>탭</th><th>이 프로젝트 (PROJECT)</th><th>로컬 (LOCAL, 개인·커밋 안 함)</th><th>전체 공통 (USER)</th></tr>
-<tr><td>스킬</td><td><code>my-app/.claude/skills/*/SKILL.md</code><br><code>my-app/.claude/commands/*.md</code></td><td>—</td><td><code>~/.claude/skills/</code><br><code>~/.claude/commands/</code></td></tr>
-<tr><td>서브에이전트</td><td><code>my-app/.claude/agents/*.md</code></td><td>—</td><td><code>~/.claude/agents/</code></td></tr>
+<tr><td>스킬</td><td><code>my-app/.claude/skills/*/SKILL.md</code><br><code>my-app/.claude/commands/**/*.md</code></td><td>—</td><td><code>~/.claude/skills/</code><br><code>~/.claude/commands/</code></td></tr>
+<tr><td>서브에이전트</td><td><code>my-app/.claude/agents/**/*.md</code></td><td>—</td><td><code>~/.claude/agents/</code></td></tr>
 <tr><td>메모리</td><td><code>my-app/CLAUDE.md</code> 또는 <code>my-app/.claude/CLAUDE.md</code><br><code>my-app/.claude/rules/**/*.md</code><br>상위 디렉터리의 <code>CLAUDE.md</code> (PARENT)</td><td><code>my-app/CLAUDE.local.md</code></td><td><code>~/.claude/CLAUDE.md</code><br><code>~/.claude/rules/</code></td></tr>
 <tr><td>MCP 서버</td><td><code>my-app/.mcp.json</code> 의 <code>mcpServers</code></td><td><code>~/.claude.json</code> 의 <code>projects["&lt;절대경로&gt;"].mcpServers</code></td><td><code>~/.claude.json</code> 의 <code>mcpServers</code></td></tr>
 <tr><td>훅 · 권한</td><td><code>my-app/.claude/settings.json</code></td><td><code>my-app/.claude/settings.local.json</code></td><td><code>~/.claude/settings.json</code></td></tr>

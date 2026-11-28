@@ -22,6 +22,8 @@ jediterm-core = { module = "org.jetbrains.jediterm:jediterm-core", version.ref =
 jediterm-ui = { module = "org.jetbrains.jediterm:jediterm-ui", version.ref = "jediterm" }
 flatlaf = { module = "com.formdev:flatlaf", version.ref = "flatlaf" }
 jackson-databind = { module = "tools.jackson.core:jackson-databind", version.ref = "jackson" }
+# 도구함 Claude 공급자의 YAML 프런트매터(adapter/toolkit/claude 에만). SnakeYAML Engine 을 끌어온다
+jackson-dataformat-yaml = { module = "tools.jackson.dataformat:jackson-dataformat-yaml", version.ref = "jackson" }
 # pty4j 가 쓰는 slf4j 로그를 JDK 로깅(System.Logger 와 같은 곳)으로 보낸다
 slf4j-jdk14 = { module = "org.slf4j:slf4j-jdk14", version.ref = "slf4j" }
 jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }

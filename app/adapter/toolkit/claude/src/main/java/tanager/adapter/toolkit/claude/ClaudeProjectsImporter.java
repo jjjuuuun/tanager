@@ -34,14 +34,14 @@ public final class ClaudeProjectsImporter implements ConversationSource {
     private static final System.Logger LOG = System.getLogger(ClaudeProjectsImporter.class.getName());
     private static final String EXTENSION = ".jsonl";
 
-    private final TranscriptOpener opener;
+    private final FileOpener opener;
 
     /** {@code ServiceLoader} 용. */
     public ClaudeProjectsImporter() {
         this(Files::newInputStream);
     }
 
-    ClaudeProjectsImporter(TranscriptOpener opener) {
+    ClaudeProjectsImporter(FileOpener opener) {
         this.opener = Objects.requireNonNull(opener, "opener");
     }
 
