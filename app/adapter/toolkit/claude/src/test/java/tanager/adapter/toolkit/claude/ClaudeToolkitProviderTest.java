@@ -32,6 +32,7 @@ import tanager.domain.history.ShellEnvironment;
 import tanager.domain.history.WorkspacePath;
 import tanager.domain.shared.Result;
 import tanager.domain.toolkit.ProviderId;
+import tanager.domain.toolkit.Shadowing;
 import tanager.domain.toolkit.SourceRef;
 import tanager.domain.toolkit.ToolkitItem;
 import tanager.domain.toolkit.ToolkitKind;
@@ -188,6 +189,51 @@ class ClaudeToolkitProviderTest {
                 .isFalse();
         assertThat(item(scan, ToolkitKind.SKILL, ToolkitScope.PROJECT, "deploy").shadowed())
                 .isTrue();
+    }
+
+    @Test
+    @DisplayName(
+            "사용자 스킬 deploy 와 프로젝트 커맨드 deploy 는 한 이름이라 커맨드가 가려진다(문서: A skill and a file in .claude/commands/ → The skill)")
+    void skillShadowsCommandOfSameName() throws IOException {
+        // given
+        Path commands = Files.createDirectories(projectDir.resolve(".claude/commands"));
+        Files.writeString(commands.resolve("deploy.md"), "---\ndescription: d\n---\n", StandardCharsets.UTF_8);
+
+        // when
+        ToolkitScan scan = scan();
+
+        // then
+        ToolkitItem command = item(scan, ToolkitKind.COMMAND, ToolkitScope.PROJECT, "deploy");
+        ToolkitItem skill = item(scan, ToolkitKind.SKILL, ToolkitScope.USER, "deploy");
+        assertThat(command.shadowed()).isTrue();
+        assertThat(skill.shadowed()).isFalse();
+        assertThat(Shadowing.winnerOf(scan.items(), command, ClaudeToolkitProvider.PRECEDENCE))
+                .contains(skill);
+        assertThat(item(scan, ToolkitKind.COMMAND, ToolkitScope.PROJECT, "review")
+                        .shadowed())
+                .isFalse();
+    }
+
+    @Test
+    @DisplayName("프로젝트 스킬 Deploy 와 사용자 스킬 deploy 는 대소문자를 무시해 같은 이름이라 프로젝트 쪽이 가려진다")
+    void skillNamesIgnoreCase() throws IOException {
+        // given
+        Files.writeString(
+                projectDir.resolve(".claude/skills/deploy/SKILL.md"),
+                "---\nname: Deploy\ndescription: Project deploy skill (synthetic)\n---\n",
+                StandardCharsets.UTF_8);
+
+        // when
+        ToolkitScan scan = scan();
+
+        // then
+        ToolkitItem project = item(scan, ToolkitKind.SKILL, ToolkitScope.PROJECT, "Deploy");
+        assertThat(project.shadowed()).isTrue();
+        assertThat(item(scan, ToolkitKind.SKILL, ToolkitScope.USER, "deploy").shadowed())
+                .isFalse();
+        assertThat(Shadowing.winnerOf(scan.items(), project, ClaudeToolkitProvider.PRECEDENCE)
+                        .map(ToolkitItem::scope))
+                .contains(ToolkitScope.USER);
     }
 
     @Test

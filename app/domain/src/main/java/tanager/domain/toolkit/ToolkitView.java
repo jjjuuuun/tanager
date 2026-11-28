@@ -17,6 +17,7 @@ import tanager.domain.history.WorkspacePath;
 public record ToolkitView(WorkspacePath path, List<ToolkitItem> items, List<ToolkitWarning> warnings) {
     private static final Comparator<ToolkitItem> BY_NAME =
             Comparator.comparing(ToolkitItem::name, String.CASE_INSENSITIVE_ORDER);
+    private static final ScopePrecedence IDENTITY_ONLY = new ScopePrecedence(Map.of());
 
     public ToolkitView {
         Objects.requireNonNull(path, "path");
@@ -79,18 +80,12 @@ public record ToolkitView(WorkspacePath path, List<ToolkitItem> items, List<Tool
         return new ToolkitView(path, kept, keptWarnings);
     }
 
-    /** 가려진 항목을 가린 항목 — 같은 공급자 · 종류 · 이름 중 가려지지 않은 것(FR-TK-05). 가려지지 않은 항목이면 empty. */
+    /**
+     * 가려진 항목을 가린 항목 — 같은 공급자 · 종류 · 이름(대소문자 구분) 중 가려지지 않은 것(FR-TK-05). 가려지지 않은 항목이면 empty. 공급자의 규칙(이름
+     * 공간 · 대소문자 무시 · 독점)까지 따지려면 {@link Shadowing#winnerOf} 에 그 공급자의 표를 넘긴다.
+     */
     public Optional<ToolkitItem> winnerOf(ToolkitItem shadowed) {
-        Objects.requireNonNull(shadowed, "shadowed");
-        if (!shadowed.shadowed()) {
-            return Optional.empty();
-        }
-        for (ToolkitItem item : items) {
-            if (!item.shadowed() && Shadowing.sameIdentity(item, shadowed)) {
-                return Optional.of(item);
-            }
-        }
-        return Optional.empty();
+        return Shadowing.winnerOf(items, shadowed, IDENTITY_ONLY);
     }
 
     private static Optional<ProviderId> providerOf(ToolkitWarning warning) {

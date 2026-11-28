@@ -30,6 +30,7 @@ import tanager.domain.history.ShellEnvironment;
 import tanager.domain.history.WorkspacePath;
 import tanager.domain.toolkit.Attribute;
 import tanager.domain.toolkit.AttributeValue;
+import tanager.domain.toolkit.Shadowing;
 import tanager.domain.toolkit.SourceRef;
 import tanager.domain.toolkit.ToolkitItem;
 import tanager.domain.toolkit.ToolkitKind;
@@ -178,6 +179,69 @@ class ClaudeMcpTest {
         assertThat(item(scan, MCP, ToolkitScope.MANAGED, "corp").attributes())
                 .containsExactly(
                         plain("type", "http"), plain("url", "https://mcp.corp.example.com"), masked("headersHelper"));
+    }
+
+    @Test
+    @DisplayName("managed-mcp.json(서버 a) · .mcp.json(서버 b)이면 b 는 이름이 달라도 가려지고 가린 쪽은 managed-mcp.json 의 a 다")
+    void managedMcpHasExclusiveControl() throws IOException {
+        // given
+        Path managedDir = tmp.resolve("managed");
+        write(managedDir.resolve("managed-mcp.json"), """
+                {"mcpServers": {"a": {"command": "corp-a"}}}
+                """);
+        write(projectDir.resolve(".mcp.json"), """
+                {"mcpServers": {"b": {"command": "local-b"}}}
+                """);
+        write(homeDir.resolve(".claude.json"), "{}");
+        fixture.mount(MANAGED, managedDir);
+
+        // when
+        ToolkitScan scan = scan();
+
+        // then
+        ToolkitItem a = item(scan, MCP, ToolkitScope.MANAGED, "a");
+        ToolkitItem b = item(scan, MCP, ToolkitScope.PROJECT, "b");
+        assertThat(a.shadowed()).isFalse();
+        assertThat(b.shadowed()).isTrue();
+        assertThat(Shadowing.winnerOf(scan.items(), b, ClaudeToolkitProvider.PRECEDENCE)
+                        .map(ToolkitItem::source))
+                .contains(new SourceRef(path(WSL, "/etc/claude-code/managed-mcp.json")));
+    }
+
+    @Test
+    @DisplayName("픽스처의 managed-mcp.json 이 있으면 LOCAL · PROJECT · USER 의 MCP 서버가 모두 가려진다")
+    void managedFixtureShadowsEveryOtherServer() {
+        // given
+        fixture.copy("mcp/managed", tmp.resolve("managed"), MANAGED);
+
+        // when
+        ToolkitScan scan = scan();
+
+        // then
+        assertThat(scan.items().stream().filter(i -> i.kind() == MCP && i.scope() != ToolkitScope.MANAGED))
+                .isNotEmpty()
+                .allMatch(ToolkitItem::shadowed);
+        assertThat(item(scan, MCP, ToolkitScope.MANAGED, "corp").shadowed()).isFalse();
+    }
+
+    @Test
+    @DisplayName("managed-mcp.json 의 서버가 비어 있으면(MCP 끄기) 다른 MCP 서버가 모두 가려진다")
+    void emptyManagedMcpDisablesMcp() throws IOException {
+        // given
+        Path managedDir = tmp.resolve("managed");
+        write(managedDir.resolve("managed-mcp.json"), """
+                {"mcpServers": {}}
+                """);
+        fixture.mount(MANAGED, managedDir);
+
+        // when
+        ToolkitScan scan = scan();
+
+        // then
+        assertThat(scan.items().stream().filter(i -> i.kind() == MCP))
+                .isNotEmpty()
+                .allMatch(ToolkitItem::shadowed);
+        assertThat(scan.items().stream().filter(i -> i.kind() != MCP)).noneMatch(ToolkitItem::shadowed);
     }
 
     @Test

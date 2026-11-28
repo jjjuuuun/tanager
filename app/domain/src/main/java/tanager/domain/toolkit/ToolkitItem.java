@@ -7,8 +7,8 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * 도구함 항목 하나(FR-TK-02 · FR-TK-05). {@code shadowed} 는 같은 공급자 · 종류 · 이름의 항목이 더 높은 범위에 있어 이 항목이 적용되지
- * 않는다는 뜻이다({@link Shadowing}).
+ * 도구함 항목 하나(FR-TK-02 · FR-TK-05). {@code shadowed} 는 같은 공급자 · 이름의 항목이 더 높은 범위(또는 이름 공간의 앞 종류)에 있거나
+ * 그 종류를 독점하는 범위가 있어 이 항목이 적용되지 않는다는 뜻이다({@link Shadowing}).
  *
  * <p>불변식: name 은 앞뒤 공백을 벗긴 뒤 1~200 코드 포인트 · 제어 문자 없음, description 은 1000 코드 포인트 이하, attributes 의 key 는
  * 유일하다(순서 유지).

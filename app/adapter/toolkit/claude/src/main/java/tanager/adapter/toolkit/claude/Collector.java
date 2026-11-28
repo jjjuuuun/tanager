@@ -7,6 +7,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -20,6 +21,8 @@ import tanager.domain.toolkit.ScopePrecedence;
 import tanager.domain.toolkit.Shadowing;
 import tanager.domain.toolkit.SourceRef;
 import tanager.domain.toolkit.ToolkitItem;
+import tanager.domain.toolkit.ToolkitKind;
+import tanager.domain.toolkit.ToolkitScope;
 import tanager.domain.toolkit.ToolkitWarning;
 
 /**
@@ -41,6 +44,7 @@ final class Collector {
     private final Set<Path> entered = new HashSet<>();
     private final List<ToolkitItem> items = new ArrayList<>();
     private final List<ToolkitWarning> warnings = new ArrayList<>();
+    private final Set<ToolkitKind> exclusive = EnumSet.noneOf(ToolkitKind.class);
 
     private Collector(Optional<FileOpener> opener) {
         this.opener = opener;
@@ -127,9 +131,23 @@ final class Collector {
         items.add(Objects.requireNonNull(item, "item"));
     }
 
+    /**
+     * 이 종류의 독점 범위 파일을 읽었다 — 독점 범위에 항목이 없어도 다른 범위의 이 종류는 쓰이지 않는다. 항목이 있으면 도메인 규칙({@link
+     * ScopePrecedence#exclusive()})과 결과가 같다.
+     */
+    void exclusive(ToolkitKind kind) {
+        exclusive.add(Objects.requireNonNull(kind, "kind"));
+    }
+
     /** 모은 항목(가려짐 표시) · 경고 · 지문. */
     ToolkitScan scan(ScopePrecedence precedence) {
-        return new ToolkitScan(Shadowing.mark(items, precedence), warnings, Optional.of(stamp()));
+        List<ToolkitItem> marked = new ArrayList<>();
+        for (ToolkitItem item : Shadowing.mark(items, precedence)) {
+            ToolkitScope owner = precedence.exclusive().get(item.kind());
+            boolean blocked = exclusive.contains(item.kind()) && owner != null && item.scope() != owner;
+            marked.add(blocked ? item.withShadowed(true) : item);
+        }
+        return new ToolkitScan(marked, warnings, Optional.of(stamp()));
     }
 
     ScanStamp stamp() {
