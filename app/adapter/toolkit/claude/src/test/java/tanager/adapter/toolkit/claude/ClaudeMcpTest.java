@@ -9,14 +9,12 @@ import static tanager.adapter.toolkit.claude.Scans.plain;
 import static tanager.adapter.toolkit.claude.Scans.source;
 
 import com.sun.management.ThreadMXBean;
-import java.io.BufferedWriter;
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -299,44 +297,21 @@ class ClaudeMcpTest {
     }
 
     @Test
-    @DisplayName("50MB ~/.claude.json 도 1초 안에 끝나고 projects 밖의 큰 값을 메모리에 만들지 않는다")
+    @DisplayName("50MB ~/.claude.json 도 끝까지 읽어 서버를 찾고 projects 밖의 큰 값을 메모리에 만들지 않는다")
     void largeClaudeJson() throws IOException {
         // given
-        writeLargeClaudeJson(homeDir.resolve(".claude.json"), 50L * 1024 * 1024);
+        LargeClaudeJson.write(homeDir.resolve(".claude.json"), LargeClaudeJson.SIZE);
         ClaudeToolkitProvider provider = new ClaudeToolkitProvider();
         ThreadMXBean threads = (ThreadMXBean) ManagementFactory.getThreadMXBean();
 
         // when
         long allocatedBefore = threads.getCurrentThreadAllocatedBytes();
-        long started = System.nanoTime();
         ToolkitScan scan = ok(provider.scan(query()));
-        Duration took = Duration.ofNanos(System.nanoTime() - started);
         long allocated = threads.getCurrentThreadAllocatedBytes() - allocatedBefore;
 
         // then
         assertThat(names(scan, MCP, ToolkitScope.LOCAL)).containsExactly("db");
         assertThat(names(scan, MCP, ToolkitScope.USER)).containsExactly("tail");
-        assertThat(took).isLessThan(Duration.ofSeconds(1));
         assertThat(allocated).as("할당 바이트").isLessThan(8L * 1024 * 1024);
-    }
-
-    /**
-     * 실제 {@code ~/.claude.json} 처럼 큰 값(대화 · 캐시)이 앞에 몰린 합성 파일. 이 경로의 항목과 맨 위 mcpServers 는 맨 끝에 둔다 — 끝까지
-     * 걸어야 찾는다.
-     */
-    private static void writeLargeClaudeJson(Path file, long targetBytes) throws IOException {
-        Files.createDirectories(file.getParent());
-        String blob = "x".repeat(32 * 1024);
-        try (BufferedWriter out = Files.newBufferedWriter(file, StandardCharsets.UTF_8)) {
-            out.write("{\"cachedBlob\": \"" + "y".repeat(4 * 1024 * 1024) + "\",\n\"projects\": {\n");
-            long written = 4L * 1024 * 1024;
-            for (int i = 0; written < targetBytes; i++) {
-                out.write("\"/home/dev/p" + i + "\": {\"history\": [{\"display\": \"" + blob
-                        + "\"}], \"mcpServers\": {\"s" + i + "\": {\"command\": \"c\"}}},\n");
-                written += blob.length() + 100;
-            }
-            out.write("\"/home/dev/app\": {\"mcpServers\": {\"db\": {\"command\": \"local-db\"}}}\n},\n");
-            out.write("\"mcpServers\": {\"tail\": {\"command\": \"t\"}}}\n");
-        }
     }
 }
