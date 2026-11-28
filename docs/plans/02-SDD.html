@@ -450,10 +450,17 @@ public record CpuWindow(List&lt;Double&gt; recent) {                            
 <pre data-lang="java"><code>public interface ToolkitProvider {
     ProviderId id();                                     // &quot;claude-code&quot;, &quot;codex&quot;, ...
     boolean supports(ShellEnvironment env);
-    Result&lt;List&lt;ToolkitItem&gt;, ToolkitError&gt; scan(ToolkitQuery query);   // query = (경로, 환경 홈, 실제 파일 접근기)
+    Result&lt;ToolkitScan, ToolkitError&gt; scan(ToolkitQuery query);   // 블로킹 · 예외 없음 · 읽기 전용
+    default Optional&lt;ScanStamp&gt; stamp(ToolkitQuery query) { return Optional.empty(); }   // 캐시 지문
 }
+record ToolkitQuery(WorkspacePath path, Optional&lt;WorkspacePath&gt; home, Function&lt;WorkspacePath, Optional&lt;Path&gt;&gt; host) {}
+record ToolkitScan(List&lt;ToolkitItem&gt; items, List&lt;ToolkitWarning&gt; warnings, Optional&lt;ScanStamp&gt; stamp) {}
+record ScanStamp(Map&lt;Path, Optional&lt;Instant&gt;&gt; inputs) {}          // 본 파일 · 디렉터리와 수정 시각
+sealed interface ToolkitError { record Unreachable() …; record Failed() … }
 // app/adapter/toolkit/claude/src/main/resources/META-INF/services/tanager.application.port.out.ToolkitProvider</code></pre>
-<p>공급자가 여럿이면 도구함 상단에 공급자 선택 칩이 생긴다. 새 공급자는 모듈 하나 + 서비스 등록 + 픽스처 테스트로 끝나야 한다.</p>
+<p>(#209, ADR-0019) <code>path</code> · <code>home</code> 은 그 환경의 경로, <code>host</code> 는 앱이 읽을 경로로 바꾸는 함수(<code>PlatformModule.hostFiles().hostPath</code>)다. 파일 하나가 틀리면 그 항목 대신 경고(<code>Unreadable</code> · <code>Malformed</code>), 공급자 전체를 못 읽으면 err. 비밀값은 읽는 즉시 <code>Masked</code> 로 바꾼다.</p>
+<p><b>조회</b>(<code>QueryToolkitUseCase</code>, 구현 <code>ToolkitQueryService</code>): 설정 <code>toolkit.providers</code>(비면 모두) 중 <code>supports(path.env)</code> 인 공급자를 등록 순으로, I/O 가상 스레드에서 나란히 부르고 결과를 한 <code>ToolkitView</code> 로 합친다. 공급자 하나가 err · 예외 · 10초 초과면 그 공급자만 <code>ProviderFailed</code>. 홈을 모르면 <code>HomeUnknown</code> + 프로젝트 범위만. 다른 공급자 id 의 항목은 버린다. 캐시는 (경로, 공급자) → scan, <code>REUSE_IF_UNCHANGED</code> 면 지문이 같을 때 재사용 · <code>FORCE</code> 면 다시 읽기, 64 경로 LRU. 같은 경로의 조회가 진행 중이면 그 결과를 같이 받는다. 상태가 아니므로 <code>StateActor</code> 를 거치지 않는다.</p>
+<p>공급자가 여럿이면 도구함 상단에 공급자 선택 칩(<code>providers(env)</code>)이 생긴다. 새 공급자는 모듈 하나 + 서비스 등록 + 픽스처 테스트로 끝나야 한다. ArchUnit 이 구현을 <code>tanager.adapter.toolkit..</code> 안으로 가둔다.</p>
 </section><section id="iface"><h2><span class="no">8.</span>인터페이스 설계</h2>
 <h3>8.1 포트</h3>
 <div class="grid2">
@@ -467,7 +474,7 @@ public record CpuWindow(List&lt;Double&gt; recent) {                            
 <li><code>RecordVisitUseCase</code> — CwdTracker 전용</li>
 <li><code>ManageHistoryUseCase</code> — 고정 · 별칭 · 숨김 · 삭제</li>
 <li><code>QueryHistoryTreeUseCase</code> — (검색어) → 트리</li>
-<li><code>QueryToolkitUseCase</code> — (경로) → ToolkitView</li>
+<li><code>QueryToolkitUseCase</code> — (경로, <code>Freshness</code>) → <code>CompletionStage&lt;ToolkitView&gt;</code> · <code>providers(env)</code> · <code>hostFile(source)</code>(#209)</li>
 <li><code>RestoreWorkspaceUseCase</code> · <code>ListProfilesUseCase</code></li>
 <li><code>WatchResourcesUseCase</code> · <code>ApplyThemeUseCase</code></li>
 </ul></div>
@@ -476,7 +483,7 @@ public record CpuWindow(List&lt;Double&gt; recent) {                            
 <li><code>PtyLauncher</code> → <code>TerminalStream</code>(subscribe · write · resize · close · onExit)</li>
 <li><code>HistoryRepository</code> · <code>WorkspaceRepository</code> · <code>ConfigRepository</code></li>
 <li><code>PlatformModule</code> — <code>shells()</code> · <code>launchCommand(profile, WorkingDir, Integration)</code>(M3, ADR-0014) · <code>integration()</code>(M3) · <code>paths()</code>(M5, #53) · <code>hostFiles()</code>(M6, #205 — <code>hostPath</code> · <code>home</code>) · <code>dirs()</code> · <code>defaultKeymap()</code> · <code>fileOpener()</code> · <code>resources()</code> · <code>appearance()</code></li>
-<li><code>ToolkitProvider</code> (여러 개)</li>
+<li><code>ToolkitProvider</code> (여러 개, <code>ServiceLoader</code> — #209, ADR-0019) · <code>ConversationSource</code> (여러 개, #208, ADR-0020)</li>
 <li><code>Clock</code> · <code>IdGenerator</code> · <code>UiDispatcher</code></li>
 </ul></div>
 </div>
@@ -817,7 +824,9 @@ function global:prompt {
 <li><code>docs/adr/0001-java-swing-jediterm-pty4j.md</code> — 언어·터미널 스택</li>
 <li><code>docs/adr/0002-hexagonal-multimodule.md</code> — 헥사고날 + 멀티 모듈</li>
 <li><code>docs/adr/0003-cwd-tracking-osc.md</code> — 셸 통합 + OSC 로 cwd 추적</li>
-<li>예정: 0004 도구함 공급자 SPI와 읽기 전용 원칙, 0005 저장 형식과 마이그레이션</li>
+<li><code>docs/adr/0019-toolkit-provider-spi.md</code> — 도구함 공급자 SPI · 읽기 전용 · 비밀값 마스킹 · 경고로 실패 허용 · 지문 캐시(#209)</li>
+<li><code>docs/adr/0020-claude-conversation-history-reading.md</code> — Claude 대화 기록 읽기(#208)</li>
+<li>그 밖의 결정은 <code>docs/adr/</code> 목록을 본다. 예정: 저장 형식과 마이그레이션</li>
 </ul>
 </section>
 </main>
