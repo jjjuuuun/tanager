@@ -1,11 +1,9 @@
 package tanager.adapter.toolkit.claude;
 
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import tanager.domain.toolkit.Attribute;
 import tanager.domain.toolkit.AttributeValue;
 import tanager.domain.toolkit.ToolkitItem;
@@ -61,22 +59,10 @@ record McpServer(String name, List<Attribute> attributes) {
         }
         attributes.addAll(SecretMask.keysOnly("env", envKeys));
         attributes.addAll(SecretMask.keysOnly("headers", headerKeys));
-        return Optional.of(new McpServer(cleanName.get(), unique(attributes)));
+        return Optional.of(new McpServer(cleanName.get(), ClaudeItems.unique(attributes)));
     }
 
     private static Optional<String> clean(String text) {
         return Frontmatter.clean(text, AttributeValue.Plain.MAX_CODE_POINTS);
-    }
-
-    // 펴서 같아진 키(env 의 "A\nB" 와 "A B" 등)는 앞의 것만 둔다 — 도메인 불변식: key 유일
-    private static List<Attribute> unique(List<Attribute> attributes) {
-        Set<String> seen = new LinkedHashSet<>();
-        List<Attribute> out = new ArrayList<>();
-        for (Attribute attribute : attributes) {
-            if (seen.add(attribute.key())) {
-                out.add(attribute);
-            }
-        }
-        return out;
     }
 }

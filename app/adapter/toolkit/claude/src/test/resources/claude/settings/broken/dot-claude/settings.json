@@ -1,0 +1,6 @@
+{
+  "permissions": { "allow": ["Bash(make)"] },
+  "hooks": {
+    "PreToolUse": [{ "matcher": "Bash", "hooks": [{ "type": "command", "command": "./check.sh" }] }]
+  }
+}

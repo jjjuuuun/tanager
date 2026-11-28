@@ -41,6 +41,9 @@ public final class ClaudeToolkitProvider implements ToolkitProvider {
      *   <li>MCP 서버 — "1. Local scope 2. Project scope 3. User scope", 같은 이름이면 위의 정의 하나만 쓴다:
      *       https://code.claude.com/docs/en/mcp#scope-hierarchy-and-precedence. 관리형 {@code managed-mcp.json} 은 배포되면 그
      *       서버만 쓰므로(exclusive control) 맨 앞: https://code.claude.com/docs/en/managed-mcp
+     *   <li>훅 · 권한 — 범위를 넘어 합쳐 적용되므로 표에 넣지 않는다: "Hook entries merge across settings levels rather than
+     *       replacing each other"(https://code.claude.com/docs/en/hooks#hook-locations), "deny rules from any scope are
+     *       evaluated before allow rules"(https://code.claude.com/docs/en/permissions)
      * </ul>
      */
     static final ScopePrecedence PRECEDENCE = new ScopePrecedence(Map.of(
@@ -52,14 +55,15 @@ public final class ClaudeToolkitProvider implements ToolkitProvider {
 
     private static final System.Logger LOG = System.getLogger(ClaudeToolkitProvider.class.getName());
 
-    /** 종류마다의 읽기. 훅 · 권한은 여기에 한 줄씩 더한다. */
+    /** 종류마다의 읽기. 새 종류는 여기에 한 줄씩 더한다. */
     private static final List<ClaudeReader> READERS = List.of(
             new SkillReader(),
             new CommandReader(),
             new AgentReader(),
             new MemoryReader(),
             new RuleReader(),
-            new McpReader());
+            new McpReader(),
+            new SettingsReader());
 
     private final FileOpener opener;
 

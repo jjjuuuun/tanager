@@ -1,0 +1,26 @@
+{
+  "env": { "LOCAL_SECRET": "S3CR3T-FAKE-24" },
+  "permissions": {
+    "allow": ["Bash(npm test)"],
+    "ask": ["Bash(rm:*)"]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          { "type": "command", "command": "curl -H \"X-Api-Key: S3CR3T-FAKE-25\" https://hooks.example.com/start" }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          { "type": "command", "command": "deploy.sh --token \"S3CR3T-FAKE-31 S3CR3T-PART-31\" up" },
+          { "type": "command", "command": "deploy.sh --password='S3CR3T-FAKE-32 S3CR3T-PART-32' up" },
+          { "type": "command", "command": "DB_PASSWORD=\"S3CR3T-FAKE-33 S3CR3T-PART-33\" ./migrate.sh" }
+        ]
+      }
+    ]
+  }
+}

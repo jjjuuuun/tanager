@@ -1,8 +1,10 @@
 package tanager.adapter.toolkit.claude;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import tanager.domain.toolkit.Attribute;
 import tanager.domain.toolkit.AttributeValue;
 import tanager.domain.toolkit.SourceRef;
@@ -79,5 +81,17 @@ final class ClaudeItems {
     /** 값이 없는 속성 — 키만 보인다. */
     static Attribute masked(String key) {
         return new Attribute(key, new AttributeValue.Masked());
+    }
+
+    /** 같은 키는 앞의 것만 둔다 — 펴서 같아진 env · headers 키({@code "A\nB"} 와 {@code "A B"}) 등. 도메인 불변식: key 유일. */
+    static List<Attribute> unique(List<Attribute> attributes) {
+        Set<String> seen = new HashSet<>();
+        List<Attribute> out = new ArrayList<>();
+        for (Attribute attribute : attributes) {
+            if (seen.add(attribute.key())) {
+                out.add(attribute);
+            }
+        }
+        return List.copyOf(out);
     }
 }

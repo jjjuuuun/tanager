@@ -1,0 +1,16 @@
+{
+  "allowManagedHooksOnly": true,
+  "env": { "CORP_PROXY_PASSWORD": "S3CR3T-FAKE-28" },
+  "permissions": {
+    "deny": ["Bash(curl:*)"],
+    "defaultMode": "default"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [{ "type": "command", "command": "/opt/corp/audit.sh", "args": ["--auth-token", "S3CR3T-FAKE-29"] }]
+      }
+    ]
+  }
+}

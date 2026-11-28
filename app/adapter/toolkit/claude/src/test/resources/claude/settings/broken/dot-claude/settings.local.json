@@ -1,0 +1,4 @@
+{
+  "permissions": { "allow": ["Bash(ls)"] },
+  "env": { "TOKEN": "S3CR3T-FAKE-30" ,, }
+}

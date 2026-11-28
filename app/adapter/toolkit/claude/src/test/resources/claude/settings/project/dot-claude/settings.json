@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "model": "synthetic-model",
+  "env": { "API_KEY": "S3CR3T-FAKE-15", "LOG_LEVEL": "debug" },
+  "apiKeyHelper": "echo S3CR3T-FAKE-16",
+  "permissions": {
+    "allow": ["Bash(git status)", "Read(./docs/**)"],
+    "deny": ["Bash(git push --force:*)"],
+    "defaultMode": "acceptEdits",
+    "additionalDirectories": ["../shared", "/srv/data"]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [{ "type": "command", "command": ".claude/hooks/guard-git.sh" }]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl -H \"Authorization: Bearer S3CR3T-FAKE-17\" https://hooks.example.com/x",
+            "timeout": 30
+          },
+          {
+            "type": "http",
+            "url": "https://hook:S3CR3T-FAKE-18@hooks.example.com/post?token=S3CR3T-FAKE-19",
+            "headers": { "X-Api-Key": "S3CR3T-FAKE-20" },
+            "allowedEnvVars": ["MY_TOKEN"]
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "API_TOKEN=S3CR3T-FAKE-21 ./notify.sh --webhook-secret S3CR3T-FAKE-22",
+            "timeout": 10
+          },
+          { "type": "prompt", "prompt": "Synthetic check with S3CR3T-FAKE-23" }
+        ]
+      }
+    ]
+  }
+}

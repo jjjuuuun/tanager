@@ -35,7 +35,7 @@ import tanager.domain.toolkit.ToolkitItem;
 import tanager.domain.toolkit.ToolkitWarning;
 
 /**
- * 비밀값이 어댑터 밖으로 나가지 않는다(SDD §12, FR-TK-07 · NFR-06, #212). MCP 픽스처의 모든 비밀 표식({@code S3CR3T-FAKE-<n>}, 합성)과
+ * 비밀값이 어댑터 밖으로 나가지 않는다(SDD §12, FR-TK-07 · NFR-06, #212 · #213). MCP · settings 픽스처의 모든 비밀 표식({@code S3CR3T-FAKE-<n>}, 합성)과
  * {@code ~/.claude.json} 의 계정 정보가 scan 결과의 어떤 글자(항목 · 속성 · 경고 · 지문 · {@code toString})에도, 그동안 남긴 로그에도 없다.
  */
 class SecretMaskingTest {
@@ -43,13 +43,21 @@ class SecretMaskingTest {
     private static final ShellEnvironment WSL = new ShellEnvironment.Wsl("Ubuntu");
     private static final WorkspacePath PROJECT = path(WSL, "/home/dev/app");
     private static final WorkspacePath BROKEN = path(WSL, "/home/dev/broken");
+    private static final WorkspacePath BROKEN_SETTINGS = path(WSL, "/home/dev/broken-settings");
     private static final WorkspacePath HOME = path(WSL, "/home/dev");
     private static final WorkspacePath MANAGED = path(WSL, "/etc/claude-code");
 
     /** 픽스처에 심은 비밀 표식 수(1 … N). */
-    private static final int SECRETS = 14;
+    private static final int SECRETS = 33;
+
+    /**
+     * 따옴표 친 여러 낱말 비밀 값({@code --token "S3CR3T-FAKE-31 S3CR3T-PART-31"})의 둘째 낱말 표식 수. 첫 낱말만 가리면 이 조각이 새어
+     * 나간다.
+     */
+    private static final int PARTS = 3;
 
     private static final Pattern SECRET = Pattern.compile("S3CR3T-FAKE-\\d+");
+    private static final Pattern PART = Pattern.compile("S3CR3T-PART-\\d+");
     private static final List<String> ACCOUNT = List.of("fake.person@example.invalid", "00000000abcd");
 
     @TempDir
@@ -63,14 +71,19 @@ class SecretMaskingTest {
                 .copy("mcp/home", tmp.resolve("home"), HOME)
                 .copy("mcp/project", tmp.resolve("project"), PROJECT)
                 .copy("mcp/broken", tmp.resolve("broken"), BROKEN)
-                .copy("mcp/managed", tmp.resolve("managed"), MANAGED);
-        assertThat(plantedSecrets(tmp)).as("픽스처가 비밀 표식을 모두 담고 있어야 시험이 뜻이 있다").hasSize(SECRETS);
+                .copy("mcp/managed", tmp.resolve("managed"), MANAGED)
+                .copy("settings/home", tmp.resolve("home"), HOME)
+                .copy("settings/project", tmp.resolve("project"), PROJECT)
+                .copy("settings/managed", tmp.resolve("managed"), MANAGED)
+                .copy("settings/broken", tmp.resolve("broken-settings"), BROKEN_SETTINGS);
+        assertThat(planted(tmp, SECRET)).as("픽스처가 비밀 표식을 모두 담고 있어야 시험이 뜻이 있다").hasSize(SECRETS);
+        assertThat(planted(tmp, PART)).as("여러 낱말 비밀 값의 조각 표식").hasSize(PARTS);
         ClaudeToolkitProvider provider = new ClaudeToolkitProvider();
 
         // when
         List<String> outputs = new ArrayList<>();
         List<LogRecord> logs = captureLogs(() -> {
-            for (WorkspacePath project : List.of(PROJECT, BROKEN)) {
+            for (WorkspacePath project : List.of(PROJECT, BROKEN, BROKEN_SETTINGS)) {
                 ToolkitQuery query = new ToolkitQuery(project, Optional.of(HOME), fixture.hostFunction());
                 ToolkitScan scan = ok(provider.scan(query));
                 outputs.addAll(texts(scan));
@@ -84,6 +97,7 @@ class SecretMaskingTest {
         List<String> logTexts = logs.stream().map(SecretMaskingTest::text).toList();
         for (String text : Stream.concat(outputs.stream(), logTexts.stream()).toList()) {
             assertThat(SECRET.matcher(text).find()).as("비밀 표식이 새어 나감: %s", text).isFalse();
+            assertThat(PART.matcher(text).find()).as("비밀 값 조각이 새어 나감: %s", text).isFalse();
             for (String account : ACCOUNT) {
                 assertThat(text).doesNotContain(account);
             }
@@ -111,11 +125,11 @@ class SecretMaskingTest {
         return texts;
     }
 
-    private static List<String> plantedSecrets(Path root) throws IOException {
+    private static List<String> planted(Path root, Pattern marker) throws IOException {
         List<String> found = new ArrayList<>();
         try (Stream<Path> files = Files.walk(root)) {
             for (Path file : files.filter(Files::isRegularFile).toList()) {
-                Matcher matcher = SECRET.matcher(Files.readString(file, StandardCharsets.UTF_8));
+                Matcher matcher = marker.matcher(Files.readString(file, StandardCharsets.UTF_8));
                 while (matcher.find()) {
                     if (!found.contains(matcher.group())) {
                         found.add(matcher.group());

@@ -137,4 +137,92 @@ class SecretMaskTest {
         assertThat(SecretMask.origin("not a url S3CR3T-FAKE-1")).isEmpty();
         assertThat(SecretMask.origin("mailto:someone")).isEmpty();
     }
+
+    @Test
+    @DisplayName("셸 명령의 따옴표 친 비밀 헤더(X-Api-Key: 값)는 닫는 따옴표까지 가리고 다른 헤더는 둔다")
+    void quotedSecretHeader() {
+        // when
+        String apiKey = SecretMask.commandLine("curl -H \"X-Api-Key: S3CR3T-FAKE-25\" https://x", List.of());
+        String token = SecretMask.commandLine("curl -H 'Authorization: token S3CR3T-FAKE-7' https://x", List.of());
+        String plain = SecretMask.commandLine("curl -H \"Content-Type: application/json\" https://x", List.of());
+
+        // then
+        assertThat(apiKey).isEqualTo("curl -H \"X-Api-Key: " + M + "\" https://x");
+        assertThat(token).isEqualTo("curl -H 'Authorization: " + M + " " + M + "' https://x");
+        assertThat(plain).isEqualTo("curl -H \"Content-Type: application/json\" https://x");
+    }
+
+    @Test
+    @DisplayName("Bearer 를 넣은 비밀 헤더는 Bearer 를 두고 그 뒤를 가린다 — --header= 에 붙어도 같다")
+    void secretHeaderWithScheme() {
+        // when
+        String quoted =
+                SecretMask.commandLine("curl --header=\"Authorization: Bearer S3CR3T-FAKE-4\" https://x", List.of());
+        String bare = SecretMask.commandLine("http", List.of("X-Auth-Token:", "S3CR3T-FAKE-9", "GET"));
+
+        // then
+        assertThat(quoted).isEqualTo("curl --header=\"Authorization: Bearer " + M + "\" https://x");
+        assertThat(bare).isEqualTo("http X-Auth-Token: " + M + " GET");
+    }
+
+    @Test
+    @DisplayName("비밀 플래그 다음의 따옴표 친 여러 낱말 값은 닫는 따옴표까지 하나로 가린다")
+    void quotedFlagValue() {
+        // when
+        String doubleQuoted =
+                SecretMask.commandLine("deploy --token \"S3CR3T-FAKE-1 S3CR3T-PART-1 x\" --port 3000", List.of());
+        String singleQuoted = SecretMask.commandLine("deploy --token 'S3CR3T-FAKE-2 S3CR3T-PART-2' up", List.of());
+        String equals =
+                SecretMask.commandLine("deploy --password=\"S3CR3T-FAKE-3 S3CR3T-PART-3\" --mode=fast", List.of());
+
+        // then
+        assertThat(doubleQuoted).isEqualTo("deploy --token \"" + M + "\" --port 3000");
+        assertThat(singleQuoted).isEqualTo("deploy --token '" + M + "' up");
+        assertThat(equals).isEqualTo("deploy --password=\"" + M + "\" --mode=fast");
+    }
+
+    @Test
+    @DisplayName("비밀 이름의 NAME=\"여러 낱말\" · NAME='여러 낱말' 은 닫는 따옴표까지 가리고 다른 NAME=값 은 둔다")
+    void quotedAssignment() {
+        // when
+        String doubleQuoted =
+                SecretMask.commandLine("API_KEY=\"S3CR3T-FAKE-4 S3CR3T-PART-4\" LOG_LEVEL=\"debug x\" node", List.of());
+        String singleQuoted = SecretMask.commandLine("SECRET='S3CR3T-FAKE-5 S3CR3T-PART-5 z' ./run.sh", List.of());
+
+        // then
+        assertThat(doubleQuoted).isEqualTo("API_KEY=\"" + M + "\" LOG_LEVEL=\"debug x\" node");
+        assertThat(singleQuoted).isEqualTo("SECRET='" + M + "' ./run.sh");
+    }
+
+    @Test
+    @DisplayName("비밀 플래그 · NAME= 의 따옴표가 닫히지 않으면 끝까지 가린다")
+    void unclosedQuotedValue() {
+        // when
+        String flag = SecretMask.commandLine("deploy --token \"S3CR3T-FAKE-6 S3CR3T-PART-6 more", List.of());
+        String assignment = SecretMask.commandLine("API_TOKEN='S3CR3T-FAKE-7 S3CR3T-PART-7", List.of());
+
+        // then
+        assertThat(flag).isEqualTo("deploy --token \"" + M);
+        assertThat(assignment).isEqualTo("API_TOKEN='" + M);
+    }
+
+    @Test
+    @DisplayName("따옴표 친 ${VAR} 참조 하나는 이름이라 그대로 둔다")
+    void quotedReference() {
+        // when
+        String line = SecretMask.commandLine("deploy --token \"${API_TOKEN}\" API_KEY='${KEY}'", List.of());
+
+        // then
+        assertThat(line).isEqualTo("deploy --token \"${API_TOKEN}\" API_KEY='${KEY}'");
+    }
+
+    @Test
+    @DisplayName("닫는 따옴표가 없는 비밀 헤더는 끝까지 가린다")
+    void unclosedSecretHeader() {
+        // when
+        String line = SecretMask.commandLine("curl -H \"X-Api-Key: S3CR3T-FAKE-25 S3CR3T-FAKE-26", List.of());
+
+        // then
+        assertThat(line).isEqualTo("curl -H \"X-Api-Key: " + M + " " + M);
+    }
 }
