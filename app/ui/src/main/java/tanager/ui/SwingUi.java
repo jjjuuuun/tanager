@@ -5,6 +5,7 @@ import java.awt.Component;
 import java.awt.Window;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicReference;
@@ -33,6 +34,7 @@ import tanager.ui.font.TerminalFontSet;
 import tanager.ui.font.TerminalFonts;
 import tanager.ui.i18n.Msg;
 import tanager.ui.i18n.NoticeText;
+import tanager.ui.measure.Measurement;
 import tanager.ui.motion.Motion;
 import tanager.ui.terminal.TerminalSettings;
 import tanager.ui.theme.JediTermColors;
@@ -60,6 +62,7 @@ public final class SwingUi {
      * @param initial 처음 그릴 작업 공간 — 시작 때 복원한 탭 · 분할 · 창별 명세 · 포커스(#179). 창마다 명세대로 셸을 띄운다
      * @param windowState 메인 창의 자리 · 크기 · 최대화 · 사이드바를 기록한다(#180). 바뀌면 작업 공간과 같이 1초 안에 저장된다
      * @param initialWindow 시작 때 복원한 창 상태. 저장된 자리가 지금 모니터들에 보이지 않으면 주 모니터의 기본 자리에 띄운다
+     * @param measurement 측정 모드(#222). 꺼져 있으면 {@link Measurement#OFF} — 창을 띄운 뒤 켜진 측정을 시작한다
      * @param onShutdown 앱을 끝낼 때 셸을 닫은 뒤 EDT 밖에서 한 번 부른다(미저장 이력 저장 등, ADR-0011). 끝나면 프로세스를 끝낸다
      */
     public static void showMainWindow(
@@ -78,7 +81,9 @@ public final class SwingUi {
             Workspace initial,
             RecordWindowStateUseCase windowState,
             WindowState initialWindow,
+            Measurement measurement,
             Runnable onShutdown) {
+        Objects.requireNonNull(measurement, "measurement");
         // 창을 만들기 전에 구독한다 — 이력 불러오기 알림이 창보다 먼저 올 수 있다. 창은 앱과 수명이 같아 해제하지 않는다
         NoticeInbox inbox = new NoticeInbox();
         events.subscribeOnUi(event -> Notices.messageOf(event).ifPresent(inbox::accept));
@@ -145,10 +150,12 @@ public final class SwingUi {
                     background,
                     initial,
                     windowState,
-                    initialWindow);
+                    initialWindow,
+                    measurement);
             shown.set(window);
             Optional.ofNullable(latestSettings.get()).ifPresent(window::settingsChanged);
             window.show(warnings);
+            measurement.start();
             inbox.attach(window::notify);
             // 창을 띄운 뒤 구독한다 — 앱과 수명이 같아 해제하지 않는다. 구독 전에 바뀐 값은 current() 로 한 번 맞춘다
             LiveTheme theme = new LiveTheme(

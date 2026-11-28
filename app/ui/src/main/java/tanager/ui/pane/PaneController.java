@@ -58,6 +58,7 @@ import tanager.ui.i18n.NoticeText;
 import tanager.ui.keys.KeyHelp;
 import tanager.ui.keys.Keymap;
 import tanager.ui.keys.LayoutAction;
+import tanager.ui.measure.PaneMeter;
 import tanager.ui.motion.Animator;
 import tanager.ui.motion.Lerp;
 import tanager.ui.motion.Motion;
@@ -114,6 +115,11 @@ public final class PaneController {
         default boolean focused() {
             return true;
         }
+
+        /** 이 창의 입력 반응 측정(#222). 측정 모드가 아니면 {@link PaneMeter#OFF}. 셸마다 새 위젯을 만들 때 단다. */
+        default PaneMeter meter() {
+            return PaneMeter.OFF;
+        }
     }
 
     private final PaneId id;
@@ -168,7 +174,7 @@ public final class PaneController {
         this.settings = Objects.requireNonNull(settings, "settings");
         this.host = Objects.requireNonNull(host, "host");
         this.focusBorder = new Animator(motion, 0, root::emphasis);
-        this.widget = new TanagerTermWidget(settings);
+        this.widget = new TanagerTermWidget(settings, host.meter());
         layoutPane();
         KeyboardFocusManager.getCurrentKeyboardFocusManager().addPropertyChangeListener("focusOwner", focusListener);
     }
@@ -371,7 +377,7 @@ public final class PaneController {
         if (widgetConnected) {
             // 끝난 위젯은 다시 쓸 수 없다(ADR-0011) — 새 위젯을 놓고, 크기는 배치가 끝난 다음에 읽는다
             widget.close();
-            widget = new TanagerTermWidget(settings);
+            widget = new TanagerTermWidget(settings, host.meter());
             widgetConnected = false;
             render();
         }

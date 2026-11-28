@@ -83,6 +83,8 @@ import tanager.ui.layout.LayoutView;
 import tanager.ui.layout.PaneDiff;
 import tanager.ui.layout.PaneMenu;
 import tanager.ui.layout.PaneMinimum;
+import tanager.ui.measure.Measurement;
+import tanager.ui.measure.PaneMeter;
 import tanager.ui.motion.Motion;
 import tanager.ui.pane.PaneController;
 import tanager.ui.sidebar.SidebarPanel;
@@ -153,6 +155,7 @@ final class MainWindow {
     private final Motion motion;
     private final Executor ui = SwingUtilities::invokeLater;
     private final Executor background;
+    private final Measurement measurement;
     private boolean closing;
 
     MainWindow(
@@ -172,8 +175,11 @@ final class MainWindow {
             Executor background,
             Workspace initial,
             RecordWindowStateUseCase windowState,
-            WindowState window) {
+            WindowState window,
+            Measurement measurement) {
         this.workspace = Objects.requireNonNull(initial, "initial");
+        // 창을 만들기 전에 — 창마다 측정 고리를 단다(#222)
+        this.measurement = Objects.requireNonNull(measurement, "measurement");
         this.onShutdown = Objects.requireNonNull(onShutdown, "onShutdown");
         this.settingsFile = Objects.requireNonNull(settingsFile, "settingsFile");
         Objects.requireNonNull(missingPaths, "missingPaths");
@@ -635,6 +641,11 @@ final class MainWindow {
         @Override
         public boolean focused() {
             return workspace.tab().focused().equals(id);
+        }
+
+        @Override
+        public PaneMeter meter() {
+            return measurement.pane(id);
         }
 
         @Override

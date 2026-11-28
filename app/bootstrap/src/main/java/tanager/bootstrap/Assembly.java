@@ -10,6 +10,7 @@ import java.util.ServiceConfigurationError;
 import java.util.ServiceLoader;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -38,6 +39,7 @@ import tanager.application.port.out.LoadedHistory;
 import tanager.application.port.out.LoadedWorkspace;
 import tanager.application.port.out.PlatformModule;
 import tanager.application.port.out.PtyLauncher;
+import tanager.application.port.out.ResourceProbe;
 import tanager.application.port.out.Subscription;
 import tanager.application.port.out.ToolkitProvider;
 import tanager.application.port.out.UiDispatcher;
@@ -161,16 +163,21 @@ final class Assembly {
      * @param ui 리소스 표시(#187) · 테마 변경 알림(#184)을 UI 스레드로 넘긴다
      */
     static Assembly assemble(PlatformModule platform, PtyLauncher launcher, UiDispatcher ui) {
-        return assemble(platform, launcher, ui, phase -> {});
+        return assemble(platform, launcher, ui, phase -> {}, false);
     }
 
     /**
      * {@link #assemble(PlatformModule, PtyLauncher, UiDispatcher)} 에 시작 시간 기록을 더한다(#221).
      *
      * @param startup state.json 읽기 끝({@link StartupPhase#STATE}) · 셸 탐지 끝({@link StartupPhase#SHELLS})을 그 일을 한 스레드에서 받는다
+     * @param measure 측정 모드(#222) — 리소스 수집의 CPU 시간 · {@code wsl.exe} 호출 간격을 로그로 남긴다({@link CollectionMeter})
      */
     static Assembly assemble(
-            PlatformModule platform, PtyLauncher launcher, UiDispatcher ui, Consumer<StartupPhase> startup) {
+            PlatformModule platform,
+            PtyLauncher launcher,
+            UiDispatcher ui,
+            Consumer<StartupPhase> startup,
+            boolean measure) {
         ProfileCatalog catalog = new ProfileCatalog(platform);
         IntegrationStatus integration = new IntegrationStatus(platform);
         warmShellIntegration(integration);
@@ -239,14 +246,15 @@ final class Assembly {
         SettingsReloader settings = new SettingsReloader(config, state);
         // 설정을 읽기 전에 구독해야 시작 때의 SettingsChanged 를 받는다. 예약은 전용 타이머, 재기는 주기마다 가상 스레드(SDD §6.6)
         ExecutorScheduler monitorScheduler = new ExecutorScheduler("tanager-monitor-timer");
+        ResourceProbe probe = platform.resources();
+        Executor monitorIo = task -> Thread.ofVirtual().name("tanager-monitor").start(task);
+        if (measure) {
+            CollectionMeter meter = CollectionMeter.start(monitorScheduler);
+            probe = meter.probe(probe);
+            monitorIo = meter.io();
+        }
         ResourceWatcher resources = new ResourceWatcher(
-                state,
-                platform.resources(),
-                platform.systemTools(),
-                monitorScheduler,
-                task -> Thread.ofVirtual().name("tanager-monitor").start(task),
-                InstantSource.system(),
-                ui);
+                state, probe, platform.systemTools(), monitorScheduler, monitorIo, InstantSource.system(), ui);
         // 설정을 읽기 전에 구독해야 시작 때의 SettingsChanged 를 받는다. 주기 예약은 저장 타이머를 같이 쓴다(일이 짧다)
         AppearanceWatcher appearance = new AppearanceWatcher(
                 state,

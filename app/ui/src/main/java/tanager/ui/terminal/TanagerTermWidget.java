@@ -7,9 +7,13 @@ import com.jediterm.terminal.ui.JediTermWidget;
 import com.jediterm.terminal.ui.TerminalPanel;
 import com.jediterm.terminal.ui.settings.SettingsProvider;
 import java.awt.Font;
+import java.awt.Graphics;
+import java.awt.event.KeyEvent;
+import java.util.Objects;
 import java.util.Optional;
 import javax.swing.JScrollBar;
 import tanager.application.port.out.TerminalSize;
+import tanager.ui.measure.PaneMeter;
 
 /**
  * 세션 하나를 보여 주는 JediTerm 위젯. 세션마다 새로 만든다 — {@code start()} 를 다시 부르면 키 리스너가 두 번 붙고
@@ -17,17 +21,28 @@ import tanager.application.port.out.TerminalSize;
  *
  * <p>설정({@link TerminalSettings})이 바뀌면 다시 만들지 않고 따라간다(#185): 색은 다시 그리고, 글꼴은 칸 크기를 다시 재 달라졌으면 셸에
  * resize 를 한 번 보내고, 스크롤백은 넘치는 오래된 줄을 버린다. {@link #close()} 하면 설정에서 떨어진다.
+ *
+ * <p>측정 모드(#222)이면 키({@code KEY_TYPED}) · 버퍼 변경 · 그림 끝을 {@link PaneMeter} 에 알린다. 꺼져 있으면 버퍼 고리를 달지 않는다.
  */
 public final class TanagerTermWidget extends JediTermWidget {
     private final TerminalSettings settings;
     private final TerminalSettings.Listener listener = this::settingsChanged;
 
     public TanagerTermWidget(TerminalSettings settings) {
+        this(settings, PaneMeter.OFF);
+    }
+
+    /** @param meter 이 창의 입력 반응 측정(#222). 측정 모드가 아니면 {@link PaneMeter#OFF} */
+    public TanagerTermWidget(TerminalSettings settings, PaneMeter meter) {
         super(settings);
         this.settings = settings;
         // JediTerm 버퍼의 상한은 설정 최댓값이다 — 줄이 늘 때마다 지금 스크롤백으로 자른다
         getTerminalTextBuffer().addModelListener(this::trimHistory);
         settings.addListener(listener);
+        if (Objects.requireNonNull(meter, "meter") != PaneMeter.OFF) {
+            getTerminalTextBuffer().addModelListener(meter::output);
+            ((BundledBoldPanel) getTerminalPanel()).meter = meter;
+        }
     }
 
     @Override
@@ -93,6 +108,8 @@ public final class TanagerTermWidget extends JediTermWidget {
         private final TerminalSettings settings;
         private Font bold;
         private Font boldItalic;
+        // EDT 전용. 위젯 생성자가 상위 생성자 뒤에 넣는다
+        private PaneMeter meter = PaneMeter.OFF;
 
         BundledBoldPanel(TerminalSettings settings, TerminalTextBuffer buffer, StyleState styleState) {
             super(settings, buffer, styleState);
@@ -109,6 +126,21 @@ public final class TanagerTermWidget extends JediTermWidget {
         private void pickBold() {
             bold = settings.fonts().bold();
             boldItalic = bold.deriveFont(bold.getStyle() | Font.ITALIC);
+        }
+
+        @Override
+        public void processKeyEvent(KeyEvent e) {
+            // 셸로 보내기 전에 잰다 — 보내는 데 걸린 시간도 반응 시간이다
+            if (e.getID() == KeyEvent.KEY_TYPED) {
+                meter.keyTyped();
+            }
+            super.processKeyEvent(e);
+        }
+
+        @Override
+        public void paintComponent(Graphics g) {
+            super.paintComponent(g);
+            meter.painted();
         }
 
         @Override
