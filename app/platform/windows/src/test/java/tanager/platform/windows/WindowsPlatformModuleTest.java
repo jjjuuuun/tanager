@@ -176,4 +176,66 @@ class WindowsPlatformModuleTest {
         assertThat(reg.commands()).hasSize(2);
         assertThat(reg.commands()).allSatisfy(command -> assertThat(command).startsWith("reg.exe", "query"));
     }
+
+    @Test
+    @DisplayName("hostFiles() 의 Windows 홈은 주입한 USERPROFILE 이고 같은 인스턴스다(#205)")
+    void hostFilesWindowsHomeIsInjectedUserProfile() {
+        // given
+        WindowsShellCatalog catalog = new WindowsShellCatalog(
+                new FakeCommandRunner(new CommandOutcome.NotStarted("x")),
+                key -> Optional.empty(),
+                Duration.ofSeconds(1));
+        WindowsPlatformModule custom = new WindowsPlatformModule(
+                catalog, key -> "USERPROFILE".equals(key) ? Optional.of("D:/Users/홍길동") : Optional.empty());
+
+        // when
+        var home = custom.hostFiles().home(WINDOWS);
+
+        // then
+        assertThat(home.value().map(WorkspacePath::path)).contains("D:\\Users\\홍길동");
+        assertThat(custom.hostFiles()).isSameAs(custom.hostFiles());
+    }
+
+    @Test
+    @DisplayName("hostFiles() 는 directories() 가 배포판에서 읽어 둔 마운트 루트로 호스트 경로를 만든다(#205)")
+    void hostFilesUseMountRootLearnedByDirectories() {
+        // given
+        WindowsShellCatalog catalog = new WindowsShellCatalog(
+                new FakeCommandRunner(new CommandOutcome.NotStarted("x")),
+                key -> Optional.empty(),
+                Duration.ofSeconds(1));
+        FakeWindowsFiles files = new FakeWindowsFiles()
+                .directory("\\\\wsl.localhost\\Ubuntu\\home\\me", Optional.of(true))
+                .text("\\\\wsl.localhost\\Ubuntu\\etc\\wsl.conf", Optional.of("[automount]\nroot = /\n"));
+        WindowsPlatformModule custom = new WindowsPlatformModule(
+                catalog,
+                key -> Optional.empty(),
+                "C:\\Users\\u",
+                new FakeCommandRunner(new CommandOutcome.NotStarted("x")),
+                files,
+                Runnable::run);
+        ShellEnvironment ubuntu = new ShellEnvironment.Wsl("Ubuntu");
+        custom.directories()
+                .isDirectory(WorkspacePath.of(ubuntu, "/home/me").value().orElseThrow(), Duration.ofSeconds(1));
+
+        // when
+        var host = custom.hostFiles()
+                .hostPath(WorkspacePath.of(ubuntu, "/c/work").value().orElseThrow());
+
+        // then
+        assertThat(host).contains(Path.of("C:\\work"));
+    }
+
+    @Test
+    @Tag("windows")
+    @EnabledOnOs(OS.WINDOWS)
+    @DisplayName("실제 Windows 에서 hostFiles() 의 Windows 홈은 %USERPROFILE% 이고 디렉터리로 있다(#205)")
+    void realWindowsHomeIsUserProfile() {
+        // when
+        var home = new WindowsPlatformModule().hostFiles().home(WINDOWS);
+
+        // then
+        assertThat(home.value().map(WorkspacePath::path)).contains(System.getenv("USERPROFILE"));
+        assertThat(Path.of(home.value().orElseThrow().path())).isDirectory();
+    }
 }

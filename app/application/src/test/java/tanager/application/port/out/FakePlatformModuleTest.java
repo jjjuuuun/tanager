@@ -63,6 +63,25 @@ class FakePlatformModuleTest {
     }
 
     @Test
+    @DisplayName("hostFiles 는 기본으로 홈을 모르고 withHostFiles 로 바꿀 수 있다(#205)")
+    void hostFilesDefaultToUnknownHome() {
+        // given
+        FakePlatformModule platform = new FakePlatformModule(List.of(WSL));
+        ShellEnvironment env = new ShellEnvironment.Wsl("A");
+        WorkspacePath home = WorkspacePath.of(env, "/home/a").value().orElseThrow();
+        FakeHostFiles files = new FakeHostFiles().withHome(env, home);
+
+        // when
+        var before = platform.hostFiles().home(env);
+        var after = platform.withHostFiles(files).hostFiles().home(env);
+
+        // then
+        assertThat(before.error()).contains(new HomeError.NotRunnable(env));
+        assertThat(after.value()).contains(home);
+        assertThat(files.homeRequests()).containsExactly(env);
+    }
+
+    @Test
     @DisplayName("directories 는 기본으로 모든 경로가 있다고 답하고 withDirectories 로 바꿀 수 있다")
     void directoriesDefaultToExisting() {
         // given

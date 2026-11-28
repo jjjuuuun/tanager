@@ -51,6 +51,12 @@ public interface PlatformModule {
     DirectoryProbe directories();
 
     /**
+     * 환경의 파일을 이 앱이 읽을 경로와 환경의 홈(FR-TK-04, #205). 도구함 · Claude 대화 읽기가 쓴다. 같은 인스턴스를 돌려준다 — 홈을 앱이 끝날 때까지
+     * 기억하므로.
+     */
+    HostFiles hostFiles();
+
+    /**
      * 지금의 OS 외관 설정(다크/라이트 · 애니메이션, #152 · #184). 예외를 던지지 않는다 — 읽지 못한 값은 {@link SystemAppearance#DEFAULT}
      * 의 값이다. 외부 명령을 실행할 수 있어 EDT 에서 부르지 않는다. 변경 알림은 없다 — application 이 주기적으로 다시 부른다(ADR-0018).
      * 그래서 한 번은 짧아야 한다(수십 ms).

@@ -36,6 +36,7 @@ public final class FakePlatformModule implements PlatformModule {
     private final FakeResourceProbe resources = new FakeResourceProbe();
     private final RecordingSystemTools systemTools = new RecordingSystemTools();
     private DirectoryProbe directories = new FakeDirectoryProbe();
+    private HostFiles hostFiles = new FakeHostFiles();
     private final AtomicInteger appearanceCalls = new AtomicInteger();
     private final AtomicInteger appearanceInFlight = new AtomicInteger();
     private final AtomicInteger maxAppearanceInFlight = new AtomicInteger();
@@ -196,6 +197,17 @@ public final class FakePlatformModule implements PlatformModule {
     @Override
     public synchronized DirectoryProbe directories() {
         return directories;
+    }
+
+    /** {@code hostFiles()} 가 돌려줄 구현. 주지 않으면 기본 {@link FakeHostFiles}(홈을 모두 모름)다. */
+    public synchronized FakePlatformModule withHostFiles(HostFiles hostFiles) {
+        this.hostFiles = Objects.requireNonNull(hostFiles, "hostFiles");
+        return this;
+    }
+
+    @Override
+    public synchronized HostFiles hostFiles() {
+        return hostFiles;
     }
 
     @Override
