@@ -110,4 +110,12 @@ class ArchitectureTest {
     void colorsOnlyFromThemeTokens() {
         ArchitectureRules.colorsOnlyFromThemeTokens(BASE).allowEmptyShould(true).check(production);
     }
+
+    @Test
+    @DisplayName("도구함 공급자(ToolkitProvider) 구현은 tanager.adapter.toolkit.. 에만 있다")
+    void toolkitProvidersLiveInToolkitAdapters() {
+        ArchitectureRules.toolkitProvidersLiveInToolkitAdapters(BASE)
+                .allowEmptyShould(true)
+                .check(production);
+    }
 }

@@ -3,8 +3,11 @@ package tanager.bootstrap;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.InstantSource;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.ServiceConfigurationError;
+import java.util.ServiceLoader;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
@@ -18,6 +21,7 @@ import tanager.application.port.in.CheckMissingPathsUseCase;
 import tanager.application.port.in.ListProfilesUseCase;
 import tanager.application.port.in.ManageHistoryUseCase;
 import tanager.application.port.in.QueryHistoryTreeUseCase;
+import tanager.application.port.in.QueryToolkitUseCase;
 import tanager.application.port.in.RecordEnvironmentsUseCase;
 import tanager.application.port.in.RecordWindowStateUseCase;
 import tanager.application.port.in.ResolvedAppearance;
@@ -31,6 +35,7 @@ import tanager.application.port.out.LoadedWorkspace;
 import tanager.application.port.out.PlatformModule;
 import tanager.application.port.out.PtyLauncher;
 import tanager.application.port.out.Subscription;
+import tanager.application.port.out.ToolkitProvider;
 import tanager.application.port.out.UiDispatcher;
 import tanager.application.port.out.WorkspaceLoadNotice;
 import tanager.application.service.AppearanceWatcher;
@@ -46,6 +51,7 @@ import tanager.application.service.ProfileCatalog;
 import tanager.application.service.ResourceWatcher;
 import tanager.application.service.SessionStarter;
 import tanager.application.service.SettingsReloader;
+import tanager.application.service.ToolkitQueryService;
 import tanager.application.service.VisitRecorder;
 import tanager.application.service.WindowRecorder;
 import tanager.application.service.WorkspaceRestorer;
@@ -73,6 +79,7 @@ final class Assembly {
     // 종료 때 남은 명령을 처리할 시간과 미저장 이력을 쓸 시간(ADR-0011 · 0012)
     private static final Duration DRAIN_TIMEOUT = Duration.ofSeconds(1);
     private static final Duration FLUSH_TIMEOUT = Duration.ofSeconds(2);
+    private static final int MAX_PROVIDER_FAILURES = 16;
 
     private final ListProfilesUseCase profiles;
     private final StartSessionUseCase sessions;
@@ -90,6 +97,7 @@ final class Assembly {
     private final ExecutorScheduler monitorScheduler;
     private final AppearanceWatcher appearance;
     private final MissingPathScanner missingPaths;
+    private final ToolkitQueryService toolkit;
     private volatile Subscription watchingSettings = () -> {};
 
     private Assembly(
@@ -108,7 +116,8 @@ final class Assembly {
             ResourceWatcher resources,
             ExecutorScheduler monitorScheduler,
             AppearanceWatcher appearance,
-            MissingPathScanner missingPaths) {
+            MissingPathScanner missingPaths,
+            ToolkitQueryService toolkit) {
         this.profiles = profiles;
         this.sessions = sessions;
         this.state = state;
@@ -125,6 +134,7 @@ final class Assembly {
         this.monitorScheduler = monitorScheduler;
         this.appearance = appearance;
         this.missingPaths = missingPaths;
+        this.toolkit = toolkit;
     }
 
     /**
@@ -199,6 +209,13 @@ final class Assembly {
                 scheduler,
                 task -> Thread.ofVirtual().name("tanager-appearance").start(task),
                 ui);
+        // 도구함은 상태가 아니다 — 액터를 거치지 않고 가상 스레드에서 읽는다. 시간 제한 예약은 저장 타이머를 같이 쓴다(일이 짧다)
+        ToolkitQueryService toolkit = new ToolkitQueryService(
+                toolkitProviders(),
+                platform.hostFiles(),
+                () -> settings.current().toolkit(),
+                task -> Thread.ofVirtual().name("tanager-toolkit").start(task),
+                scheduler);
         return new Assembly(
                 catalog,
                 starter,
@@ -215,7 +232,28 @@ final class Assembly {
                 resources,
                 monitorScheduler,
                 appearance,
-                missingPaths);
+                missingPaths,
+                toolkit);
+    }
+
+    // 등록된 도구함 공급자 모두(ADR-0019). 만들지 못한 공급자는 빼고 로그만 남긴다 — 공급자 하나 때문에 앱이 뜨지 않으면 안 된다
+    private static List<ToolkitProvider> toolkitProviders() {
+        List<ToolkitProvider> found = new ArrayList<>();
+        var providers = ServiceLoader.load(ToolkitProvider.class).iterator();
+        // 잘못된 등록이 같은 오류를 되풀이해도 끝나게 횟수를 둔다
+        for (int failures = 0; failures < MAX_PROVIDER_FAILURES; ) {
+            try {
+                if (!providers.hasNext()) {
+                    break;
+                }
+                found.add(providers.next());
+            } catch (ServiceConfigurationError e) {
+                failures++;
+                LOG.log(System.Logger.Level.ERROR, "도구함 공급자를 만들지 못해 뺀다", e);
+            }
+        }
+        LOG.log(System.Logger.Level.INFO, "도구함 공급자 {0}개", found.size());
+        return List.copyOf(found);
     }
 
     // 상태를 만들기 전에 시작한다 — state.json 을 기다리는 동안에도 탐지가 돈다(탐지는 한 번뿐이고 뒤의 호출은 그 결과를 기다린다)
@@ -293,6 +331,11 @@ final class Assembly {
     /** 사라진 이력 경로 확인 — 창 활성화 때 다시 확인한다(#186). */
     CheckMissingPathsUseCase missingPaths() {
         return missingPaths;
+    }
+
+    /** 고른 폴더 · 세션의 도구함(FR-TK-01, #209). 패널은 후속 UI 이슈. */
+    QueryToolkitUseCase toolkit() {
+        return toolkit;
     }
 
     /** 메인 창의 자리 · 크기 · 최대화 · 사이드바 기록(FR-RES-03, #180). 저장은 작업 공간 저장기가 한다. */

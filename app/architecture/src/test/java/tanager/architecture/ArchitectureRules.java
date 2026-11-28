@@ -20,6 +20,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import tanager.application.port.out.ToolkitProvider;
 
 /**
  * Tanager 의 아키텍처 규칙(ADR-0002, .claude/rules/architecture.md).
@@ -160,6 +161,19 @@ final class ArchitectureRules {
                 .dependOnClassesThat()
                 .haveFullyQualifiedName("com.formdev.flatlaf.util.SystemInfo")
                 .because("OS 분기는 bootstrap 의 플랫폼 선택(ServiceLoader) 한 곳에만 둔다 — 나머지는 PlatformModule 포트만 본다");
+    }
+
+    /**
+     * 도구함 공급자({@link ToolkitProvider}) 구현은 toolkit 어댑터({@code adapter.toolkit..})에만 둔다(ADR-0019). 새 AI 도구는 어댑터
+     * 모듈 하나로 붙고, 그 밖의 계층이 공급자를 몰래 만들어 등록하지 않게 한다.
+     */
+    static ArchRule toolkitProvidersLiveInToolkitAdapters(String base) {
+        return classes()
+                .that()
+                .implement(ToolkitProvider.class)
+                .should()
+                .resideInAPackage(base + ".adapter.toolkit..")
+                .because("새 AI 도구 = app/adapter/toolkit/<도구> 모듈 + ToolkitProvider 등록(architecture.md)");
     }
 
     /** 색은 ui.theme 의 토큰에서만 온다. 그 밖의 ui 코드는 색을 만들지 않는다(SDD §8.5, ADR-0010). */
