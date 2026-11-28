@@ -137,4 +137,41 @@ class SecretMaskTest {
         assertThat(SecretMask.origin("not a url S3CR3T-FAKE-1")).isEmpty();
         assertThat(SecretMask.origin("mailto:someone")).isEmpty();
     }
+
+    @Test
+    @DisplayName("셸 명령의 따옴표 친 비밀 헤더(X-Api-Key: 값)는 닫는 따옴표까지 가리고 다른 헤더는 둔다")
+    void quotedSecretHeader() {
+        // when
+        String apiKey = SecretMask.commandLine("curl -H \"X-Api-Key: S3CR3T-FAKE-25\" https://x", List.of());
+        String token = SecretMask.commandLine("curl -H 'Authorization: token S3CR3T-FAKE-7' https://x", List.of());
+        String plain = SecretMask.commandLine("curl -H \"Content-Type: application/json\" https://x", List.of());
+
+        // then
+        assertThat(apiKey).isEqualTo("curl -H \"X-Api-Key: " + M + "\" https://x");
+        assertThat(token).isEqualTo("curl -H 'Authorization: " + M + " " + M + "' https://x");
+        assertThat(plain).isEqualTo("curl -H \"Content-Type: application/json\" https://x");
+    }
+
+    @Test
+    @DisplayName("Bearer 를 넣은 비밀 헤더는 Bearer 를 두고 그 뒤를 가린다 — --header= 에 붙어도 같다")
+    void secretHeaderWithScheme() {
+        // when
+        String quoted =
+                SecretMask.commandLine("curl --header=\"Authorization: Bearer S3CR3T-FAKE-4\" https://x", List.of());
+        String bare = SecretMask.commandLine("http", List.of("X-Auth-Token:", "S3CR3T-FAKE-9", "GET"));
+
+        // then
+        assertThat(quoted).isEqualTo("curl --header=\"Authorization: Bearer " + M + "\" https://x");
+        assertThat(bare).isEqualTo("http X-Auth-Token: " + M + " GET");
+    }
+
+    @Test
+    @DisplayName("닫는 따옴표가 없는 비밀 헤더는 끝까지 가린다")
+    void unclosedSecretHeader() {
+        // when
+        String line = SecretMask.commandLine("curl -H \"X-Api-Key: S3CR3T-FAKE-25 S3CR3T-FAKE-26", List.of());
+
+        // then
+        assertThat(line).isEqualTo("curl -H \"X-Api-Key: " + M + " " + M);
+    }
 }

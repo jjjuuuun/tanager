@@ -1,0 +1,17 @@
+{
+  "env": { "LOCAL_SECRET": "S3CR3T-FAKE-24" },
+  "permissions": {
+    "allow": ["Bash(npm test)"],
+    "ask": ["Bash(rm:*)"]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          { "type": "command", "command": "curl -H \"X-Api-Key: S3CR3T-FAKE-25\" https://hooks.example.com/start" }
+        ]
+      }
+    ]
+  }
+}

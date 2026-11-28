@@ -40,6 +40,7 @@ final class SecretMask {
     private static final Pattern QUERY = Pattern.compile("([?&;])([^=&#;?\\s]+)=([^&#;\\s]*)");
     private static final Pattern AUTH_SCHEME = Pattern.compile("(?i)\\b(bearer|basic)\\s+\\S+");
     private static final Pattern ASSIGNMENT = Pattern.compile("([A-Za-z_][A-Za-z0-9_.-]*)=(.*)", Pattern.DOTALL);
+    private static final Pattern HEADER_NAME = Pattern.compile("[A-Za-z0-9_-]+:");
     private static final Pattern TOKEN = Pattern.compile("[A-Za-z0-9_+=-]{" + TOKEN_LENGTH + ",}");
 
     private SecretMask() {}
@@ -54,7 +55,10 @@ final class SecretMask {
         return List.copyOf(attributes);
     }
 
-    /** 명령과 인수를 공백으로 이은 한 줄. {@code command} 안의 공백도 인수 경계로 본다. */
+    /**
+     * 명령과 인수를 공백으로 이은 한 줄. {@code command} 안의 공백도 인수 경계로 본다. 셸 명령(훅)의 비밀 헤더 {@code "X-Api-Key: 값"} 은 따옴표가
+     * 열려 있으면 닫는 따옴표까지, 아니면 다음 낱말을 가린다 — {@code Bearer} · {@code Basic} 은 두고 그 뒤를 가린다.
+     */
     static String commandLine(String command, List<String> args) {
         List<String> words = new ArrayList<>();
         for (String word : command.strip().split("\\s+")) {
@@ -65,10 +69,23 @@ final class SecretMask {
         words.addAll(args);
         List<String> out = new ArrayList<>(words.size());
         boolean hideNext = false;
+        Optional<String> closingQuote = Optional.empty();
         for (String word : words) {
-            if (hideNext) {
-                out.add(hideValue(word));
-                hideNext = false;
+            if (closingQuote.isPresent()) {
+                String quote = closingQuote.get();
+                if (word.endsWith(quote)) {
+                    out.add(hideValue(word.substring(0, word.length() - quote.length())) + quote);
+                    closingQuote = Optional.empty();
+                } else {
+                    out.add(isAuthScheme(word) ? word : hideValue(word));
+                }
+            } else if (hideNext) {
+                if (isAuthScheme(word)) {
+                    out.add(word);
+                } else {
+                    out.add(hideValue(word));
+                    hideNext = false;
+                }
             } else if (word.startsWith("-") && isSecretName(flagName(word))) {
                 int equals = word.indexOf('=');
                 if (equals < 0) {
@@ -77,7 +94,11 @@ final class SecretMask {
                 } else {
                     out.add(word.substring(0, equals + 1) + hideValue(word.substring(equals + 1)));
                 }
-            } else if (word.equalsIgnoreCase("bearer") || word.equalsIgnoreCase("basic")) {
+            } else if (secretHeader(word).isPresent()) {
+                out.add(word);
+                closingQuote = secretHeader(word).get();
+                hideNext = closingQuote.isEmpty();
+            } else if (isAuthScheme(word)) {
                 out.add(word);
                 hideNext = true;
             } else {
@@ -122,6 +143,27 @@ final class SecretMask {
         }
         String origin = scheme.toLowerCase(Locale.ROOT) + "://" + host.toLowerCase(Locale.ROOT);
         return Optional.of(uri.getPort() >= 0 ? origin + ":" + uri.getPort() : origin);
+    }
+
+    private static boolean isAuthScheme(String word) {
+        return word.equalsIgnoreCase("bearer") || word.equalsIgnoreCase("basic");
+    }
+
+    /**
+     * 비밀 이름의 헤더 머리({@code X-Api-Key:} · {@code "Authorization:} · {@code --header="Authorization:})면 그 값을 닫을 따옴표(없으면
+     * empty)를 담아 돌려준다. 헤더 머리가 아니면 empty.
+     */
+    private static Optional<Optional<String>> secretHeader(String word) {
+        String head = word.substring(word.lastIndexOf('=') + 1);
+        Optional<String> quote = Optional.empty();
+        if (head.startsWith("\"") || head.startsWith("'")) {
+            quote = Optional.of(head.substring(0, 1));
+            head = head.substring(1);
+        }
+        if (!HEADER_NAME.matcher(head).matches() || !isSecretName(head)) {
+            return Optional.empty();
+        }
+        return Optional.of(quote);
     }
 
     private static String hideValue(String value) {

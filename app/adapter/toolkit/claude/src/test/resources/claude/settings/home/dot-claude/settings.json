@@ -1,0 +1,17 @@
+{
+  "env": { "GH_TOKEN": "S3CR3T-FAKE-26" },
+  "permissions": {
+    "allow": ["WebFetch(domain:example.com)", "Bash(git status)"]
+  },
+  "hooks": {
+    "Notification": [
+      { "hooks": [{ "type": "command", "command": "notify-send Claude" }] }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "mcp__memory__.*",
+        "hooks": [{ "type": "mcp_tool", "server": "memory", "tool": "log", "input": { "note": "S3CR3T-FAKE-27" } }]
+      }
+    ]
+  }
+}
