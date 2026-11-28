@@ -41,7 +41,7 @@ class ShortcutKeysTerminalTest {
     private static final Duration WAIT = Duration.ofSeconds(2);
     private static final byte[] MARKER = {'q'};
 
-    private final ShortcutKeysTest.ManualTime time = new ShortcutKeysTest.ManualTime();
+    private final ManualTime time = new ManualTime();
     private final List<KeyAction> ran = new ArrayList<>();
     private final ScriptedTerminalStream stream = new ScriptedTerminalStream(1);
     private TanagerTermWidget widget;

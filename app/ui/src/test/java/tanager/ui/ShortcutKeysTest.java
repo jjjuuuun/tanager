@@ -8,10 +8,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.awt.Component;
 import java.awt.event.KeyEvent;
 import java.time.Duration;
-import java.time.Instant;
-import java.time.InstantSource;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -32,38 +29,6 @@ class ShortcutKeysTest {
 
     private final ManualTime time = new ManualTime();
     private final List<Boolean> shown = new ArrayList<>();
-
-    /** 손으로 돌리는 시계 겸 일회용 타이머. */
-    static final class ManualTime implements Coalescer.Timer, InstantSource {
-        private record Due(long at, Runnable task) {}
-
-        private final List<Due> due = new ArrayList<>();
-        private long now;
-
-        @Override
-        public Instant instant() {
-            return Instant.EPOCH.plusNanos(now);
-        }
-
-        @Override
-        public void after(Duration delay, Runnable task) {
-            due.add(new Due(now + delay.toNanos(), task));
-        }
-
-        void advance(Duration amount) {
-            long until = now + amount.toNanos();
-            while (true) {
-                Optional<Due> next = due.stream().filter(d -> d.at() <= until).min(Comparator.comparingLong(Due::at));
-                if (next.isEmpty()) {
-                    break;
-                }
-                due.remove(next.get());
-                now = next.get().at();
-                next.get().task().run();
-            }
-            now = until;
-        }
-    }
 
     static Keymap withPrefix(String prefix) {
         return Keymap.resolve(Keymap.defaults(), new KeyConfig(Optional.of(prefix), Map.of()))

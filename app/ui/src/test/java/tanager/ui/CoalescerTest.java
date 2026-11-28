@@ -3,9 +3,6 @@ package tanager.ui;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -13,40 +10,6 @@ import org.junit.jupiter.api.Test;
 /** 몰려오는 창 이벤트를 250ms 모아 한 번만 부른다(FR-RES-03, #180). 시간은 손으로 돌리는 시계 · 타이머로 결정적으로 본다. */
 class CoalescerTest {
     private static final Duration QUIET = Duration.ofMillis(250);
-
-    /** 손으로 돌리는 시계 겸 일회용 타이머. */
-    private static final class ManualTime implements Coalescer.Timer {
-        private record Due(long at, Runnable task) {}
-
-        private final List<Due> due = new ArrayList<>();
-        private long now;
-
-        long nanos() {
-            return now;
-        }
-
-        @Override
-        public void after(Duration delay, Runnable task) {
-            due.add(new Due(now + delay.toNanos(), task));
-        }
-
-        void advance(Duration amount) {
-            long until = now + amount.toNanos();
-            while (true) {
-                Due next = due.stream()
-                        .filter(d -> d.at() <= until)
-                        .min(Comparator.comparingLong(Due::at))
-                        .orElse(null);
-                if (next == null) {
-                    break;
-                }
-                due.remove(next);
-                now = next.at();
-                next.task().run();
-            }
-            now = until;
-        }
-    }
 
     private final ManualTime time = new ManualTime();
     private final AtomicInteger runs = new AtomicInteger();
