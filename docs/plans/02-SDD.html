@@ -433,6 +433,7 @@ public record CpuWindow(List&lt;Double&gt; recent) {                            
 <li>파일의 마지막 수정 시각: 목록의 순서(최근 먼저)와 날짜.</li>
 </ul>
 <p><b>M0 확인 결과</b>: 디렉터리 이름은 되돌릴 수 없다(한글 경로 → <code>-----</code>). 각 <code>*.jsonl</code> 의 여러 종류 줄에 <code>cwd</code> 필드가 있으므로, 파일마다 <code>cwd</code> 가 있는 첫 줄과 첫 사용자 메시지 줄까지만 읽는다. <code>cwd</code> 를 못 찾은 파일은 건너뛴다.</p>
+<p><b>포트</b>(#208, ADR-0020): application 의 출력 포트 <code>ConversationSource</code>(SPI, <code>ServiceLoader</code> 로 여럿) — <code>scan(env, hostHome)</code> 이 <code>Result&lt;ConversationScan, ConversationError&gt;</code>(<code>NoHistory</code> · <code>UnknownFormat</code> · <code>Unreadable</code> → 그 환경의 기능을 끈다)를, <code>resume(id)</code> · <code>continueLatest()</code> 가 셸에 입력할 한 줄(<code>ShellLine</code>, Enter 없음)을 준다. Claude 구현은 <code>app/adapter/toolkit/claude</code> 의 <code>ClaudeProjectsImporter</code> 다. 파일마다 앞 200줄 또는 256KB 까지만 읽고, 대화는 도메인 <code>PastConversation</code>(출처 · <code>ConversationId</code> · cwd · 요약 · 수정 시각)으로 메모리에만 둔다.</p>
 <p><b>트리 모양</b>(사용자 결정 2026-11-27): Claude 를 쓴 폴더 아래에 실행 중 세션과 함께 이전 대화(💬 요약 · 날짜)를 최근 순으로 둔다. 대화를 더블클릭하거나 메뉴 "이어서 하기"를 고르면 그 폴더에서 같은 환경의 기본 셸로 새 창을 열고 <code>claude --resume &lt;세션ID&gt;</code> 를 입력 · 실행한다. 폴더 메뉴에는 "여기서 claude --continue"(마지막 대화)도 둔다.</p>
 <h3>7.4 확장: 다른 AI 도구</h3>
 <pre data-lang="java"><code>public interface ToolkitProvider {
